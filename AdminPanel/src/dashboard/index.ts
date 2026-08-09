@@ -1,0 +1,11 @@
+export { DashboardPage } from './DashboardPage';
+export { Sidebar } from './components/Sidebar';
+export { TopHeader } from './components/TopHeader';
+export { MetricCards } from './components/MetricCards';
+export { AppointmentsTrendChart } from './components/AppointmentsTrendChart';
+export { PatientGrowthChart } from './components/PatientGrowthChart';
+export { RecentAppointmentsTable } from './components/RecentAppointmentsTable';
+export { TodaysSchedule } from './components/TodaysSchedule';
+export { RecentPatientsWidget } from './components/RecentPatientsWidget';
+export { QuickActionsWidget } from './components/QuickActionsWidget';
+export { NewAppointmentModal } from './components/NewAppointmentModal';

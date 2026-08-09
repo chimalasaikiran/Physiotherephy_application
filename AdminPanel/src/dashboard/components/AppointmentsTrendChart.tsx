@@ -1,0 +1,166 @@
+import React, { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+
+export const AppointmentsTrendChart: React.FC = () => {
+  const [timeframe, setTimeframe] = useState('Last 30 Days');
+  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
+
+  const data = [
+    { label: 'WK 1', value: 7, count: 70 },
+    { label: 'WK 2', value: 14, count: 140 },
+    { label: 'WK 3', value: 28, count: 280 },
+    { label: 'WK 4', value: 31, count: 310 },
+  ];
+
+  // SVG dimensions
+  const viewBoxWidth = 400;
+  const viewBoxHeight = 180;
+  const paddingLeft = 35;
+  const paddingBottom = 25;
+  const paddingTop = 20;
+  const paddingRight = 20;
+
+  const chartWidth = viewBoxWidth - paddingLeft - paddingRight;
+  const chartHeight = viewBoxHeight - paddingTop - paddingBottom;
+
+  const yMax = 40;
+
+  // Calculate points for SVG path
+  const points = data.map((d, index) => {
+    const x = paddingLeft + (index / (data.length - 1)) * chartWidth;
+    const y = paddingTop + chartHeight - (d.value / yMax) * chartHeight;
+    return { x, y, ...d };
+  });
+
+  // Construct smooth bezier curve path string
+  const dPath = points.reduce((acc, point, index, array) => {
+    if (index === 0) return `M ${point.x},${point.y}`;
+    const prev = array[index - 1];
+    const cp1x = prev.x + (point.x - prev.x) / 2;
+    const cp1y = prev.y;
+    const cp2x = prev.x + (point.x - prev.x) / 2;
+    const cp2y = point.y;
+    return `${acc} C ${cp1x},${cp1y} ${cp2x},${cp2y} ${point.x},${point.y}`;
+  }, '');
+
+  // Area path (close line to bottom edge for gradient fill)
+  const areaPath = `${dPath} L ${points[points.length - 1].x},${paddingTop + chartHeight} L ${points[0].x},${paddingTop + chartHeight} Z`;
+
+  return (
+    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex flex-col justify-between h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h4 className="text-xs font-bold tracking-wider text-slate-400 uppercase">
+            Appointments Trend
+          </h4>
+        </div>
+        <div className="relative">
+          <select
+            value={timeframe}
+            onChange={(e) => setTimeframe(e.target.value)}
+            className="appearance-none bg-slate-50 border border-slate-100 text-slate-700 text-xs font-semibold py-1.5 pl-3 pr-7 rounded-lg focus:outline-none cursor-pointer"
+          >
+            <option>Last 30 Days</option>
+            <option>Last 7 Days</option>
+            <option>This Quarter</option>
+          </select>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* SVG Line Chart */}
+      <div className="relative w-full h-48 sm:h-52">
+        <svg
+          viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+          className="w-full h-full overflow-visible"
+        >
+          <defs>
+            <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {/* Y Axis Grid Lines */}
+          {[0, 10, 20, 30, 40].map((val) => {
+            const y = paddingTop + chartHeight - (val / yMax) * chartHeight;
+            return (
+              <g key={val}>
+                <line
+                  x1={paddingLeft}
+                  y1={y}
+                  x2={viewBoxWidth - paddingRight}
+                  y2={y}
+                  stroke="#F1F5F9"
+                  strokeWidth="1"
+                  strokeDasharray={val === 0 ? undefined : "3 3"}
+                />
+                <text
+                  x={paddingLeft - 8}
+                  y={y + 4}
+                  textAnchor="end"
+                  className="text-[10px] fill-slate-400 font-medium"
+                >
+                  {val}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Area Gradient Fill */}
+          <path d={areaPath} fill="url(#blueGradient)" />
+
+          {/* Trend Line */}
+          <path
+            d={dPath}
+            fill="none"
+            stroke="#1D4ED8"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+
+          {/* Data Points */}
+          {points.map((pt, idx) => (
+            <g key={idx}>
+              <circle
+                cx={pt.x}
+                cy={pt.y}
+                r={hoveredPoint === idx ? "6" : "4"}
+                fill="#1D4ED8"
+                stroke="#FFFFFF"
+                strokeWidth="2"
+                className="cursor-pointer transition-all duration-200"
+                onMouseEnter={() => setHoveredPoint(idx)}
+                onMouseLeave={() => setHoveredPoint(null)}
+              />
+              {/* X Axis Labels */}
+              <text
+                x={pt.x}
+                y={viewBoxHeight - 4}
+                textAnchor="middle"
+                className="text-[10px] fill-slate-400 font-semibold uppercase"
+              >
+                {pt.label}
+              </text>
+            </g>
+          ))}
+        </svg>
+
+        {/* Hover Tooltip Overlay */}
+        {hoveredPoint !== null && (
+          <div
+            className="absolute bg-slate-900 text-white text-xs px-2.5 py-1 rounded-md shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-150"
+            style={{
+              left: `${(points[hoveredPoint].x / viewBoxWidth) * 100}%`,
+              top: `${(points[hoveredPoint].y / viewBoxHeight) * 100 - 10}%`,
+            }}
+          >
+            <span className="font-semibold">{points[hoveredPoint].label}:</span>{' '}
+            {points[hoveredPoint].count} Appointments
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
