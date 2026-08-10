@@ -12,15 +12,23 @@ import { NewAppointmentModal } from './components/NewAppointmentModal';
 import { PatientsView, AddPatientPage, PatientProfilePage, type Patient } from '@/patients';
 import { TherapistsView, AddTherapistPage, TherapistProfilePage, type Therapist } from '@/therapists';
 import { SchedulePage, CreateAppointmentPage, AppointmentDetailsPage, RescheduleAppointmentPage, SessionSummaryPage } from '@/schedule';
+import { ProgramsPage, CreateRecoveryProgramPage, ProgramDetailsPage, type Program } from '@/programs';
+import { ExerciseLibraryPage, CreateExercisePage, ExerciseDetailPage, type Exercise } from '@/exercises';
+import { ReportsPage } from '@/reports';
+import { AnalyticsPage } from '@/analytics';
+import { PaymentsPage, CreateInvoicePage, CreateTreatmentPackagePage } from '@/payments';
+import { SettingsPage } from '@/settings';
 
 interface DashboardPageProps {
   onLogout: () => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState('session-summary');
+  const [activeTab, setActiveTab] = useState('settings');
   const [selectedTherapist, setSelectedTherapist] = useState<Therapist | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
 
@@ -108,8 +116,96 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               onBack={() => setActiveTab('patients')}
             />
           ) : activeTab === 'programs' ? (
-            <TherapistProfilePage defaultTab="Programs" onBack={() => setActiveTab('therapists')} />
+            <ProgramsPage
+              onNavigateToCreateProgram={() => setActiveTab('create-program')}
+              onNavigateToProgramDetails={(prog) => {
+                if (prog) setSelectedProgram(prog);
+                setActiveTab('program-details');
+              }}
+            />
+          ) : activeTab === 'program-details' ? (
+            <ProgramDetailsPage
+              program={selectedProgram}
+              onBack={() => setActiveTab('programs')}
+            />
+          ) : activeTab === 'create-program' ? (
+            <CreateRecoveryProgramPage
+              onBack={() => setActiveTab('programs')}
+              onCreateProgram={() => setActiveTab('programs')}
+            />
+          ) : activeTab === 'exercise-detail' ? (
+            <ExerciseDetailPage
+              exercise={selectedExercise}
+              onBack={() => setActiveTab('exercise-library')}
+              onSelectExercise={(ex) => setSelectedExercise(ex)}
+            />
+          ) : activeTab === 'create-exercise' ? (
+            <CreateExercisePage
+              onBack={() => setActiveTab('exercise-library')}
+              onSuccess={() => setActiveTab('exercise-library')}
+            />
+          ) : activeTab === 'exercise-library' || activeTab === 'exercises' ? (
+            <ExerciseLibraryPage
+              onNavigateToCreateExercise={() => setActiveTab('create-exercise')}
+              onNavigateToExerciseDetails={(ex) => {
+                if (ex) setSelectedExercise(ex);
+                setActiveTab('exercise-detail');
+              }}
+            />
+          ) : activeTab === 'patient-reports' || activeTab === 'patient_reports' ? (
+            <ReportsPage initialSubTab="Patient Reports" />
+          ) : activeTab === 'exports' || activeTab === 'reports-exports' ? (
+            <ReportsPage initialSubTab="Exports" />
+          ) : activeTab === 'reports' ? (
+            <ReportsPage />
+          ) : activeTab === 'analytics-therapists' || activeTab === 'analytics_therapists' ? (
+            <AnalyticsPage
+              initialSubTab="Therapists"
+              onNavigateToTherapists={() => setActiveTab('therapists')}
+              onNavigateToPatients={() => setActiveTab('patients')}
+            />
+          ) : activeTab === 'analytics-patients' || activeTab === 'analytics_patients' ? (
+            <AnalyticsPage
+              initialSubTab="Patients"
+              onNavigateToTherapists={() => setActiveTab('therapists')}
+              onNavigateToPatients={() => setActiveTab('patients')}
+            />
+          ) : activeTab === 'create-treatment-package' || activeTab === 'create-package' ? (
+            <CreateTreatmentPackagePage
+              onBack={() => setActiveTab('payments')}
+              onSuccess={() => setActiveTab('payments')}
+            />
+          ) : activeTab === 'create-invoice' ? (
+            <CreateInvoicePage
+              onBack={() => setActiveTab('payments')}
+              onSuccess={() => setActiveTab('payments')}
+              onNavigateToPatientProfile={() => {
+                setActiveTab('patient-profile');
+              }}
+            />
+          ) : activeTab === 'payments' || activeTab === 'billing' ? (
+            <PaymentsPage
+              onNavigateToCreateInvoice={() => setActiveTab('create-invoice')}
+              onNavigateToCreatePackage={() => setActiveTab('create-treatment-package')}
+              onNavigateToPatientProfile={() => {
+                setActiveTab('patient-profile');
+              }}
+            />
+          ) : activeTab === 'settings' || activeTab === 'security' || activeTab === 'notifications' || activeTab === 'integrations' || activeTab.startsWith('setting') || activeTab.startsWith('security') || activeTab.startsWith('notification') || activeTab.startsWith('integration') ? (
+            <SettingsPage
+              initialSubTab={
+                activeTab.includes('security')
+                  ? 'Security'
+                  : activeTab.includes('notification')
+                  ? 'Notifications'
+                  : activeTab.includes('integration')
+                  ? 'Integrations'
+                  : 'Security'
+              }
+              onNavigateToTab={(tab) => setActiveTab(tab)}
+            />
           ) : activeTab === 'dashboard' ? (
+
 
             <div className="space-y-6 sm:space-y-8">
               {/* Main Title Section */}
@@ -154,11 +250,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                     onAddPatient={() => setActiveTab('add-patient')}
                     onBookAppointment={() => setActiveTab('create-appointment')}
                     onAssignTherapist={() => setActiveTab('add-therapist')}
-                    onCreateProgram={() => setActiveTab('create-appointment')}
+                    onCreateProgram={() => setActiveTab('create-program')}
                   />
                 </div>
               </div>
             </div>
+
           ) : (
             /* Sub-tab view placeholder */
             <div className="bg-white rounded-3xl p-12 border border-slate-100 shadow-xs text-center max-w-2xl mx-auto my-12 space-y-4">

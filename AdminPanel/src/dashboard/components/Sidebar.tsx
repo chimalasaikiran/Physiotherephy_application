@@ -5,6 +5,8 @@ import {
   Stethoscope,
   Calendar,
   Layers,
+  Dumbbell,
+  FileText,
   CreditCard,
   BarChart3,
   Bell,
@@ -36,7 +38,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'therapists', label: 'Therapists', icon: Stethoscope },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
     { id: 'programs', label: 'Programs', icon: Layers },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
+    { id: 'exercise-library', label: 'Exercises Library', icon: Dumbbell },
+    { id: 'reports', label: 'Reports', icon: FileText },
+    { id: 'payments', label: 'Payments', icon: CreditCard },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'notifications', label: 'Notifications', icon: Bell },
   ];
@@ -48,6 +52,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const isItemActive = (itemId: string, currentTab: string) => {
     if (currentTab === itemId) return true;
+    if (itemId === 'payments' || itemId === 'billing') {
+      return (
+        currentTab === 'payments' ||
+        currentTab === 'billing' ||
+        currentTab === 'create-invoice' ||
+        currentTab.startsWith('payment') ||
+        currentTab.startsWith('billing') ||
+        currentTab.startsWith('create-invoice')
+      );
+    }
     if (itemId === 'therapists') {
       return (
         currentTab === 'therapist-profile' ||
@@ -72,13 +86,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
         currentTab === 'appointment-details' ||
         currentTab === 'reschedule-appointment' ||
         currentTab.startsWith('schedule') ||
-        currentTab.startsWith('create-appointment') ||
-        currentTab.startsWith('session-details') ||
-        currentTab.startsWith('reschedule')
+        currentTab.startsWith('create-appointment')
+      );
+    }
+
+    if (itemId === 'programs') {
+      return currentTab === 'programs' || currentTab === 'create-program' || currentTab.startsWith('program');
+    }
+
+    if (itemId === 'exercise-library' || itemId === 'exercises') {
+      return (
+        currentTab === 'exercise-library' ||
+        currentTab === 'exercises' ||
+        currentTab.startsWith('exercise')
+      );
+    }
+
+    if (itemId === 'reports') {
+      return (
+        currentTab === 'reports' ||
+        currentTab === 'create-report' ||
+        currentTab.startsWith('report')
       );
     }
     return currentTab.startsWith(itemId);
   };
+
+
 
   return (
     <>
