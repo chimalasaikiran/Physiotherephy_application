@@ -1,0 +1,66 @@
+services:
+  - type: web
+    name: physiotherapy-user-service
+    env: docker
+    dockerContext: ./user-service
+    dockerfilePath: ./user-service/Dockerfile
+    region: singapore
+    plan: free
+    envVars:
+      - key: PORT
+        value: 5001
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: physicotherephy-c28dd
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/serviceAccountKey.json
+      - key: CORS_ORIGIN
+        value: "*"
+    secretFiles:
+      - key: serviceAccountKey.json
+        name: serviceAccountKey.json
+
+  - type: web
+    name: physiotherapy-appointment-service
+    env: docker
+    dockerContext: ./appointment-service
+    dockerfilePath: ./appointment-service/Dockerfile
+    region: singapore
+    plan: free
+    envVars:
+      - key: PORT
+        value: 5002
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: physicotherephy-c28dd
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/serviceAccountKey.json
+      - key: CORS_ORIGIN
+        value: "*"
+    secretFiles:
+      - key: serviceAccountKey.json
+        name: serviceAccountKey.json
+
+  - type: web
+    name: physiotherapy-payment-service
+    env: docker
+    dockerContext: ./payment-service
+    dockerfilePath: ./payment-service/Dockerfile
+    region: singapore
+    plan: free
+    envVars:
+      - key: PORT
+        value: 5003
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: physicotherephy-c28dd
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/serviceAccountKey.json
+      - key: CORS_ORIGIN
+        value: "*"
+    secretFiles:
+      - key: serviceAccountKey.json
+        name: serviceAccountKey.json
