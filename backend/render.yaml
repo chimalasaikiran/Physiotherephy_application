@@ -13,13 +13,12 @@ services:
         value: production
       - key: FIREBASE_PROJECT_ID
         value: physicotherephy-c28dd
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        value: /etc/secrets/serviceAccountKey.json
       - key: CORS_ORIGIN
         value: "*"
-    secretFiles:
-      - key: serviceAccountKey.json
-        name: serviceAccountKey.json
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
 
   - type: web
     name: physiotherapy-appointment-service
@@ -35,13 +34,12 @@ services:
         value: production
       - key: FIREBASE_PROJECT_ID
         value: physicotherephy-c28dd
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        value: /etc/secrets/serviceAccountKey.json
       - key: CORS_ORIGIN
         value: "*"
-    secretFiles:
-      - key: serviceAccountKey.json
-        name: serviceAccountKey.json
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
 
   - type: web
     name: physiotherapy-payment-service
@@ -57,10 +55,9 @@ services:
         value: production
       - key: FIREBASE_PROJECT_ID
         value: physicotherephy-c28dd
-      - key: GOOGLE_APPLICATION_CREDENTIALS
-        value: /etc/secrets/serviceAccountKey.json
       - key: CORS_ORIGIN
         value: "*"
-    secretFiles:
-      - key: serviceAccountKey.json
-        name: serviceAccountKey.json
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false
