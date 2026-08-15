@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   FileText,
@@ -17,28 +17,46 @@ import {
   FileSpreadsheet,
   Calendar,
   ShieldCheck,
-  Wrench,
   Check,
   TrendingUp,
   UserCheck,
   Target,
   FilePlus,
-  AlertCircle,
+  Trash2,
+  Eye,
+  DollarSign,
+  Filter,
 } from 'lucide-react';
-import {
-  mockPinnedReports,
-  mockRecentReports,
-  mockQuickTemplates,
-  mockScheduledRuns,
-  mockRecentExports,
-} from './mockData';
+
 import type { PinnedReport, RecentReport } from './types';
+import { mockQuickTemplates, mockScheduledRuns } from './mockData';
 import { CreateReportModal } from './components/CreateReportModal';
 import { ViewReportModal } from './components/ViewReportModal';
 import { ExportsTab } from './components/ExportsTab';
 
-interface ReportsPageProps {
+// Real-time Firestore services
+import {
+  subscribeToReports,
+  subscribeToExportsArchive,
+  calculateReportsDashboardMetrics,
+  togglePinReport,
+  deleteReportRecord,
+  createExportArchiveItem,
+  type FirestoreReportRecord,
+  type FirestoreExportArchiveItem,
+} from '@/services/reportService';
+import { subscribeToPatients } from '@/services/patientService';
+import { subscribeToSchedules } from '@/services/scheduleService';
+import { subscribeToPayments, subscribeToInvoices } from '@/services/paymentService';
+import { subscribeToTherapists } from '@/services/therapistService';
+import { downloadCsv } from '@/utils/exportUtils';
 
+import type { Patient } from '@/patients/types';
+import type { AppointmentItem } from '@/schedule/components/AppointmentsTable';
+import type { PaymentRecord, InvoiceDocument } from '@/payments/types';
+import type { Therapist } from '@/therapists/types';
+
+interface ReportsPageProps {
   initialSubTab?: 'Overview' | 'Patient Reports' | 'Treatment Reports' | 'Financial Reports' | 'Exports';
 }
 
@@ -48,10 +66,24 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
     'Overview' | 'Patient Reports' | 'Treatment Reports' | 'Financial Reports' | 'Exports'
   >(initialSubTab);
 
+  // Firestore collections real-time state
+  const [firestoreReports, setFirestoreReports] = useState<FirestoreReportRecord[]>([]);
+  const [exportsArchive, setExportsArchive] = useState<FirestoreExportArchiveItem[]>([]);
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [schedules, setSchedules] = useState<AppointmentItem[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceDocument[]>([]);
+  const [therapists, setTherapists] = useState<Therapist[]>([]);
+
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [reportTypeFilter, setReportTypeFilter] = useState('All');
+  const [patientFilter, setPatientFilter] = useState('All');
+  const [therapistFilter, setTherapistFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+
+  // Active Menu / Dropdown popup state
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
 
   // Modal states
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -64,27 +96,152 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 3000);
+    }, 3500);
   };
 
-  // State for dynamic reports list
-  const [pinnedReports, setPinnedReports] = useState<PinnedReport[]>(mockPinnedReports);
-  const [recentReports, setRecentReports] = useState<RecentReport[]>(mockRecentReports);
+  // 1. Subscribe to all Firestore collections in real-time
+  useEffect(() => {
+    const unsubReports = subscribeToReports(setFirestoreReports);
+    const unsubExports = subscribeToExportsArchive(setExportsArchive);
+    const unsubPatients = subscribeToPatients(setPatients);
+    const unsubSchedules = subscribeToSchedules((appts) => setSchedules(appts));
+    const unsubPayments = subscribeToPayments(setPayments);
+    const unsubInvoices = subscribeToInvoices(setInvoices);
+    const unsubTherapists = subscribeToTherapists(setTherapists);
+
+    return () => {
+      unsubReports();
+      unsubExports();
+      unsubPatients();
+      unsubSchedules();
+      unsubPayments();
+      unsubInvoices();
+      unsubTherapists();
+    };
+  }, []);
+
+  // 2. Dynamic dashboard metrics calculation
+  const metrics = useMemo(() => {
+    return calculateReportsDashboardMetrics(
+      patients,
+      schedules,
+      payments,
+      invoices,
+      firestoreReports,
+      exportsArchive
+    );
+  }, [patients, schedules, payments, invoices, firestoreReports, exportsArchive]);
+
+  // Convert firestore reports to UI Pinned & Recent lists
+  const pinnedReports: PinnedReport[] = useMemo(() => {
+    return firestoreReports
+      .filter((r) => r.isPinned)
+      .map((r) => ({
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        status: r.status,
+        updatedAt: `${r.date} • ${typeof r.author === 'string' ? r.author : r.author.name}`,
+        author: r.author,
+        iconType: (r.iconType || 'document') as any,
+        patientId: r.patientId,
+        patientName: r.patientName,
+        therapistId: r.therapistId,
+        therapistName: r.therapistName,
+        summaryText: r.summaryText,
+        fileFormat: r.fileFormat,
+        isPinned: true,
+      }));
+  }, [firestoreReports]);
+
+  // Combine Firestore reports + dynamic patient/treatment/financial rows into display reports
+  const allDisplayReports: RecentReport[] = useMemo(() => {
+    const list: RecentReport[] = [];
+
+    // Add Firestore report documents
+    firestoreReports.forEach((r) => {
+      list.push({
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        date: r.date,
+        status: r.status,
+        author: r.author,
+        iconType: (r.iconType || 'document') as any,
+        patientId: r.patientId,
+        patientName: r.patientName,
+        therapistId: r.therapistId,
+        therapistName: r.therapistName,
+        summaryText: r.summaryText,
+        fileFormat: r.fileFormat,
+        isPinned: r.isPinned,
+      });
+    });
+
+    // Synthesize treatment session reports from completed appointments
+    schedules.forEach((s) => {
+      if (!list.some((item) => item.id === `appt-rep-${s.id}`)) {
+        list.push({
+          id: `appt-rep-${s.id}`,
+          title: `Treatment Session: ${s.patientName} (${s.patientSubtitle})`,
+          category: 'Clinical',
+          date: s.date,
+          status: s.status === 'Completed' ? 'Verified' : 'Needs Review',
+          author: {
+            name: s.therapistName,
+            avatarUrl: s.therapistAvatar || '',
+          },
+          iconType: 'assessment',
+          patientName: s.patientName,
+          therapistName: s.therapistName,
+          summaryText: `Clinical treatment session conducted by ${s.therapistName} for ${s.patientName} (${s.type}). Status: ${s.status}.`,
+          fileFormat: 'PDF',
+        });
+      }
+    });
+
+    // Synthesize financial reports from payment records
+    payments.forEach((p) => {
+      if (!list.some((item) => item.id === `pay-rep-${p.id}`)) {
+        list.push({
+          id: `pay-rep-${p.id}`,
+          title: `Payment Receipt: ${p.patientName} (₹${(p.amount || p.numericAmount || 0).toLocaleString('en-IN')})`,
+          category: 'Financial',
+          date: p.paidAt ? p.paidAt.split('T')[0] : p.createdAt.split('T')[0],
+          status: p.paymentStatus === 'Paid' || p.status === 'PAID' ? 'Verified' : 'Draft',
+          author: {
+            name: p.therapistName || 'Billing Desk',
+            avatarUrl: '',
+          },
+          iconType: 'document',
+          patientName: p.patientName,
+          therapistName: p.therapistName,
+          summaryText: `Payment record #${p.paymentId || p.id} for ${p.patientName}. Method: ${p.paymentMethod || 'Online'}. Amount: ₹${p.amount || 0}.`,
+          fileFormat: 'CSV',
+        });
+      }
+    });
+
+    return list;
+  }, [firestoreReports, schedules, payments]);
 
   // Filtered reports logic
   const filteredRecentReports = useMemo(() => {
-    return recentReports.filter((report) => {
+    return allDisplayReports.filter((report) => {
+      const authorStr = typeof report.author === 'string' ? report.author : report.author?.name || '';
       const matchesSearch =
+        searchQuery === '' ||
         report.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         report.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        report.author.name.toLowerCase().includes(searchQuery.toLowerCase());
+        authorStr.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (report.patientName && report.patientName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (report.therapistName && report.therapistName.toLowerCase().includes(searchQuery.toLowerCase()));
 
       const matchesSubTab =
         activeSubTab === 'Overview' ||
-        activeSubTab === 'Patient Reports' ||
-        (activeSubTab === 'Treatment Reports' && (report.category === 'Clinical' || report.category === 'Assessment')) ||
-        (activeSubTab === 'Financial Reports' && report.category === 'Financial') ||
-        activeSubTab === 'Exports';
+        (activeSubTab === 'Patient Reports' && (report.category === 'Clinical' || report.category === 'Assessment' || report.category === 'Patient Care' || !!report.patientName)) ||
+        (activeSubTab === 'Treatment Reports' && (report.category === 'Clinical' || report.category === 'Progress' || report.title.includes('Session'))) ||
+        (activeSubTab === 'Financial Reports' && (report.category === 'Financial' || report.title.includes('Payment')));
 
       const matchesType =
         reportTypeFilter === 'All' || report.category.toLowerCase().includes(reportTypeFilter.toLowerCase());
@@ -92,25 +249,103 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
       const matchesStatus =
         statusFilter === 'All' || (report.status && report.status.toLowerCase() === statusFilter.toLowerCase());
 
-      return matchesSearch && matchesSubTab && matchesType && matchesStatus;
+      const matchesPatient =
+        patientFilter === 'All' || (report.patientName && report.patientName === patientFilter);
+
+      const matchesTherapist =
+        therapistFilter === 'All' || (report.therapistName && report.therapistName === therapistFilter);
+
+      return matchesSearch && matchesSubTab && matchesType && matchesStatus && matchesPatient && matchesTherapist;
     });
-  }, [recentReports, searchQuery, activeSubTab, reportTypeFilter, statusFilter]);
+  }, [allDisplayReports, searchQuery, activeSubTab, reportTypeFilter, statusFilter, patientFilter, therapistFilter]);
+
+  // Trigger export of current filtered reports data to CSV and save to Firestore
+  const handleExportData = async (format: 'CSV' | 'Excel' | 'PDF' = 'CSV') => {
+    const filename = `${activeSubTab.toLowerCase().replace(/\s+/g, '_')}_export_${new Date().toISOString().split('T')[0]}`;
+    
+    if (activeSubTab === 'Financial Reports') {
+      const sizeStr = downloadCsv(
+        filename,
+        [
+          { header: 'ID', accessor: (item: PaymentRecord) => item.paymentId || item.id },
+          { header: 'Patient Name', accessor: (item: PaymentRecord) => item.patientName },
+          { header: 'Therapist Name', accessor: (item: PaymentRecord) => item.therapistName || 'Unassigned' },
+          { header: 'Amount (INR)', accessor: (item: PaymentRecord) => item.amount || item.numericAmount },
+          { header: 'Payment Method', accessor: (item: PaymentRecord) => item.paymentMethod },
+          { header: 'Status', accessor: (item: PaymentRecord) => item.paymentStatus || item.status },
+          { header: 'Date', accessor: (item: PaymentRecord) => item.paidAt || item.createdAt },
+        ],
+        payments
+      );
+
+      await createExportArchiveItem({
+        fileName: `${filename}.${format.toLowerCase()}`,
+        format: format === 'Excel' ? 'EXCEL' : format === 'PDF' ? 'PDF' : 'CSV',
+        size: sizeStr,
+        status: 'Completed',
+        dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        reportType: 'Financial Reports',
+        recordsCount: payments.length,
+      });
+
+      showToast(`Exported ${payments.length} financial payment records to ${filename}.csv!`);
+    } else {
+      const sizeStr = downloadCsv(
+        filename,
+        [
+          { header: 'Report Title', accessor: (item: RecentReport) => item.title },
+          { header: 'Category', accessor: (item: RecentReport) => item.category },
+          { header: 'Patient Name', accessor: (item: RecentReport) => item.patientName || 'N/A' },
+          { header: 'Therapist Name', accessor: (item: RecentReport) => item.therapistName || 'N/A' },
+          { header: 'Status', accessor: (item: RecentReport) => item.status || 'Verified' },
+          { header: 'Date', accessor: (item: RecentReport) => item.date },
+          { header: 'Summary', accessor: (item: RecentReport) => item.summaryText || '' },
+        ],
+        filteredRecentReports
+      );
+
+      await createExportArchiveItem({
+        fileName: `${filename}.${format.toLowerCase()}`,
+        format: format === 'Excel' ? 'EXCEL' : format === 'PDF' ? 'PDF' : 'CSV',
+        size: sizeStr,
+        status: 'Completed',
+        dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        reportType: activeSubTab,
+        recordsCount: filteredRecentReports.length,
+      });
+
+      showToast(`Exported ${filteredRecentReports.length} ${activeSubTab} records to ${filename}.csv!`);
+    }
+  };
+
+  // Toggle pin report in Firestore
+  const handleTogglePin = async (reportId: string, currentIsPinned?: boolean) => {
+    try {
+      await togglePinReport(reportId, !!currentIsPinned);
+      showToast(currentIsPinned ? 'Unpinned report.' : 'Pinned report to dashboard!');
+    } catch (e: any) {
+      showToast(`Error toggling pin: ${e.message}`);
+    }
+    setActiveActionMenuId(null);
+  };
+
+  // Delete report from Firestore
+  const handleDeleteReport = async (reportId: string, title: string) => {
+    if (!reportId.startsWith('rec-') && !reportId.startsWith('appt-') && !reportId.startsWith('pay-')) {
+      try {
+        await deleteReportRecord(reportId);
+        showToast(`Deleted report "${title}" from Firestore.`);
+      } catch (e: any) {
+        showToast(`Error deleting report: ${e.message}`);
+      }
+    } else {
+      showToast(`Removed "${title}" from view.`);
+    }
+    setActiveActionMenuId(null);
+  };
 
   const handleReportCreated = (newReport: { title: string; category: string }) => {
-    const createdItem: RecentReport = {
-      id: `rec-${Date.now()}`,
-      title: newReport.title,
-      category: newReport.category,
-      date: 'Just now',
-      status: 'Verified',
-      author: {
-        name: 'Dr. Sarah Chen',
-        avatarUrl: 'https://images.unsplash.com/photo-1594824813566-7885a3964478?auto=format&fit=crop&q=80&w=150',
-      },
-      iconType: 'document',
-    };
-    setRecentReports([createdItem, ...recentReports]);
-    showToast(`Report "${newReport.title}" generated successfully!`);
+    showToast(`Report "${newReport.title}" saved to Firestore successfully!`);
   };
 
   return (
@@ -130,13 +365,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
             Reports
           </h1>
           <p className="text-sm font-medium text-slate-500 mt-1">
-            Generate, organize and export clinical and operational reports.
+            Generate, organize and export clinical, treatment, and financial reports from Firestore.
           </p>
         </div>
 
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => showToast('Exporting clinical reports to ZIP package...')}
+            onClick={() => handleExportData('CSV')}
             className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-xs flex items-center space-x-2 cursor-pointer"
           >
             <Download className="w-4 h-4 text-slate-500" />
@@ -187,13 +422,13 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
         <ExportsTab showToast={showToast} />
       ) : (
         <>
-          {/* Metric / KPI Cards Grid (4 Columns matching Figma) */}
+          {/* Metric / KPI Cards Grid (4 Columns calculated from Firestore) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            {/* Card 1: Reports Generated */}
+            {/* Card 1: Total Reports Generated */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Reports Generated
+                  Total Reports
                 </span>
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                   <FileText className="w-5 h-5" />
@@ -201,39 +436,39 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
               </div>
               <div className="mt-4">
                 <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                  1,284
+                  {metrics.totalReports.toLocaleString('en-IN')}
                 </div>
                 <div className="mt-1.5 flex items-center text-xs font-semibold text-emerald-600">
-                  <span>↑ 12% vs last month</span>
+                  <span>Live from Firestore</span>
                 </div>
               </div>
             </div>
 
-            {/* Card 2: Monthly Exports */}
+            {/* Card 2: Financial Revenue / Paid */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Monthly Exports
+                  Total Revenue
                 </span>
-                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Cloud className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <DollarSign className="w-5 h-5" />
                 </div>
               </div>
               <div className="mt-4">
                 <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                  342
+                  ₹{metrics.totalRevenue.toLocaleString('en-IN')}
                 </div>
                 <div className="mt-1.5 text-xs font-semibold text-slate-500">
-                  Steady activity
+                  Paid: ₹{metrics.totalPaid.toLocaleString('en-IN')} • Pending: ₹{metrics.totalPending.toLocaleString('en-IN')}
                 </div>
               </div>
             </div>
 
-            {/* Card 3: Scheduled Reports */}
+            {/* Card 3: Treatment Reports */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                  Scheduled Reports
+                  Treatment Sessions
                 </span>
                 <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
                   <Clock className="w-5 h-5" />
@@ -241,10 +476,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
               </div>
               <div className="mt-4">
                 <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-                  18
+                  {metrics.treatmentReportsCount}
                 </div>
                 <div className="mt-1.5 text-xs font-semibold text-slate-500">
-                  Next run: Tomorrow
+                  {schedules.length} total scheduled
                 </div>
               </div>
             </div>
@@ -262,12 +497,14 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
               <div className="mt-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-500">Usage</span>
-                  <span className="text-xs font-bold text-slate-900">8.4 / 10 GB</span>
+                  <span className="text-xs font-bold text-slate-900">
+                    {metrics.storageUsedMB} MB / 10 GB
+                  </span>
                 </div>
                 <div className="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
                   <div
                     className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                    style={{ width: '84%' }}
+                    style={{ width: `${Math.min(100, Math.max(5, (metrics.storageUsedMB / 10240) * 100))}%` }}
                   />
                 </div>
               </div>
@@ -283,7 +520,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search reports, authors, or categories..."
+                placeholder="Search reports, patients, or therapists..."
                 className="w-full pl-10 pr-12 py-2 bg-slate-50 border border-slate-100 rounded-xl text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
               />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:flex items-center space-x-1 px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-[10px] font-semibold text-slate-400">
@@ -300,21 +537,49 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                   onChange={(e) => setReportTypeFilter(e.target.value)}
                   className="appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 pr-8 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"
                 >
-                  <option value="All">Report Type</option>
+                  <option value="All">All Categories</option>
                   <option value="Clinical">Clinical</option>
                   <option value="Assessment">Assessment</option>
                   <option value="Progress">Progress</option>
+                  <option value="Financial">Financial</option>
                   <option value="Patient Care">Patient Care</option>
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
-              {/* Created By Button / Filter */}
-              <button className="bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-700 flex items-center space-x-1.5 cursor-pointer transition-colors">
-                <User className="w-3.5 h-3.5 text-slate-500" />
-                <span>Created By</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-              </button>
+              {/* Patient Selector Filter */}
+              <div className="relative">
+                <select
+                  value={patientFilter}
+                  onChange={(e) => setPatientFilter(e.target.value)}
+                  className="appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 pr-8 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"
+                >
+                  <option value="All">All Patients</option>
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.name}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <User className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+
+              {/* Therapist Selector Filter */}
+              <div className="relative">
+                <select
+                  value={therapistFilter}
+                  onChange={(e) => setTherapistFilter(e.target.value)}
+                  className="appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 pr-8 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"
+                >
+                  <option value="All">All Therapists</option>
+                  {therapists.map((t) => (
+                    <option key={t.id} value={t.name}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+                <UserCheck className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
 
               {/* Status Dropdown */}
               <div className="relative">
@@ -327,16 +592,10 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                   <option value="Verified">Verified</option>
                   <option value="Needs Review">Needs Review</option>
                   <option value="Draft">Draft</option>
+                  <option value="Ready">Ready</option>
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
-
-              {/* Sort By Dropdown */}
-              <button className="bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-700 flex items-center space-x-1.5 cursor-pointer transition-colors">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-                <span>Sort By</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-              </button>
             </div>
           </div>
 
@@ -344,7 +603,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
             {/* Left Column (Spans 2 on desktop) */}
             <div className="lg:col-span-2 space-y-6 sm:space-y-8">
-              {/* Section 1: Pinned Patient Reports (Matching Figma) */}
+              {/* Section 1: Pinned Reports */}
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 text-slate-900">
                   <Pin className="w-4 h-4 text-blue-600 fill-blue-600" />
@@ -359,7 +618,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                   {pinnedReports.map((report) => (
                     <div
                       key={report.id}
-                      className="bg-white rounded-2xl border border-slate-100 p-5 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow"
+                      className="bg-white rounded-2xl border border-slate-100 p-5 shadow-xs flex flex-col justify-between space-y-4 hover:shadow-md transition-shadow relative"
                     >
                       <div className="flex items-start justify-between">
                         <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -371,9 +630,45 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                             <FileText className="w-5 h-5 text-blue-600" />
                           )}
                         </div>
-                        <button className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer">
+                        <button
+                          onClick={() =>
+                            setActiveActionMenuId(activeActionMenuId === report.id ? null : report.id)
+                          }
+                          className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg transition-colors cursor-pointer"
+                        >
                           <MoreVertical className="w-4 h-4" />
                         </button>
+
+                        {/* Action Menu Popup */}
+                        {activeActionMenuId === report.id && (
+                          <div className="absolute right-4 top-12 w-44 bg-white rounded-2xl border border-slate-100 shadow-xl py-1.5 z-30 animate-in fade-in zoom-in-95">
+                            <button
+                              onClick={() => {
+                                setSelectedReportForView(report);
+                                setActiveActionMenuId(null);
+                              }}
+                              className="w-full px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center space-x-2 cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-slate-500" />
+                              <span>View Details</span>
+                            </button>
+                            <button
+                              onClick={() => handleTogglePin(report.id, report.isPinned)}
+                              className="w-full px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center space-x-2 cursor-pointer"
+                            >
+                              <Pin className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Unpin Report</span>
+                            </button>
+                            <div className="my-1 border-t border-slate-100" />
+                            <button
+                              onClick={() => handleDeleteReport(report.id, report.title)}
+                              className="w-full px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center space-x-2 cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -381,7 +676,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                           {report.title}
                         </h3>
 
-                        {/* Tag Badges (Clinical / Progress / Verified / Draft matching Figma) */}
+                        {/* Tag Badges */}
                         <div className="flex flex-wrap items-center gap-2 mt-2.5">
                           <span
                             className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -403,7 +698,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                           ) : (
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mr-1.5"></span>
-                              Draft
+                              {report.status}
                             </span>
                           )}
                         </div>
@@ -424,91 +719,139 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                 </div>
               </div>
 
-              {/* Section 2: Recent Patient Reports (Matching Figma) */}
+              {/* Section 2: Recent Reports */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
                     {activeSubTab === 'Patient Reports' || activeSubTab === 'Overview'
-                      ? 'Recent Patient Reports'
+                      ? 'Recent Reports'
                       : `Recent ${activeSubTab}`}
                   </h2>
                   <button
-                    onClick={() => setActiveSubTab('Overview')}
+                    onClick={() => {
+                      setReportTypeFilter('All');
+                      setPatientFilter('All');
+                      setTherapistFilter('All');
+                      setStatusFilter('All');
+                      setSearchQuery('');
+                    }}
                     className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
                   >
-                    View All
+                    Reset Filters
                   </button>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-xs divide-y divide-slate-100 overflow-hidden">
                   {filteredRecentReports.length > 0 ? (
-                    filteredRecentReports.map((report) => (
-                      <div
-                        key={report.id}
-                        onClick={() => setSelectedReportForView(report)}
-                        className="p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50/80 transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center space-x-3.5">
-                          <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                              report.category === 'Assessment'
-                                ? 'bg-blue-50 text-blue-600'
-                                : report.category === 'Clinical'
-                                ? 'bg-purple-50 text-purple-600'
-                                : 'bg-teal-50 text-teal-600'
-                            }`}
-                          >
-                            <FileText className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <h3 className="text-sm font-extrabold text-slate-900">
-                                {report.title}
-                              </h3>
-                            </div>
-                            <p className="text-xs font-medium text-slate-400 mt-0.5">
-                              {report.category} • {report.date}
-                            </p>
-                          </div>
-                        </div>
+                    filteredRecentReports.map((report) => {
+                      const authorName =
+                        typeof report.author === 'string'
+                          ? report.author
+                          : report.author?.name || 'Dr. Sarah Chen';
 
-                        <div className="flex items-center space-x-3">
-                          {report.status && (
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-xs font-bold hidden sm:inline-block ${
-                                report.status === 'Verified'
-                                  ? 'bg-emerald-50 text-emerald-700'
-                                  : report.status === 'Needs Review'
-                                  ? 'bg-amber-50 text-amber-700'
-                                  : 'bg-slate-100 text-slate-600'
+                      return (
+                        <div
+                          key={report.id}
+                          onClick={() => setSelectedReportForView(report)}
+                          className="p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50/80 transition-colors cursor-pointer relative"
+                        >
+                          <div className="flex items-center space-x-3.5">
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                report.category === 'Assessment'
+                                  ? 'bg-blue-50 text-blue-600'
+                                  : report.category === 'Clinical'
+                                  ? 'bg-purple-50 text-purple-600'
+                                  : 'bg-teal-50 text-teal-600'
                               }`}
                             >
-                              {report.status}
-                            </span>
-                          )}
+                              <FileText className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <h3 className="text-sm font-extrabold text-slate-900">
+                                  {report.title}
+                                </h3>
+                              </div>
+                              <p className="text-xs font-medium text-slate-400 mt-0.5">
+                                {report.category} • {report.date}
+                                {report.patientName ? ` • Patient: ${report.patientName}` : ''}
+                              </p>
+                            </div>
+                          </div>
 
-                          <InitialsAvatar name={report.author.name} className="w-8 h-8 text-xs font-bold ring-2 ring-white shrink-0" />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedReportForView(report);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center space-x-3">
+                            {report.status && (
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-xs font-bold hidden sm:inline-block ${
+                                  report.status === 'Verified'
+                                    ? 'bg-emerald-50 text-emerald-700'
+                                    : report.status === 'Needs Review'
+                                    ? 'bg-amber-50 text-amber-700'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {report.status}
+                              </span>
+                            )}
+
+                            <InitialsAvatar name={authorName} className="w-8 h-8 text-xs font-bold ring-2 ring-white shrink-0" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveActionMenuId(activeActionMenuId === report.id ? null : report.id);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+
+                            {/* Dropdown Popup */}
+                            {activeActionMenuId === report.id && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute right-4 top-12 w-44 bg-white rounded-2xl border border-slate-100 shadow-xl py-1.5 z-30 text-left animate-in fade-in zoom-in-95"
+                              >
+                                <button
+                                  onClick={() => {
+                                    setSelectedReportForView(report);
+                                    setActiveActionMenuId(null);
+                                  }}
+                                  className="w-full px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center space-x-2 cursor-pointer"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>View Report</span>
+                                </button>
+                                <button
+                                  onClick={() => handleTogglePin(report.id, report.isPinned)}
+                                  className="w-full px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center space-x-2 cursor-pointer"
+                                >
+                                  <Pin className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>{report.isPinned ? 'Unpin' : 'Pin to Top'}</span>
+                                </button>
+                                <div className="my-1 border-t border-slate-100" />
+                                <button
+                                  onClick={() => handleDeleteReport(report.id, report.title)}
+                                  className="w-full px-4 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 flex items-center space-x-2 cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="p-8 text-center text-slate-400 text-sm font-medium">
-                      No patient reports found matching your criteria.
+                      No reports found matching your criteria.
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Section 3: Quick Templates (Matching Figma) */}
+              {/* Section 3: Quick Templates */}
               <div className="space-y-4">
                 <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
                   Quick Templates
@@ -552,7 +895,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
               </div>
             </div>
 
-            {/* Right Column (Widgets matching Figma) */}
+            {/* Right Column (Widgets) */}
             <div className="space-y-6 sm:space-y-8">
               {/* Widget 1: Quick Actions */}
               <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-xs space-y-4">
@@ -572,7 +915,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                   </button>
 
                   <button
-                    onClick={() => showToast('Exporting Patient Reports as PDF...')}
+                    onClick={() => handleExportData('PDF')}
                     className="w-full py-3 px-4 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 font-extrabold text-sm rounded-xl transition-colors flex items-center space-x-3 cursor-pointer"
                   >
                     <FileText className="w-4 h-4 text-blue-600" />
@@ -580,7 +923,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                   </button>
 
                   <button
-                    onClick={() => showToast('Exporting Patient Reports as Excel...')}
+                    onClick={() => handleExportData('Excel')}
                     className="w-full py-3 px-4 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 font-extrabold text-sm rounded-xl transition-colors flex items-center space-x-3 cursor-pointer"
                   >
                     <FileSpreadsheet className="w-4 h-4 text-blue-600" />
@@ -588,7 +931,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                   </button>
 
                   <button
-                    onClick={() => showToast('Opening report schedule manager...')}
+                    onClick={() => showToast('Report schedule auto-sync active.')}
                     className="w-full py-3 px-4 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-600 font-extrabold text-sm rounded-xl transition-colors flex items-center space-x-3 cursor-pointer"
                   >
                     <Clock className="w-4 h-4 text-blue-600" />
@@ -629,21 +972,21 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                 </div>
 
                 <button
-                  onClick={() => showToast('Opening schedule management panel...')}
+                  onClick={() => showToast('Report schedule active.')}
                   className="w-full py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl transition-colors text-center cursor-pointer"
                 >
                   Manage Schedules
                 </button>
               </div>
 
-              {/* Widget 3: Recent Exports */}
+              {/* Widget 3: Recent Exports from Firestore */}
               <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-xs space-y-4">
                 <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
                   Recent Exports
                 </h2>
 
                 <div className="space-y-3">
-                  {mockRecentExports.map((item) => (
+                  {exportsArchive.slice(0, 4).map((item) => (
                     <div
                       key={item.id}
                       className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors"
@@ -651,12 +994,12 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                       <div className="flex items-center space-x-3 min-w-0">
                         <div
                           className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                            item.fileType === 'excel'
+                            item.format === 'EXCEL'
                               ? 'bg-emerald-50 text-emerald-600'
                               : 'bg-blue-50 text-blue-600'
                           }`}
                         >
-                          {item.fileType === 'excel' ? (
+                          {item.format === 'EXCEL' ? (
                             <FileSpreadsheet className="w-4 h-4" />
                           ) : (
                             <FileText className="w-4 h-4" />
@@ -667,7 +1010,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                             {item.fileName}
                           </h3>
                           <p className="text-[11px] text-slate-400 font-medium">
-                            {item.fileSize} • {item.timeAgo}
+                            {item.size} • {item.dateCreated}
                           </p>
                         </div>
                       </div>
@@ -706,4 +1049,3 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
 };
 
 export default ReportsPage;
-

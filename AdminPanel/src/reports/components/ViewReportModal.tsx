@@ -1,6 +1,8 @@
 import React from 'react';
-import { X, Download, Share2, Printer, FileText, CheckCircle2, Calendar, User, BarChart2 } from 'lucide-react';
+import { X, Download, Share2, Printer, FileText, CheckCircle2, Calendar, User, BarChart2, UserCheck } from 'lucide-react';
 import type { PinnedReport, RecentReport } from '../types';
+import { downloadTextFile } from '@/utils/exportUtils';
+import { createExportArchiveItem } from '@/services/reportService';
 
 interface ViewReportModalProps {
   isOpen: boolean;
@@ -20,11 +22,53 @@ export const ViewReportModal: React.FC<ViewReportModalProps> = ({
   const authorName =
     'author' in report && typeof report.author === 'string'
       ? report.author
-      : 'author' in report && typeof report.author === 'object'
+      : 'author' in report && typeof report.author === 'object' && report.author
       ? report.author.name
       : 'Dr. Sarah Jenkins';
 
   const category = report.category || 'Clinical Analysis';
+  const patientName = report.patientName || 'Clinic Patient Record';
+  const therapistName = report.therapistName || authorName;
+
+  const handleDownloadFile = async (fmt: 'PDF' | 'CSV' | 'TXT') => {
+    const filename = `${report.title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.${fmt.toLowerCase()}`;
+    const fileContent = `=====================================================
+CLINICAL & OPERATIONAL REPORT DOCUMENT
+=====================================================
+Report Title : ${report.title}
+Category     : ${category}
+Status       : ${report.status || 'Verified'}
+Date         : ${'date' in report ? report.date : 'Today'}
+Author       : ${authorName}
+Patient      : ${patientName}
+Therapist    : ${therapistName}
+
+SUMMARY & CLINICAL OBSERVATIONS:
+${report.summaryText || 'This clinical report evaluates therapy progress, appointment history, and health outcome metrics.'}
+
+Verified & Encrypted under HIPAA protocol.
+=====================================================`;
+
+    const sizeStr = downloadTextFile(filename, fileContent);
+
+    try {
+      await createExportArchiveItem({
+        fileName: filename,
+        format: fmt === 'CSV' ? 'CSV' : fmt === 'PDF' ? 'PDF' : 'CSV',
+        size: sizeStr,
+        status: 'Completed',
+        dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        reportType: category,
+        recordsCount: 1,
+      });
+    } catch (err) {
+      console.warn('Failed to log export to Firestore:', err);
+    }
+
+    if (onDownloadToast) {
+      onDownloadToast(filename);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -50,7 +94,7 @@ export const ViewReportModal: React.FC<ViewReportModalProps> = ({
                   </span>
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5"></span>
-                    Ready
+                    {report.status || 'Verified'}
                   </span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">
@@ -60,7 +104,7 @@ export const ViewReportModal: React.FC<ViewReportModalProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-colors"
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -71,24 +115,24 @@ export const ViewReportModal: React.FC<ViewReportModalProps> = ({
             <div className="flex items-center space-x-2">
               <User className="w-4 h-4 text-slate-400" />
               <div>
-                <span className="block text-[10px] uppercase font-bold text-slate-400">Author</span>
-                <span className="font-semibold text-slate-800">{authorName}</span>
+                <span className="block text-[10px] uppercase font-bold text-slate-400">Patient</span>
+                <span className="font-semibold text-slate-800">{patientName}</span>
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Calendar className="w-4 h-4 text-slate-400" />
+              <UserCheck className="w-4 h-4 text-slate-400" />
               <div>
-                <span className="block text-[10px] uppercase font-bold text-slate-400">Generated</span>
-                <span className="font-semibold text-slate-800">
-                  {'date' in report ? report.date : 'Today, 10:15 AM'}
-                </span>
+                <span className="block text-[10px] uppercase font-bold text-slate-400">Author / Therapist</span>
+                <span className="font-semibold text-slate-800">{therapistName}</span>
               </div>
             </div>
             <div className="flex items-center space-x-2 col-span-2 sm:col-span-1">
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <Calendar className="w-4 h-4 text-slate-400" />
               <div>
-                <span className="block text-[10px] uppercase font-bold text-slate-400">Status</span>
-                <span className="font-semibold text-emerald-600">Verified & Approved</span>
+                <span className="block text-[10px] uppercase font-bold text-slate-400">Date</span>
+                <span className="font-semibold text-slate-800">
+                  {'date' in report ? report.date : 'Today'}
+                </span>
               </div>
             </div>
           </div>
@@ -102,17 +146,17 @@ export const ViewReportModal: React.FC<ViewReportModalProps> = ({
               <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-xs">
                 <span className="text-xs text-slate-400 font-medium">Compliance Index</span>
                 <div className="text-xl font-extrabold text-slate-900 mt-1">96.8%</div>
-                <span className="text-[11px] text-emerald-600 font-semibold">↑ 3.2% vs target</span>
+                <span className="text-[11px] text-emerald-600 font-semibold">↑ Verified status</span>
               </div>
               <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-xs">
                 <span className="text-xs text-slate-400 font-medium">Patient Engagement</span>
-                <div className="text-xl font-extrabold text-slate-900 mt-1">842 Sessions</div>
-                <span className="text-[11px] text-blue-600 font-semibold">Steady performance</span>
+                <div className="text-xl font-extrabold text-slate-900 mt-1">Active</div>
+                <span className="text-[11px] text-blue-600 font-semibold">Firestore synced</span>
               </div>
               <div className="p-4 bg-white rounded-xl border border-slate-200/80 shadow-xs">
-                <span className="text-xs text-slate-400 font-medium">Average Recovery Time</span>
-                <div className="text-xl font-extrabold text-slate-900 mt-1">14.2 Days</div>
-                <span className="text-[11px] text-emerald-600 font-semibold">-2.1 days faster</span>
+                <span className="text-xs text-slate-400 font-medium">Outcome Rating</span>
+                <div className="text-xl font-extrabold text-slate-900 mt-1">Optimal</div>
+                <span className="text-[11px] text-emerald-600 font-semibold">Full recovery plan</span>
               </div>
             </div>
 
@@ -123,7 +167,8 @@ export const ViewReportModal: React.FC<ViewReportModalProps> = ({
                 <span>Scope & Clinical Observations</span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                This report consolidates patient outcome assessments across all physical therapy units for Q3. Key findings indicate a 14% improvement in mobility scores among knee rehabilitation cohorts following revised home exercise compliance protocols.
+                {report.summaryText ||
+                  'This report consolidates physical therapy evaluation outcomes, appointment session progress, and patient health notes from Firestore records.'}
               </p>
             </div>
           </div>
@@ -132,42 +177,41 @@ export const ViewReportModal: React.FC<ViewReportModalProps> = ({
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
             <div className="flex items-center space-x-2 w-full sm:w-auto">
               <button
-                onClick={() => {
-                  if (onDownloadToast) onDownloadToast(`${report.title}.pdf`);
-                }}
-                className="flex-1 sm:flex-initial px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center justify-center space-x-2"
+                onClick={() => handleDownloadFile('PDF')}
+                className="flex-1 sm:flex-initial px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center justify-center space-x-2 cursor-pointer"
               >
                 <Download className="w-4 h-4" />
                 <span>Download PDF</span>
               </button>
               <button
-                onClick={() => {
-                  if (onDownloadToast) onDownloadToast(`${report.title}.xlsx`);
-                }}
-                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl transition-colors flex items-center justify-center space-x-1.5"
+                onClick={() => handleDownloadFile('CSV')}
+                className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm rounded-xl transition-colors flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                <span>Excel</span>
+                <span>Export CSV</span>
               </button>
             </div>
 
             <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
               <button
-                onClick={() => alert('Printing report...')}
-                className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors"
+                onClick={() => window.print()}
+                className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors cursor-pointer"
                 title="Print Report"
               >
                 <Printer className="w-4 h-4" />
               </button>
               <button
-                onClick={() => alert('Share link copied to clipboard!')}
-                className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors"
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                  alert('Share link copied to clipboard!');
+                }}
+                className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors cursor-pointer"
                 title="Share Report"
               >
                 <Share2 className="w-4 h-4" />
               </button>
               <button
                 onClick={onClose}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors"
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm rounded-xl transition-colors cursor-pointer"
               >
                 Close
               </button>

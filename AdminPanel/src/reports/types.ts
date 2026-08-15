@@ -2,23 +2,37 @@ export interface PinnedReport {
   id: string;
   title: string;
   category: string; // e.g., "Clinical", "Progress", "Financial"
-  status: 'Ready' | 'Verified' | 'Draft' | 'Generating' | 'Scheduled';
+  status: 'Ready' | 'Verified' | 'Draft' | 'Generating' | 'Scheduled' | 'Needs Review';
   updatedAt: string; // e.g., "Oct 14, 2023 • Dr. Sarah Jenkins"
-  author: string;
-  iconType: 'document' | 'chart' | 'user';
+  author: string | { name: string; avatarUrl: string };
+  iconType: 'document' | 'chart' | 'user' | 'compliance' | 'vitals' | 'assessment';
+  patientId?: string;
+  patientName?: string;
+  therapistId?: string;
+  therapistName?: string;
+  summaryText?: string;
+  fileFormat?: 'PDF' | 'Excel' | 'CSV';
+  isPinned?: boolean;
 }
 
 export interface RecentReport {
   id: string;
   title: string;
-  category: string; // e.g., "Assessment", "Clinical", "Patient Care"
+  category: string; // e.g., "Assessment", "Clinical", "Patient Care", "Financial"
   date: string; // e.g., "Oct 12, 2023"
-  status?: 'Verified' | 'Needs Review' | 'Draft' | 'Pending';
+  status?: 'Verified' | 'Needs Review' | 'Draft' | 'Pending' | 'Ready' | 'Generating';
   author: {
     name: string;
     avatarUrl: string;
-  };
-  iconType: 'document' | 'compliance' | 'vitals' | 'assessment';
+  } | string;
+  iconType: 'document' | 'compliance' | 'vitals' | 'assessment' | 'chart' | 'user';
+  patientId?: string;
+  patientName?: string;
+  therapistId?: string;
+  therapistName?: string;
+  summaryText?: string;
+  fileFormat?: 'PDF' | 'Excel' | 'CSV';
+  isPinned?: boolean;
 }
 
 export interface QuickTemplate {
@@ -63,6 +77,6 @@ export interface DataArchiveItem {
   status: 'Completed' | 'Expiring Soon' | 'Processing' | 'Failed';
   dateCreated: string;
   downloadUrl?: string;
+  reportType?: string;
+  recordsCount?: number;
 }
-
-

@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
-import { X, FileText, Plus, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, FileText, Plus } from 'lucide-react';
+import { createReportRecord } from '@/services/reportService';
+import { subscribeToPatients } from '@/services/patientService';
+import { subscribeToTherapists } from '@/services/therapistService';
+import type { Patient } from '@/patients/types';
+import type { Therapist } from '@/therapists/types';
 
 interface CreateReportModalProps {
   isOpen: boolean;
@@ -13,31 +18,69 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
   onSuccess,
 }) => {
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Clinical Analysis');
+  const [category, setCategory] = useState('Clinical');
   const [format, setFormat] = useState<'PDF' | 'Excel' | 'CSV'>('PDF');
   const [schedule, setSchedule] = useState('One-time');
-  const [recipients, setRecipients] = useState('dr.chen@onemedical.com');
+  const [selectedPatientId, setSelectedPatientId] = useState('');
+  const [selectedTherapistId, setSelectedTherapistId] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [therapists, setTherapists] = useState<Therapist[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const unsubP = subscribeToPatients(setPatients);
+    const unsubT = subscribeToTherapists(setTherapists);
+    return () => {
+      unsubP();
+      unsubT();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      const selectedPatient = patients.find((p) => p.id === selectedPatientId);
+      const selectedTherapist = therapists.find((t) => t.id === selectedTherapistId);
+
+      await createReportRecord({
+        title: title.trim(),
+        category,
+        fileFormat: format,
+        patientId: selectedPatientId || undefined,
+        patientName: selectedPatient ? selectedPatient.name : undefined,
+        therapistId: selectedTherapistId || undefined,
+        therapistName: selectedTherapist ? selectedTherapist.name : undefined,
+        status: 'Verified',
+        author: selectedTherapist ? selectedTherapist.name : 'Dr. Sarah Jenkins',
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        iconType: category === 'Financial' ? 'document' : category === 'Progress' ? 'chart' : 'assessment',
+        summaryText: description || `Report "${title}" generated for ${selectedPatient ? selectedPatient.name : 'clinic records'}.`,
+      });
+
       onSuccess({
         title: title.trim(),
         category,
       });
-      setIsSubmitting(false);
-      onClose();
+
       // Reset form
       setTitle('');
       setDescription('');
-    }, 500);
+      setSelectedPatientId('');
+      setSelectedTherapistId('');
+      onClose();
+    } catch (err: any) {
+      console.error('Failed to create report in Firestore:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -59,16 +102,16 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
               </div>
               <div>
                 <h3 className="text-xl font-extrabold text-slate-900">
-                  Create New Report
+                  Create New Report (Firestore)
                 </h3>
                 <p className="text-xs font-medium text-slate-400">
-                  Generate customized clinical or financial metrics
+                  Generate customized clinical, patient, or financial metrics
                 </p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-colors"
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -102,11 +145,11 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                   onChange={(e) => setCategory(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 >
-                  <option value="Clinical Analysis">Clinical Analysis</option>
+                  <option value="Clinical">Clinical</option>
+                  <option value="Assessment">Assessment</option>
+                  <option value="Progress">Progress</option>
                   <option value="Patient Care">Patient Care</option>
                   <option value="Financial">Financial</option>
-                  <option value="Internal Ops">Internal Ops</option>
-                  <option value="Treatment Reports">Treatment Reports</option>
                 </select>
               </div>
 
@@ -120,7 +163,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                       type="button"
                       key={fmt}
                       onClick={() => setFormat(fmt)}
-                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all ${
+                      className={`py-2.5 px-3 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
                         format === fmt
                           ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                           : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
@@ -133,35 +176,60 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
               </div>
             </div>
 
-            {/* Schedule & Delivery */}
+            {/* Patient & Therapist Selection */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Run Schedule
+                  Target Patient (Optional)
                 </label>
                 <select
-                  value={schedule}
-                  onChange={(e) => setSchedule(e.target.value)}
+                  value={selectedPatientId}
+                  onChange={(e) => setSelectedPatientId(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
                 >
-                  <option value="One-time">Run Once (Now)</option>
-                  <option value="Daily">Daily at 08:00 AM</option>
-                  <option value="Weekly">Weekly (Every Monday)</option>
-                  <option value="Monthly">Monthly (1st of month)</option>
+                  <option value="">All Patients (Clinic-wide)</option>
+                  {patients.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({p.patientId || p.id.slice(0, 5)})
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Recipient Email
+                  Assigned Therapist (Optional)
                 </label>
-                <input
-                  type="email"
-                  value={recipients}
-                  onChange={(e) => setRecipients(e.target.value)}
+                <select
+                  value={selectedTherapistId}
+                  onChange={(e) => setSelectedTherapistId(e.target.value)}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
-                />
+                >
+                  <option value="">Unassigned / Admin</option>
+                  {therapists.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
               </div>
+            </div>
+
+            {/* Schedule */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                Run Schedule
+              </label>
+              <select
+                value={schedule}
+                onChange={(e) => setSchedule(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+              >
+                <option value="One-time">Run Once (Now)</option>
+                <option value="Daily">Daily at 08:00 AM</option>
+                <option value="Weekly">Weekly (Every Monday)</option>
+                <option value="Monthly">Monthly (1st of month)</option>
+              </select>
             </div>
 
             {/* Description */}
@@ -173,7 +241,7 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add optional notes, date range criteria, or target therapist metrics..."
+                placeholder="Add optional clinical notes, ROM parameters, or target therapist metrics..."
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none"
               />
             </div>
@@ -183,14 +251,14 @@ export const CreateReportModal: React.FC<CreateReportModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"
+                className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting || !title.trim()}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center space-x-2"
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-blue-500/20 flex items-center space-x-2 cursor-pointer"
               >
                 {isSubmitting ? (
                   <span>Generating...</span>

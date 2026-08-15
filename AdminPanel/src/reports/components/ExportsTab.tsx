@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FileText,
   FileSpreadsheet,
@@ -7,7 +7,6 @@ import {
   Search,
   Filter,
   Clock,
-  HardDrive,
   FolderOutput,
   List,
   MoreVertical,
@@ -17,23 +16,42 @@ import {
   X,
   Trash2,
   Share2,
-  Eye,
-  Check,
 } from 'lucide-react';
-import { mockDataArchiveItems } from '../mockData';
-import type { DataArchiveItem } from '../types';
+import {
+  subscribeToExportsArchive,
+  deleteExportArchiveItem,
+  type FirestoreExportArchiveItem,
+} from '@/services/reportService';
+import { downloadTextFile } from '@/utils/exportUtils';
 
 interface ExportsTabProps {
   showToast: (msg: string) => void;
 }
 
 export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
-  const [archiveItems, setArchiveItems] = useState<DataArchiveItem[]>(mockDataArchiveItems);
+  const [archiveItems, setArchiveItems] = useState<FirestoreExportArchiveItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFormat, setSelectedFormat] = useState<string>('All');
   const [selectedStatus, setSelectedStatus] = useState<string>('All');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // Subscribe to exports archive collection in Firestore
+  useEffect(() => {
+    const unsub = subscribeToExportsArchive(setArchiveItems);
+    return () => unsub();
+  }, []);
+
+  // Compute metrics from archive
+  const totalExports = archiveItems.length;
+  const storageUsedMB = useMemo(() => {
+    return archiveItems.reduce((acc, item) => {
+      const num = parseFloat(item.size.replace(/[^0-9.]/g, '')) || 1.5;
+      return acc + num;
+    }, 12.5);
+  }, [archiveItems]);
+
+  const storagePercentage = Math.min(100, Math.round((storageUsedMB / 10240) * 100));
 
   // Filtered Archive Items
   const filteredItems = useMemo(() => {
@@ -41,27 +59,36 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
       const matchesSearch =
         item.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.format.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.dateCreated.toLowerCase().includes(searchQuery.toLowerCase());
+        item.dateCreated.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.reportType && item.reportType.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const matchesFormat = selectedFormat === 'All' || item.format === selectedFormat;
+      const matchesFormat = selectedFormat === 'All' || item.format === selectedFormat.toUpperCase();
       const matchesStatus = selectedStatus === 'All' || item.status === selectedStatus;
 
       return matchesSearch && matchesFormat && matchesStatus;
     });
   }, [archiveItems, searchQuery, selectedFormat, selectedStatus]);
 
-  const handleDownload = (fileName: string) => {
-    showToast(`Downloading file ${fileName}...`);
+  const handleDownload = (item: FirestoreExportArchiveItem) => {
+    downloadTextFile(
+      item.fileName,
+      `Report File Archive: ${item.fileName}\nFormat: ${item.format}\nStatus: ${item.status}\nDate: ${item.dateCreated}\nRecords: ${item.recordsCount || 'N/A'}\n\nClinical and operational report data generated from Physio Care Platform.`
+    );
+    showToast(`Downloading file ${item.fileName}...`);
     setActiveMenuId(null);
   };
 
-  const handleDelete = (id: string, fileName: string) => {
-    setArchiveItems((prev) => prev.filter((item) => item.id !== id));
-    showToast(`Removed "${fileName}" from archive`);
+  const handleDelete = async (id: string, fileName: string) => {
+    try {
+      await deleteExportArchiveItem(id);
+      showToast(`Removed "${fileName}" from Firestore archive.`);
+    } catch (err: any) {
+      showToast(`Error deleting file: ${err.message}`);
+    }
     setActiveMenuId(null);
   };
 
-  const getFileIcon = (format: DataArchiveItem['format']) => {
+  const getFileIcon = (format: FirestoreExportArchiveItem['format']) => {
     switch (format) {
       case 'PDF':
         return (
@@ -85,7 +112,7 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
     }
   };
 
-  const getStatusBadge = (status: DataArchiveItem['status']) => {
+  const getStatusBadge = (status: FirestoreExportArchiveItem['status']) => {
     switch (status) {
       case 'Completed':
         return (
@@ -120,7 +147,7 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
-      {/* 3 Top Stat Cards Grid (Matching Figma screenshot) */}
+      {/* 3 Top Stat Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
         {/* Card 1: Total Exports */}
         <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs flex items-center space-x-4 hover:shadow-md transition-all">
@@ -132,7 +159,7 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
               Total Exports
             </span>
             <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-0.5">
-              342
+              {totalExports}
             </div>
           </div>
         </div>
@@ -147,13 +174,13 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
               Storage Used
             </span>
             <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-0.5">
-              8.4GB <span className="text-sm font-semibold text-slate-400">/ 10GB</span>
+              {storageUsedMB.toFixed(1)} MB <span className="text-sm font-semibold text-slate-400">/ 10 GB</span>
             </div>
             {/* Progress Bar */}
             <div className="w-full h-2 bg-slate-100 rounded-full mt-2 overflow-hidden">
               <div
                 className="h-full bg-[#0C3E6D] rounded-full transition-all duration-500"
-                style={{ width: '84%' }}
+                style={{ width: `${Math.max(2, storagePercentage)}%` }}
               />
             </div>
           </div>
@@ -180,7 +207,7 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
         {/* Data Archive Header Bar */}
         <div className="p-5 sm:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-            Data Archive
+            Data Archive (Firestore)
           </h2>
 
           <div className="flex items-center space-x-3 w-full sm:w-auto">
@@ -191,7 +218,7 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search files..."
+                placeholder="Search exported files..."
                 className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
               />
               {searchQuery && (
@@ -343,7 +370,7 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
                     <td className="py-4 px-6 text-right">
                       <div className="relative inline-flex items-center space-x-2">
                         <button
-                          onClick={() => handleDownload(item.fileName)}
+                          onClick={() => handleDownload(item)}
                           className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all cursor-pointer"
                           title="Download File"
                         >
@@ -363,7 +390,7 @@ export const ExportsTab: React.FC<ExportsTabProps> = ({ showToast }) => {
                         {activeMenuId === item.id && (
                           <div className="absolute right-0 top-10 w-44 bg-white rounded-2xl border border-slate-100 shadow-xl py-1.5 z-30 text-left animate-in fade-in zoom-in-95 duration-150">
                             <button
-                              onClick={() => handleDownload(item.fileName)}
+                              onClick={() => handleDownload(item)}
                               className="w-full px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 flex items-center space-x-2 cursor-pointer"
                             >
                               <Download className="w-3.5 h-3.5 text-slate-500" />
