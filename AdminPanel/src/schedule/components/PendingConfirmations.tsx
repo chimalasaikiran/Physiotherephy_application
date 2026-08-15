@@ -1,65 +1,53 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Bell, CheckCircle2 } from 'lucide-react';
+import type { AppointmentItem } from './AppointmentsTable';
 
-interface PendingConfirmationItem {
-  id: string;
-  name: string;
-  details: string;
+interface PendingConfirmationsProps {
+  appointments?: AppointmentItem[];
+  onConfirm?: (item: AppointmentItem) => void;
 }
 
-export const PendingConfirmations: React.FC = () => {
-  const [items, setItems] = useState<PendingConfirmationItem[]>([
-    {
-      id: '1',
-      name: 'Meera Joshi',
-      details: 'Home Visit - Oct 25',
-    },
-    {
-      id: '2',
-      name: 'Rahul Verma',
-      details: 'Clinic Visit - Oct 26',
-    },
-  ]);
-
-  const handleConfirm = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
-  };
+export const PendingConfirmations: React.FC<PendingConfirmationsProps> = ({
+  appointments = [],
+  onConfirm,
+}) => {
+  const pendingItems = appointments.filter((a) => a.status === 'Scheduled');
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs space-y-4">
       {/* Widget Header */}
       <h3 className="text-xs font-bold text-slate-400 tracking-wider uppercase">
-        PENDING CONFIRMATIONS
+        PENDING CONFIRMATIONS ({pendingItems.length})
       </h3>
 
       {/* Confirmation List */}
       <div className="space-y-3">
-        {items.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-2">
+        {pendingItems.length === 0 ? (
+          <p className="text-xs text-slate-400 text-center py-2 font-medium">
             No pending confirmations.
           </p>
         ) : (
-          items.map((item) => (
+          pendingItems.map((item) => (
             <div
               key={item.id}
               className="flex items-center justify-between p-3 rounded-xl border border-slate-100/80 bg-slate-50/40 hover:bg-slate-50 transition-colors"
             >
               <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                   <Bell className="w-4 h-4" />
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 leading-tight">
-                    {item.name}
+                    {item.patientName}
                   </h4>
                   <p className="text-xs text-slate-400 font-medium mt-0.5">
-                    {item.details}
+                    {item.date} • {item.time}
                   </p>
                 </div>
               </div>
 
               <button
-                onClick={() => handleConfirm(item.id)}
+                onClick={() => onConfirm?.(item)}
                 className="p-1 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
                 title="Confirm Appointment"
               >
@@ -72,3 +60,4 @@ export const PendingConfirmations: React.FC = () => {
     </div>
   );
 };
+

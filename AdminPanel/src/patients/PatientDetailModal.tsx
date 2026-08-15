@@ -1,4 +1,5 @@
 import React from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import { X, Phone, Mail, Calendar, Activity, FileText, CheckCircle2 } from 'lucide-react';
 import type { Patient } from './types';
 
@@ -47,11 +48,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
           {/* Profile Card Header */}
           <div className="flex items-center space-x-4">
-            <img
-              src={patient.avatarUrl}
-              alt={patient.name}
-              className="w-16 h-16 rounded-2xl object-cover border-2 border-slate-100 shadow-sm"
-            />
+            <InitialsAvatar name={patient.name} className="w-16 h-16 text-xl font-bold shrink-0" />
             <div>
               <h3 className="text-xl font-extrabold text-slate-900">{patient.name}</h3>
               <p className="text-sm text-slate-500 font-medium mt-0.5">
@@ -99,9 +96,7 @@ export const PatientDetailModal: React.FC<PatientDetailModalProps> = ({ patient,
                 Therapist
               </span>
               <div className="flex items-center space-x-2">
-                <div className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center ${patient.therapistAvatarBg}`}>
-                  {patient.therapistInitials}
-                </div>
+                <InitialsAvatar name={patient.therapistName} className="w-5 h-5 text-[9px] font-bold shrink-0" />
                 <span className="text-sm font-bold text-slate-800 truncate">{patient.therapistName}</span>
               </div>
             </div>

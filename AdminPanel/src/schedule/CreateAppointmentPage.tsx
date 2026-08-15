@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   Search,
   CheckCircle2,
@@ -30,7 +31,11 @@ import {
   List,
   Wallet,
   Compass,
+  AlertCircle,
 } from 'lucide-react';
+import { subscribeToPatients } from '@/services/patientService';
+import { subscribeToTherapists } from '@/services/therapistService';
+import { getTherapistSlotsForDate, createScheduleRecord } from '@/services/scheduleService';
 
 interface CreateAppointmentPageProps {
   onBack: () => void;
@@ -65,7 +70,7 @@ interface TherapistData {
 interface DayItem {
   day: string;
   date: string;
-  fullDate: string;
+  fullDate: string; // YYYY-MM-DD
   formatted: string;
 }
 
@@ -74,132 +79,39 @@ interface TimeSlotItem {
   status: 'available' | 'booked';
 }
 
-const MOCK_PATIENTS: PatientCardData[] = [
-  {
-    id: 'p-1',
-    name: 'Sanya Malhotra',
-    patientId: '#OM-90210',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    condition: 'ACL RECOVERY',
-    programPhase: 'ACL Recovery • Phase 3',
-    progressPercent: 75,
-    lastSession: 'Oct 12, 2024',
-    phone: '+1 (555) 234-5678',
-  },
-  {
-    id: 'p-2',
-    name: 'Marcus Thorne',
-    patientId: '#OM-88432',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-    condition: 'LUMBAR STRAIN',
-    programPhase: 'Lumbar Spine Rehab • Phase 2',
-    progressPercent: 40,
-    lastSession: 'Oct 05, 2024',
-    phone: '+1 (555) 876-5432',
-  },
-  {
-    id: 'p-3',
-    name: 'Arjun Reddy',
-    patientId: '#OM-91045',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200',
-    condition: 'ROTATOR CUFF',
-    programPhase: 'Shoulder Mobility • Phase 1',
-    progressPercent: 60,
-    lastSession: 'Oct 14, 2024',
-    phone: '+1 (555) 345-6789',
-  },
-  {
-    id: 'p-4',
-    name: 'Ananya Verma',
-    patientId: '#OM-87219',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
-    condition: 'POST-OP KNEE',
-    programPhase: 'Knee Strengthening • Phase 4',
-    progressPercent: 85,
-    lastSession: 'Oct 10, 2024',
-    phone: '+1 (555) 987-6543',
-  },
-];
+const generateWeekDays = (weekOffset: number = 0): DayItem[] => {
+  const today = new Date();
+  const currentDayIndex = today.getDay(); // 0 = Sun, 1 = Mon...
+  const diffToMon = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex) + weekOffset * 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMon);
 
-const MOCK_THERAPISTS: TherapistData[] = [
-  {
-    id: 't-1',
-    name: 'Dr. Arjun Mehta',
-    role: 'Orthopedic Physiotherapy',
-    yearsExp: '12 years exp',
-    specialty: 'Orthopedic Physiotherapy • 12 years exp',
-    avatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=200',
-    rating: 4.9,
-    availability: 'Available Today',
-    isAvailableToday: true,
-  },
-  {
-    id: 't-2',
-    name: 'Dr. Ananya Iyer',
-    role: 'Senior MSK Physiotherapist',
-    yearsExp: '8 years exp',
-    specialty: 'Senior MSK Physiotherapist • 8 years exp',
-    avatar: 'https://images.unsplash.com/photo-1594824813566-88855ce78c00?auto=format&fit=crop&q=80&w=200',
-    rating: 4.8,
-    availability: 'Next Available: Tomorrow',
-    isAvailableToday: false,
-  },
-  {
-    id: 't-3',
-    name: 'Dr. Priya Sharma',
-    role: 'Neurological Specialist',
-    yearsExp: '10 years exp',
-    specialty: 'Neurological Specialist • 10 years exp',
-    avatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=200',
-    rating: 4.9,
-    availability: 'Next Available: Wednesday',
-    isAvailableToday: false,
-  },
-  {
-    id: 't-4',
-    name: 'Dr. Rohan Gupta',
-    role: 'Spine & Joint Specialist',
-    yearsExp: '14 years exp',
-    specialty: 'Spine & Joint Specialist • 14 years exp',
-    avatar: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=200',
-    rating: 4.95,
-    availability: 'Available Today',
-    isAvailableToday: true,
-  },
-];
+  const days: DayItem[] = [];
+  const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const WEEK_DAYS: DayItem[] = [
-  { day: 'MON', date: '21', fullDate: '2024-10-21', formatted: 'Mon, Oct 21' },
-  { day: 'TUE', date: '22', fullDate: '2024-10-22', formatted: 'Tue, Oct 22' },
-  { day: 'WED', date: '23', fullDate: '2024-10-23', formatted: 'Wed, Oct 23' },
-  { day: 'THU', date: '24', fullDate: '2024-10-24', formatted: 'Thu, Oct 24' },
-  { day: 'FRI', date: '25', fullDate: '2024-10-25', formatted: 'Fri, Oct 25' },
-  { day: 'SAT', date: '26', fullDate: '2024-10-26', formatted: 'Sat, Oct 26' },
-  { day: 'SUN', date: '27', fullDate: '2024-10-27', formatted: 'Sun, Oct 27' },
-];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const fullDate = `${yyyy}-${mm}-${dd}`;
+    const dayName = dayNames[d.getDay()];
+    const formatted = `${dayName}, ${monthNames[d.getMonth()]} ${d.getDate()}`;
+    days.push({
+      day: dayName,
+      date: String(d.getDate()).padStart(2, '0'),
+      fullDate,
+      formatted,
+    });
+  }
+  return days;
+};
 
-const MORNING_SLOTS: TimeSlotItem[] = [
-  { time: '09:00 AM', status: 'available' },
-  { time: '09:45 AM', status: 'available' },
-  { time: '10:30 AM', status: 'booked' },
-  { time: '11:15 AM', status: 'available' },
-];
-
-const AFTERNOON_SLOTS: TimeSlotItem[] = [
-  { time: '01:00 PM', status: 'booked' },
-  { time: '01:45 PM', status: 'available' },
-  { time: '02:30 PM', status: 'available' },
-  { time: '03:15 PM', status: 'available' },
-  { time: '04:00 PM', status: 'available' },
-  { time: '04:45 PM', status: 'available' },
-];
-
-const EVENING_SLOTS: TimeSlotItem[] = [
-  { time: '06:00 PM', status: 'available' },
-  { time: '06:45 PM', status: 'available' },
-  { time: '07:30 PM', status: 'available' },
-  { time: '08:15 PM', status: 'booked' },
-];
+const DEFAULT_MORNING_SLOTS = ['09:00 AM', '09:45 AM', '10:30 AM', '11:15 AM'];
+const DEFAULT_AFTERNOON_SLOTS = ['01:00 PM', '01:45 PM', '02:30 PM', '03:15 PM', '04:00 PM', '04:45 PM'];
+const DEFAULT_EVENING_SLOTS = ['06:00 PM', '06:45 PM', '07:30 PM', '08:15 PM'];
 
 const STEPS = [
   { number: 1, label: 'Patient' },
@@ -212,20 +124,29 @@ const STEPS = [
 export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
   onBack,
   onSuccess,
-  initialStep = 3,
+  initialStep = 1,
 }) => {
   const [currentStep, setCurrentStep] = useState<number>(initialStep);
   const [patientSearchTerm, setPatientSearchTerm] = useState<string>('');
   const [therapistSearchTerm, setTherapistSearchTerm] = useState<string>('');
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+
+  // Firestore real-time state
+  const [patients, setPatients] = useState<PatientCardData[]>([]);
+  const [therapists, setTherapists] = useState<TherapistData[]>([]);
+  const [bookedSlotsSet, setBookedSlotsSet] = useState<Set<string>>(new Set());
+
+  // Dynamic Week Days
+  const weekDays = useMemo(() => generateWeekDays(weekOffset), [weekOffset]);
 
   // Step state
   const [sessionDuration, setSessionDuration] = useState<'30m' | '45m' | '60m'>('45m');
-  const [selectedDay, setSelectedDay] = useState<DayItem>(WEEK_DAYS[2]); // Default Wed, Oct 23
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('01:45 PM'); // Default 01:45 PM
+  const [selectedDay, setSelectedDay] = useState<DayItem>(weekDays[2] || weekDays[0]);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('01:45 PM');
 
   // Selections
-  const [selectedPatient, setSelectedPatient] = useState<PatientCardData>(MOCK_PATIENTS[0]);
-  const [selectedTherapist, setSelectedTherapist] = useState<TherapistData | null>(MOCK_THERAPISTS[0]);
+  const [selectedPatient, setSelectedPatient] = useState<PatientCardData | null>(null);
+  const [selectedTherapist, setSelectedTherapist] = useState<TherapistData | null>(null);
   const [visitType, setVisitType] = useState<'Clinic Visit' | 'Home Visit' | 'Online'>('Clinic Visit');
 
   // Clinical Details
@@ -239,39 +160,151 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
   const [attachedFiles, setAttachedFiles] = useState<{ id: string; name: string; size: string }[]>([]);
 
   const [isBookedSuccess, setIsBookedSuccess] = useState<boolean>(false);
+  const [bookingError, setBookingError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Financial values matching Figma exact node 36-6208 (₹1500 + ₹300 - ₹1200 = ₹600)
+  // Subscribe to Patients
+  useEffect(() => {
+    const unsub = subscribeToPatients((pts) => {
+      const mapped: PatientCardData[] = pts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        patientId: p.patientId,
+        avatar: p.avatarUrl,
+        condition: p.condition,
+        programPhase: 'Phase 1 - Initial Assessment',
+        progressPercent: p.recoveryScore || 70,
+        lastSession: p.nextAppointmentDate || 'No past sessions',
+        phone: p.phone || '',
+      }));
+      setPatients(mapped);
+      if (mapped.length > 0 && !selectedPatient) {
+        setSelectedPatient(mapped[0]);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Subscribe to Therapists
+  useEffect(() => {
+    const unsub = subscribeToTherapists((ths) => {
+      const activeThs = ths.filter((t) => t.status === 'ACTIVE' && t.availability !== 'On Leave');
+      const mapped: TherapistData[] = activeThs.map((t) => ({
+        id: t.id!,
+        name: t.name,
+        role: t.degree || 'Physiotherapy Specialist',
+        yearsExp: t.experience || '5+ Years Exp',
+        specialty: t.specializations?.join(', ') || 'Orthopedic Physiotherapy',
+        avatar:
+          t.avatarUrl ||
+          'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
+        rating: t.rating || 5.0,
+        availability: t.availability || 'Available Today',
+        isAvailableToday: t.availability === 'Available Today',
+      }));
+      setTherapists(mapped);
+      if (mapped.length > 0 && !selectedTherapist) {
+        setSelectedTherapist(mapped[0]);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Fetch booked slots whenever selectedTherapist or selectedDay changes
+  useEffect(() => {
+    if (selectedTherapist && selectedDay) {
+      const allSlots = [...DEFAULT_MORNING_SLOTS, ...DEFAULT_AFTERNOON_SLOTS, ...DEFAULT_EVENING_SLOTS];
+      getTherapistSlotsForDate(selectedTherapist.id, selectedDay.fullDate, allSlots).then(
+        ({ bookedSlots }) => {
+          setBookedSlotsSet(bookedSlots);
+        }
+      );
+    }
+  }, [selectedTherapist?.id, selectedDay?.fullDate]);
+
+  // Keep selectedDay synced with weekDays update
+  useEffect(() => {
+    if (weekDays.length > 0 && !weekDays.find((d) => d.fullDate === selectedDay?.fullDate)) {
+      setSelectedDay(weekDays[0]);
+    }
+  }, [weekDays]);
+
+  // Financial values
   const sessionFee = 1500.0;
   const facilityCharges = 300.0;
   const insuranceCoverage = 1200.0;
   const totalPayable = sessionFee + facilityCharges - insuranceCoverage;
 
-  const filteredPatients = MOCK_PATIENTS.filter(
+  const filteredPatients = patients.filter(
     (p) =>
       p.name.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
       p.patientId.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
       p.condition.toLowerCase().includes(patientSearchTerm.toLowerCase())
   );
 
-  const filteredTherapists = MOCK_THERAPISTS.filter(
+  const filteredTherapists = therapists.filter(
     (t) =>
       t.name.toLowerCase().includes(therapistSearchTerm.toLowerCase()) ||
       t.specialty.toLowerCase().includes(therapistSearchTerm.toLowerCase()) ||
       t.role.toLowerCase().includes(therapistSearchTerm.toLowerCase())
   );
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (currentStep < 5) {
       setCurrentStep((prev) => prev + 1);
     } else {
-      setIsBookedSuccess(true);
-      if (onSuccess) {
-        setTimeout(() => {
-          onSuccess();
-        }, 2200);
+      if (!selectedPatient || !selectedTherapist) {
+        setBookingError('Please select both a patient and a therapist before confirming.');
+        return;
+      }
+      setIsSubmitting(true);
+      setBookingError(null);
+
+      try {
+        await createScheduleRecord({
+          patientId: selectedPatient.id,
+          patientName: selectedPatient.name,
+          patientSubtitle: selectedPatient.condition,
+          patientAvatar: selectedPatient.avatar,
+          patientPhone: selectedPatient.phone,
+          patientCondition: selectedPatient.condition,
+          therapistId: selectedTherapist.id,
+          therapistName: selectedTherapist.name,
+          therapistSubtitle: selectedTherapist.specialty,
+          therapistAvatar: selectedTherapist.avatar,
+          type: visitType,
+          fullDate: selectedDay.fullDate,
+          dateLabel: selectedDay.formatted,
+          timeSlot: selectedTimeSlot,
+          sessionDuration,
+          patientInstructions,
+          internalStaffNotes,
+          urgencyPriority,
+          attachedFiles,
+          sessionFee,
+          facilityCharges,
+          insuranceCoverage,
+        });
+
+        setIsBookedSuccess(true);
+        if (onSuccess) {
+          setTimeout(() => {
+            onSuccess();
+          }, 2000);
+        }
+      } catch (err: any) {
+        console.error('Create appointment error:', err);
+        if (err.message === 'SLOT_ALREADY_BOOKED') {
+          setBookingError('This time slot was just booked by another user. Please select a different slot.');
+        } else {
+          setBookingError(err.message || 'Failed to create appointment. Please try again.');
+        }
+      } finally {
+        setIsSubmitting(false);
       }
     }
   };
+
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-16 animate-in fade-in duration-300">
@@ -383,7 +416,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {filteredPatients.map((patient) => {
-              const isSelected = selectedPatient.id === patient.id;
+              const isSelected = selectedPatient?.id === patient.id;
 
               return (
                 <div
@@ -402,11 +435,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                   )}
 
                   <div className="flex items-center space-x-3.5 mb-4">
-                    <img
-                      src={patient.avatar}
-                      alt={patient.name}
-                      className="w-12 h-12 rounded-full object-cover border-2 border-slate-100 shadow-xs"
-                    />
+                    <InitialsAvatar name={patient.name} className="w-12 h-12 text-sm font-bold shrink-0" />
                     <div>
                       <h3 className="font-extrabold text-slate-900 text-base leading-snug">
                         {patient.name}
@@ -494,11 +523,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                   }`}
                 >
                   <div className="flex items-center space-x-4">
-                    <img
-                      src={therapist.avatar}
-                      alt={therapist.name}
-                      className="w-14 h-14 rounded-full object-cover border-2 border-slate-100 shadow-xs flex-shrink-0"
-                    />
+                    <InitialsAvatar name={therapist.name} className="w-14 h-14 text-base font-bold shrink-0" />
                     <div className="space-y-1">
                       <h3 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight leading-snug">
                         {therapist.name}
@@ -604,34 +629,36 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                   <span>Filter</span>
                 </button>
               </div>
-            </div>
-
-            {/* Calendar Date Navigation */}
+            </div>            {/* Calendar Date Navigation */}
             <div className="space-y-4">
               <div className="flex items-center justify-between px-2">
                 <button
                   type="button"
+                  onClick={() => setWeekOffset((prev) => prev - 1)}
                   className="p-2 rounded-full text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Previous Week"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <h3 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
-                  October 21 – 27, 2024
+                  {weekDays[0]?.formatted} – {weekDays[6]?.formatted}
                 </h3>
                 <button
                   type="button"
+                  onClick={() => setWeekOffset((prev) => prev + 1)}
                   className="p-2 rounded-full text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                  title="Next Week"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="grid grid-cols-7 gap-2 sm:gap-3">
-                {WEEK_DAYS.map((dayItem) => {
-                  const isSelected = selectedDay.date === dayItem.date;
+                {weekDays.map((dayItem) => {
+                  const isSelected = selectedDay.fullDate === dayItem.fullDate;
                   return (
                     <div
-                      key={dayItem.date}
+                      key={dayItem.fullDate}
                       onClick={() => setSelectedDay(dayItem)}
                       className={`flex flex-col items-center justify-center py-3 sm:py-4 px-1 rounded-2xl cursor-pointer transition-all ${
                         isSelected
@@ -670,15 +697,15 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                   <span>MORNING SLOTS</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {MORNING_SLOTS.map((slot) => {
-                    const isBooked = slot.status === 'booked';
-                    const isSelected = selectedTimeSlot === slot.time;
+                  {DEFAULT_MORNING_SLOTS.map((slotTime) => {
+                    const isBooked = bookedSlotsSet.has(slotTime);
+                    const isSelected = selectedTimeSlot === slotTime;
                     return (
                       <button
-                        key={slot.time}
+                        key={slotTime}
                         type="button"
                         disabled={isBooked}
-                        onClick={() => setSelectedTimeSlot(slot.time)}
+                        onClick={() => setSelectedTimeSlot(slotTime)}
                         className={`py-3 px-4 rounded-2xl text-xs sm:text-sm font-extrabold transition-all border relative ${
                           isBooked
                             ? 'bg-slate-50 text-slate-300 border-slate-100 line-through cursor-not-allowed'
@@ -687,7 +714,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                             : 'bg-slate-50/80 text-slate-700 border-slate-100 hover:bg-slate-100 cursor-pointer'
                         }`}
                       >
-                        {slot.time}
+                        {slotTime}
                       </button>
                     );
                   })}
@@ -700,15 +727,15 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                   <span>AFTERNOON SLOTS</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {AFTERNOON_SLOTS.map((slot) => {
-                    const isBooked = slot.status === 'booked';
-                    const isSelected = selectedTimeSlot === slot.time;
+                  {DEFAULT_AFTERNOON_SLOTS.map((slotTime) => {
+                    const isBooked = bookedSlotsSet.has(slotTime);
+                    const isSelected = selectedTimeSlot === slotTime;
                     return (
                       <button
-                        key={slot.time}
+                        key={slotTime}
                         type="button"
                         disabled={isBooked}
-                        onClick={() => setSelectedTimeSlot(slot.time)}
+                        onClick={() => setSelectedTimeSlot(slotTime)}
                         className={`py-3.5 px-4 rounded-2xl text-xs sm:text-sm font-extrabold transition-all border relative ${
                           isBooked
                             ? 'bg-slate-50/80 text-slate-300 border-slate-100 line-through cursor-not-allowed'
@@ -717,7 +744,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                             : 'bg-slate-50/80 text-slate-700 border-slate-100 hover:bg-slate-100 cursor-pointer'
                         }`}
                       >
-                        {slot.time}
+                        {slotTime}
                       </button>
                     );
                   })}
@@ -730,15 +757,15 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                   <span>EVENING SLOTS</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {EVENING_SLOTS.map((slot) => {
-                    const isBooked = slot.status === 'booked';
-                    const isSelected = selectedTimeSlot === slot.time;
+                  {DEFAULT_EVENING_SLOTS.map((slotTime) => {
+                    const isBooked = bookedSlotsSet.has(slotTime);
+                    const isSelected = selectedTimeSlot === slotTime;
                     return (
                       <button
-                        key={slot.time}
+                        key={slotTime}
                         type="button"
                         disabled={isBooked}
-                        onClick={() => setSelectedTimeSlot(slot.time)}
+                        onClick={() => setSelectedTimeSlot(slotTime)}
                         className={`py-3 px-4 rounded-2xl text-xs sm:text-sm font-extrabold transition-all border relative ${
                           isBooked
                             ? 'bg-slate-50 text-slate-300 border-slate-100 line-through cursor-not-allowed'
@@ -747,7 +774,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                             : 'bg-slate-50/80 text-slate-700 border-slate-100 hover:bg-slate-100 cursor-pointer'
                         }`}
                       >
-                        {slot.time}
+                        {slotTime}
                       </button>
                     );
                   })}
@@ -764,10 +791,10 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
               Back
             </button>
             <button
-              onClick={() => setCurrentStep(5)}
+              onClick={() => setCurrentStep(4)}
               className="px-6 py-3 bg-[#003B95] hover:bg-blue-900 text-white font-bold rounded-full shadow-md text-sm cursor-pointer transition-all flex items-center space-x-2"
             >
-              <span>Review Appointment</span>
+              <span>Next: Session Details</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -991,6 +1018,14 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
             </p>
           </div>
 
+          {/* Error Banner when booking fails */}
+          {bookingError && (
+            <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-2xl shadow-xs flex items-center space-x-3">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-600" />
+              <div className="text-sm font-semibold">{bookingError}</div>
+            </div>
+          )}
+
           {/* Success Banner Overlay when confirmed */}
           {isBookedSuccess && (
             <div className="bg-emerald-500 text-white p-6 rounded-3xl shadow-xl space-y-2 text-center animate-in zoom-in-95 duration-300">
@@ -999,7 +1034,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
               </div>
               <h3 className="text-xl font-extrabold">Appointment Confirmed Successfully!</h3>
               <p className="text-sm opacity-90">
-                Booking confirmed for {selectedPatient.name} with {selectedTherapist?.name || 'Dr. Arjun Mehta'} on {selectedDay.formatted} at {selectedTimeSlot}. Redirecting to schedule...
+                Booking confirmed for {selectedPatient?.name || 'Patient'} with {selectedTherapist?.name || 'Dr. Arjun Mehta'} on {selectedDay.formatted} at {selectedTimeSlot}. Redirecting to schedule...
               </p>
             </div>
           )}
@@ -1023,7 +1058,7 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
 
                   <div>
                     <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                      {selectedPatient.name}
+                      {selectedPatient?.name || 'Unassigned Patient'}
                     </h3>
                   </div>
 
@@ -1031,13 +1066,13 @@ export const CreateAppointmentPage: React.FC<CreateAppointmentPageProps> = ({
                     <div className="flex justify-between items-center text-xs sm:text-sm">
                       <span className="text-slate-400 font-semibold">Patient ID:</span>
                       <span className="font-extrabold text-[#003B95] font-mono tracking-tight bg-blue-50/80 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                        {selectedPatient.patientId}
+                        {selectedPatient?.patientId || '#PT-0000'}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-xs sm:text-sm">
                       <span className="text-slate-400 font-semibold">Primary Case:</span>
                       <span className="font-extrabold text-slate-800">
-                        {selectedPatient.condition === 'ACL RECOVERY' ? 'ACL Recovery' : selectedPatient.condition}
+                        {selectedPatient?.condition === 'ACL RECOVERY' ? 'ACL Recovery' : (selectedPatient?.condition || 'General')}
                       </span>
                     </div>
                   </div>

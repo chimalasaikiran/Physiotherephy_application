@@ -12,8 +12,6 @@ export const AUTH_CONFIG: AuthConfig = {
   passwordLabel: 'Password',
   passwordPlaceholder: '••••••••',
   rememberMeLabel: 'Remember me',
-  forgotPasswordText: 'Forgot password?',
-  forgotPasswordHref: '#forgot-password',
   submitButtonText: 'Sign In',
   dividerText: 'OR',
   googleSignInText: 'Sign in with Google',

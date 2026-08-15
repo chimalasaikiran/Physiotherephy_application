@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Sparkles } from 'lucide-react';
+import { X, UserPlus, Sparkles, Loader2 } from 'lucide-react';
 import type { Therapist, AvailabilityStatus, TherapistStatus } from './types';
 
 interface AddTherapistModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTherapist: (therapist: Omit<Therapist, 'id' | 'patientsCount' | 'rating'>) => void;
+  onAddTherapist: (therapist: Omit<Therapist, 'id' | 'patientsCount' | 'rating'>) => Promise<void> | void;
 }
 
 const AVAILABLE_SPECIALIZATIONS = [
@@ -34,6 +34,8 @@ export const AddTherapistModal: React.FC<AddTherapistModalProps> = ({
   const [availability, setAvailability] = useState<AvailabilityStatus>('Available Today');
   const [status, setStatus] = useState<TherapistStatus>('ACTIVE');
   const [selectedSpecs, setSelectedSpecs] = useState<string[]>(['Sports Rehab']);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -47,29 +49,36 @@ export const AddTherapistModal: React.FC<AddTherapistModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !email.trim()) return;
-
-    onAddTherapist({
-      name: name.startsWith('Dr.') ? name : `Dr. ${name}`,
-      degree,
-      experience,
-      email,
-      phone: phone || '+1 (555) 100-2000',
-      location,
-      bio: bio || 'Specialist physical therapist providing evidence-based rehabilitation.',
-      availability,
-      status,
-      specializations: selectedSpecs,
-      initials: name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase(),
-    });
-
-    onClose();
-    // Reset form
-    setName('');
-    setEmail('');
-    setPhone('');
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await onAddTherapist({
+        name: name.startsWith('Dr.') ? name : `Dr. ${name}`,
+        degree,
+        experience,
+        email,
+        phone: phone || '+1 (555) 100-2000',
+        location,
+        bio: bio || 'Specialist physical therapist providing evidence-based rehabilitation.',
+        availability,
+        status,
+        specializations: selectedSpecs,
+        initials: name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase(),
+        assignedPatientIds: [],
+      });
+      onClose();
+      // Reset form
+      setName('');
+      setEmail('');
+      setPhone('');
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save therapist.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -265,21 +274,32 @@ export const AddTherapistModal: React.FC<AddTherapistModalProps> = ({
           </div>
 
           {/* Footer actions */}
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>Save Therapist</span>
-            </button>
+          <div className="pt-3 border-t border-slate-100 flex flex-col items-stretch space-y-2">
+            {saveError && (
+              <p className="text-xs text-rose-600 font-semibold text-center">{saveError}</p>
+            )}
+            <div className="flex items-center justify-end space-x-3">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving}
+                className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4" />
+                )}
+                <span>{isSaving ? 'Saving…' : 'Save Therapist'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>

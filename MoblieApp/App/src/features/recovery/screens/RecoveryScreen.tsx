@@ -11,6 +11,7 @@ import {
   Dimensions,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +22,11 @@ import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+
+import { fetchUserProgressStats, ProgressStats as UserProgressData, DEFAULT_USER_PROGRESS } from '@/api/recoveryApi';
+import { subscribeToPatientAssignments, MobileProgramAssignment } from '@/api/programService';
+import { auth } from '@/config/firebase';
+import { useAuth } from '@/context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -34,8 +40,8 @@ interface AchievementItem {
 
 interface DayActivity {
   day: string;
-  completedHeight: number; // percentage 0 - 100
-  pendingHeight: number;   // percentage 0 - 100
+  completedHeight: number;
+  pendingHeight: number;
   status: 'completed' | 'partial' | 'pending';
 }
 
@@ -47,9 +53,57 @@ interface RecoveryScreenProps {
 export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar = false, onTabPress }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user, userProfile } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('recovery');
+  const [userProgress, setUserProgress] = useState<UserProgressData>(DEFAULT_USER_PROGRESS);
+  const [assignedPrograms, setAssignedPrograms] = useState<MobileProgramAssignment[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState<boolean>(true);
 
   const recoveryData = Strings.recoveryDashboard;
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const currentUser = auth.currentUser;
+    const uid = currentUser?.uid || user?.uid;
+
+    if (!uid) {
+      setAssignmentsLoading(false);
+      return;
+    }
+
+    fetchUserProgressStats(uid).then((progressData) => {
+      if (isMounted && progressData) {
+        setUserProgress((prev) => ({
+          ...prev,
+          ...progressData,
+          completedSessionCount: progressData.completedSessionCount ?? progressData.completedSessions ?? prev.completedSessionCount,
+          recoveryScore: progressData.recoveryScore ?? progressData.recoveryPercentage ?? prev.recoveryScore,
+          streakDays: progressData.streakDays ?? prev.streakDays,
+        }));
+      }
+    });
+
+    const unsubAssignments = subscribeToPatientAssignments(
+      uid,
+      (assignments) => {
+        if (isMounted) {
+          setAssignedPrograms(assignments);
+          setAssignmentsLoading(false);
+        }
+      },
+      (err) => {
+        console.warn('[RecoveryScreen] assignment subscription error:', err);
+        if (isMounted) setAssignmentsLoading(false);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      unsubAssignments();
+    };
+  }, [user?.uid]);
+
+  const activeAssignment = assignedPrograms.length > 0 ? assignedPrograms[0] : null;
 
   const handleNavTabPress = (tab: TabKey) => {
     setActiveNavTab(tab);
@@ -70,17 +124,21 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
     }
   };
 
+  const completedSessions = activeAssignment
+    ? activeAssignment.completedSessions
+    : userProgress.completedSessionCount ?? 0;
+
   const achievements: AchievementItem[] = [
     {
       id: 'streak',
-      title: '7 Day Streak',
+      title: `${userProgress.streakDays || 4} Day Streak`,
       iconName: 'flame',
       badgeBg: '#FFEDD5',
       iconColor: '#F97316',
     },
     {
       id: 'sessions',
-      title: '25 Sessions',
+      title: `${completedSessions} Sessions`,
       iconName: 'ribbon',
       badgeBg: '#E0F2FE',
       iconColor: '#0284C7',
@@ -94,7 +152,7 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
     },
     {
       id: 'top_performer',
-      title: 'Top 10%',
+      title: 'Top Tier',
       iconName: 'trophy',
       badgeBg: '#F3E8FF',
       iconColor: '#9333EA',
@@ -102,14 +160,53 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
   ];
 
   const weeklyDays: DayActivity[] = [
-    { day: 'Mon', completedHeight: 85, pendingHeight: 0, status: 'completed' },
-    { day: 'Tue', completedHeight: 95, pendingHeight: 0, status: 'completed' },
-    { day: 'Wed', completedHeight: 75, pendingHeight: 0, status: 'completed' },
-    { day: 'Thu', completedHeight: 90, pendingHeight: 0, status: 'completed' },
-    { day: 'Fri', completedHeight: 65, pendingHeight: 25, status: 'partial' },
-    { day: 'Sat', completedHeight: 45, pendingHeight: 40, status: 'partial' },
-    { day: 'Sun', completedHeight: 0, pendingHeight: 80, status: 'pending' },
+    { day: 'Mon', completedHeight: completedSessions > 0 ? 85 : 0, pendingHeight: completedSessions > 0 ? 0 : 80, status: completedSessions > 0 ? 'completed' : 'pending' },
+    { day: 'Tue', completedHeight: completedSessions > 1 ? 95 : 0, pendingHeight: completedSessions > 1 ? 0 : 80, status: completedSessions > 1 ? 'completed' : 'pending' },
+    { day: 'Wed', completedHeight: completedSessions > 2 ? 75 : 0, pendingHeight: completedSessions > 2 ? 0 : 80, status: completedSessions > 2 ? 'completed' : 'pending' },
+    { day: 'Thu', completedHeight: completedSessions > 3 ? 90 : 0, pendingHeight: completedSessions > 3 ? 0 : 80, status: completedSessions > 3 ? 'completed' : 'pending' },
+    { day: 'Fri', completedHeight: completedSessions > 4 ? 65 : 0, pendingHeight: completedSessions > 4 ? 0 : 80, status: completedSessions > 4 ? 'completed' : 'pending' },
+    { day: 'Sat', completedHeight: completedSessions > 5 ? 85 : 0, pendingHeight: completedSessions > 5 ? 0 : 80, status: completedSessions > 5 ? 'completed' : 'pending' },
+    { day: 'Sun', completedHeight: completedSessions > 6 ? 90 : 0, pendingHeight: completedSessions > 6 ? 0 : 80, status: completedSessions > 6 ? 'completed' : 'pending' },
   ];
+
+  const userName = userProfile?.fullName?.trim() || Strings.explore.userNameDefault || 'User';
+
+  const getGreetingHeading = () => {
+    const hour = new Date().getHours();
+    let timeGreeting = 'Good Morning';
+    if (hour >= 12 && hour < 17) {
+      timeGreeting = 'Good Afternoon';
+    } else if (hour >= 17 || hour < 4) {
+      timeGreeting = 'Good Evening';
+    }
+    return `${timeGreeting}, ${userName} 👋`;
+  };
+
+  // Helper for exercises count & stage details
+  const getAssignmentMeta = (assignment: MobileProgramAssignment) => {
+    const currentWeekData = assignment.programDetails?.weeks?.find(
+      (w) => w.weekNumber === assignment.currentWeek
+    ) || assignment.programDetails?.weeks?.[0];
+
+    const currentStageTitle = currentWeekData?.title || 'Rehabilitation Phase';
+    const clinicalFocus = currentWeekData?.clinicalFocus || assignment.patientCondition || 'Mobility & Control';
+    const weeksExercisesSum = assignment.programDetails?.weeks && assignment.programDetails.weeks.length > 0
+      ? assignment.programDetails.weeks.reduce((acc, w) => acc + (w.exercises?.length || 0), 0)
+      : 0;
+    const totalProgramExercises = weeksExercisesSum > 0
+      ? weeksExercisesSum
+      : Number(assignment.programDetails?.totalExercises || assignment.programDetails?.exercisesCount || 10);
+    const completedCount = assignment.completedExercises?.length || 0;
+    const remainingCount = Math.max(0, totalProgramExercises - completedCount);
+
+    return {
+      currentStageTitle,
+      clinicalFocus,
+      totalProgramExercises,
+      completedCount,
+      remainingCount,
+    };
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -122,7 +219,7 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 12,
+              paddingTop: Spacing.md,
               paddingBottom: 110 + Math.max(insets.bottom, 12),
             },
           ]}
@@ -132,12 +229,16 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Image
-                source={require('../../../assets/images/user_sagar_avatar.png')}
+                source={
+                  userProfile?.avatarUri
+                    ? { uri: userProfile.avatarUri }
+                    : require('../../../assets/images/user_sagar_avatar.png')
+                }
                 style={styles.avatarImage}
                 resizeMode="cover"
               />
               <View style={styles.headerTextGroup}>
-                <Text style={styles.greetingText}>{recoveryData.greeting}</Text>
+                <Text style={styles.greetingText}>{getGreetingHeading()}</Text>
                 <Text style={styles.subGreetingText}>{recoveryData.subtitle}</Text>
               </View>
             </View>
@@ -152,133 +253,187 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
             </TouchableOpacity>
           </View>
 
-          {/* 2. GRADIENT CARD: WEEK 4 OF RECOVERY */}
-          <TouchableOpacity
-            activeOpacity={0.92}
-            onPress={() => router.push('/recovery-progress' as any)}
-          >
-            <LinearGradient
-              colors={['#003D9B', '#005F9E', '#007A8C']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.recoveryBannerCard}
-            >
-              {/* Top Improvement Badge */}
-              <View style={styles.improvementBadge}>
-                <Ionicons name="trending-up" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.improvementBadgeText}>
-                  {recoveryData.banner.improvementBadge}
-                </Text>
+          {/* LOADING STATE */}
+          {assignmentsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#003D9B" />
+              <Text style={styles.loadingText}>Loading assigned recovery programs...</Text>
+            </View>
+          ) : assignedPrograms.length === 0 ? (
+            /* EMPTY STATE: NO ASSIGNED PROGRAM */
+            <View style={styles.emptyStateCard}>
+              <View style={styles.emptyIconWrapper}>
+                <Ionicons name="medical-outline" size={40} color="#003D9B" />
               </View>
-
-              <Text style={styles.bannerTitle}>{recoveryData.banner.title}</Text>
-              <Text style={styles.bannerDescription}>{recoveryData.banner.description}</Text>
-
-              {/* CIRCULAR RECOVERY METER */}
-              <View style={styles.ringGaugeWrapper}>
-                <View style={styles.outerRing}>
-                  <View style={styles.innerRingContent}>
-                    <Text style={styles.ringScoreText}>{recoveryData.banner.overallScore}</Text>
-                    <Text style={styles.ringLabelText}>{recoveryData.banner.overallLabel}</Text>
-                  </View>
-                </View>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-
-          {/* 3. TODAY'S SESSION */}
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>{recoveryData.todaysSession.title}</Text>
-            
-            <TouchableOpacity
-              activeOpacity={0.92}
-              style={styles.todaySessionCard}
-              onPress={() => router.push('/today-session' as any)}
-            >
-              <View style={styles.dumbbellIconCircle}>
-                <Ionicons name="barbell-outline" size={26} color={Colors.primary} />
-              </View>
-
-              <Text style={styles.sessionTitle}>{recoveryData.todaysSession.sessionTitle}</Text>
-
-              <View style={styles.sessionMetaRow}>
-                <View style={styles.metaBadge}>
-                  <Ionicons name="barbell" size={14} color="#64748B" />
-                  <Text style={styles.metaText}>{recoveryData.todaysSession.exercisesCount}</Text>
-                </View>
-                <View style={styles.metaDot} />
-                <View style={styles.metaBadge}>
-                  <Ionicons name="time-outline" size={14} color="#64748B" />
-                  <Text style={styles.metaText}>{recoveryData.todaysSession.duration}</Text>
-                </View>
-                <View style={styles.metaDot} />
-                <View style={styles.metaBadge}>
-                  <Ionicons name="stats-chart-outline" size={14} color="#64748B" />
-                  <Text style={styles.metaText}>{recoveryData.todaysSession.level}</Text>
-                </View>
-              </View>
-
+              <Text style={styles.emptyStateTitle}>No recovery programs assigned yet.</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Your physiotherapist will assign a personalized recovery program for you soon.
+              </Text>
               <TouchableOpacity
                 activeOpacity={0.88}
-                style={styles.startSessionButton}
-                onPress={() => router.push('/today-session' as any)}
+                style={styles.emptyConsultButton}
+                onPress={() => router.push('/service-selection' as any)}
               >
-                <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.startSessionButtonText}>
-                  {recoveryData.todaysSession.startButton}
-                </Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </View>
-
-          {/* 4. CURRENT PROGRAM */}
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>{recoveryData.currentProgram.title}</Text>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => router.push('/my-recovery-programs' as any)}
-              >
-                <Text style={styles.viewProgramLink}>{recoveryData.currentProgram.viewProgram}</Text>
+                <Ionicons name="calendar-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.emptyConsultButtonText}>Request Clinical Assessment</Text>
               </TouchableOpacity>
             </View>
+          ) : (
+            /* ASSIGNED PROGRAM AVAILABLE */
+            <>
+              {/* 2. RECOVERY BANNER CARD DRIVEN BY ASSIGNED PROGRAM */}
+              {activeAssignment && (
+                <TouchableOpacity
+                  activeOpacity={0.92}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/recovery-program-details' as any,
+                      params: { assignmentId: activeAssignment.id },
+                    })
+                  }
+                >
+                  <LinearGradient
+                    colors={['#003D9B', '#005F9E', '#007A8C']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.recoveryBannerCard}
+                  >
+                    {/* Top Status & Week Badge */}
+                    <View style={styles.improvementBadge}>
+                      <Ionicons name="checkmark-circle-outline" size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.improvementBadgeText}>
+                        Week {activeAssignment.currentWeek} of {activeAssignment.totalWeeks} • {activeAssignment.status.toUpperCase()}
+                      </Text>
+                    </View>
 
-            <TouchableOpacity
-              activeOpacity={0.9}
-              style={styles.programCard}
-              onPress={() => router.push('/recovery-program-details' as any)}
-            >
-              <View style={styles.programTopRow}>
-                <Image
-                  source={require('../../../assets/images/doctor_ananya.png')}
-                  style={styles.doctorAvatar}
-                  resizeMode="cover"
-                />
-                <View style={styles.programTextGroup}>
-                  <Text style={styles.programTitleText}>{recoveryData.currentProgram.programTitle}</Text>
-                  <Text style={styles.specialistText}>{recoveryData.currentProgram.specialist}</Text>
-                </View>
-              </View>
+                    <Text style={styles.bannerTitle}>{activeAssignment.programTitle}</Text>
+                    <Text style={styles.bannerDescription}>
+                      {activeAssignment.programDetails?.description || `Active rehabilitation protocol for ${activeAssignment.patientCondition}`}
+                    </Text>
 
-              <View style={styles.progressInfoRow}>
-                <Text style={styles.progressSessionsText}>
-                  {recoveryData.currentProgram.sessionsCompleted}
-                </Text>
-                <Text style={styles.progressPercentText}>
-                  {recoveryData.currentProgram.progressPercent}
-                </Text>
-              </View>
+                    {/* CIRCULAR RECOVERY METER */}
+                    <View style={styles.ringGaugeWrapper}>
+                      <View style={styles.outerRing}>
+                        <View style={styles.innerRingContent}>
+                          <Text style={styles.ringScoreText}>{activeAssignment.progressPercent}%</Text>
+                          <Text style={styles.ringLabelText}>Program Progress</Text>
+                        </View>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
 
-              <View style={styles.progressBarTrack}>
-                <View style={[styles.progressBarFill, { width: '75%' }]} />
-              </View>
-            </TouchableOpacity>
-          </View>
+              {/* 3. CURRENT ASSIGNED PROGRAM OVERVIEW CARD */}
+              {activeAssignment && (() => {
+                const meta = getAssignmentMeta(activeAssignment);
+                return (
+                  <View style={styles.sectionContainer}>
+                    <View style={styles.sectionHeaderRow}>
+                      <Text style={styles.sectionTitle}>Assigned Recovery Program</Text>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => router.push('/my-recovery-programs' as any)}
+                      >
+                        <Text style={styles.viewProgramLink}>View All ({assignedPrograms.length})</Text>
+                      </TouchableOpacity>
+                    </View>
 
-          {/* 5. ACHIEVEMENTS */}
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      style={styles.programCard}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/recovery-program-details' as any,
+                          params: { assignmentId: activeAssignment.id },
+                        })
+                      }
+                    >
+                      {/* Top Doctor & Status Bar */}
+                      <View style={styles.programTopRow}>
+                        <Image
+                          source={require('../../../assets/images/doctor_ananya.png')}
+                          style={styles.doctorAvatar}
+                          resizeMode="cover"
+                        />
+                        <View style={styles.programTextGroup}>
+                          <Text style={styles.programTitleText}>{activeAssignment.programTitle}</Text>
+                          <Text style={styles.specialistText}>
+                            {activeAssignment.programDetails?.doctorName || 'Dr. Ananya Sharma'} • {activeAssignment.patientCondition}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Current Stage */}
+                      <View style={styles.stageInfoBox}>
+                        <Ionicons name="fitness" size={16} color="#0284C7" />
+                        <Text style={styles.stageTitleText}>{meta.currentStageTitle}</Text>
+                      </View>
+
+                      {/* Exercise Counts Breakdown */}
+                      <View style={styles.exerciseStatsRow}>
+                        <View style={styles.statBadgeItem}>
+                          <Ionicons name="checkmark-done" size={14} color="#16A34A" />
+                          <Text style={styles.statBadgeText}>{meta.completedCount} Completed</Text>
+                        </View>
+                        <View style={styles.statDot} />
+                        <View style={styles.statBadgeItem}>
+                          <Ionicons name="time" size={14} color="#EAB308" />
+                          <Text style={styles.statBadgeText}>{meta.remainingCount} Remaining</Text>
+                        </View>
+                        <View style={styles.statDot} />
+                        <View style={styles.statBadgeItem}>
+                          <Ionicons name="calendar-outline" size={14} color="#64748B" />
+                          <Text style={styles.statBadgeText}>Week {activeAssignment.currentWeek}/{activeAssignment.totalWeeks}</Text>
+                        </View>
+                      </View>
+
+                      {/* Progress Sessions & Bar */}
+                      <View style={styles.progressInfoRow}>
+                        <Text style={styles.progressSessionsText}>
+                          {activeAssignment.completedSessions} / {activeAssignment.totalSessions} Sessions Completed
+                        </Text>
+                        <Text style={styles.progressPercentText}>
+                          {activeAssignment.progressPercent}%
+                        </Text>
+                      </View>
+
+                      <View style={styles.progressBarTrack}>
+                        <View
+                          style={[
+                            styles.progressBarFill,
+                            {
+                              width: `${Math.max(activeAssignment.progressPercent, 2)}%`,
+                            },
+                          ]}
+                        />
+                      </View>
+
+                      {/* Action Button */}
+                      <TouchableOpacity
+                        activeOpacity={0.88}
+                        style={styles.openProgramButton}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/recovery-program-details' as any,
+                            params: { assignmentId: activeAssignment.id },
+                          })
+                        }
+                      >
+                        <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                        <Text style={styles.openProgramButtonText}>Open Program Details</Text>
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })()}
+            </>
+          )}
+
+          {/* 4. ACHIEVEMENTS */}
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>{recoveryData.achievements.title}</Text>
-            
+
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -295,10 +450,10 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
             </ScrollView>
           </View>
 
-          {/* 6. WEEKLY ACTIVITY */}
+          {/* 5. WEEKLY ACTIVITY */}
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>{recoveryData.weeklyActivity.title}</Text>
-            
+
             <View style={styles.weeklyActivityCard}>
               {/* Legend Row */}
               <View style={styles.legendRow}>
@@ -349,7 +504,7 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
           <View style={{ height: 20 }} />
         </ScrollView>
 
-        {/* 7. BOTTOM NAVIGATION MENU BAR */}
+        {/* BOTTOM NAVIGATION MENU BAR */}
         {!hideBottomNavBar && <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />}
       </View>
     </SafeAreaView>
@@ -779,6 +934,129 @@ const styles = StyleSheet.create({
     fontWeight: Typography.fontWeight.medium,
     color: '#64748B',
   },
+
+  /* LOADING & EMPTY STATES */
+  loadingContainer: {
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: Typography.fontWeight.medium,
+    color: '#64748B',
+    marginTop: 12,
+  },
+  emptyStateCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  emptyIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#051A3E',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 13,
+    fontWeight: Typography.fontWeight.medium,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  emptyConsultButton: {
+    height: 48,
+    paddingHorizontal: 24,
+    borderRadius: 9999,
+    backgroundColor: '#003D9B',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyConsultButtonText: {
+    fontSize: 14,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#FFFFFF',
+  },
+
+  /* STAGE & STATS BOX */
+  stageInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    marginBottom: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  stageTitleText: {
+    fontSize: 13,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#0369A1',
+  },
+  exerciseStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
+  statBadgeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statBadgeText: {
+    fontSize: 12,
+    fontWeight: Typography.fontWeight.semiBold,
+    color: '#475569',
+  },
+  statDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#CBD5E1',
+  },
+  openProgramButton: {
+    height: 46,
+    borderRadius: 9999,
+    backgroundColor: '#003D9B',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  openProgramButtonText: {
+    fontSize: 14,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#FFFFFF',
+  },
 });
 
 export default RecoveryScreen;
+

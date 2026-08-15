@@ -109,9 +109,14 @@ export const ExerciseProgressScreen: React.FC = () => {
     setBreakTimer(30);
   };
 
+  const assignmentId = (params.assignmentId as string) || '';
+
   const handleContinueNext = () => {
     if (isWorkoutComplete) {
-      router.replace('/session-complete');
+      router.replace({
+        pathname: '/session-complete',
+        params: { assignmentId },
+      });
     } else if (isExerciseComplete) {
       // Move to next exercise, starting at set 1
       router.push({
@@ -122,6 +127,7 @@ export const ExerciseProgressScreen: React.FC = () => {
           totalSets: getExerciseByIndex(exerciseIndex + 1).totalSets.toString(),
           totalExercises: totalExercises.toString(),
           name: getExerciseByIndex(exerciseIndex + 1).name,
+          assignmentId,
         },
       });
     } else {
@@ -134,6 +140,7 @@ export const ExerciseProgressScreen: React.FC = () => {
           totalSets: totalSets.toString(),
           totalExercises: totalExercises.toString(),
           name: currentExerciseObj.name,
+          assignmentId,
         },
       });
     }
@@ -142,6 +149,11 @@ export const ExerciseProgressScreen: React.FC = () => {
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
+    } else if (assignmentId) {
+      router.replace({
+        pathname: '/recovery-program-details',
+        params: { assignmentId },
+      });
     } else {
       router.replace('/today-session');
     }

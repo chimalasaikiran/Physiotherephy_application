@@ -10,6 +10,7 @@ import { Strings } from '@/constants';
 
 interface ExploreHeaderProps {
   userName?: string;
+  avatarUri?: string | null;
   onNotificationPress?: () => void;
   onProfilePress?: () => void;
   unreadCount?: number;
@@ -17,13 +18,12 @@ interface ExploreHeaderProps {
 
 export const ExploreHeader: React.FC<ExploreHeaderProps> = ({
   userName = Strings.explore.userNameDefault,
+  avatarUri,
   onNotificationPress,
   onProfilePress,
   unreadCount = 2,
 }) => {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const topInset = Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4;
 
   const handleNotificationClick = () => {
     if (onNotificationPress) {
@@ -42,7 +42,7 @@ export const ExploreHeader: React.FC<ExploreHeaderProps> = ({
   };
 
   return (
-    <View style={[styles.container, { paddingTop: topInset }]}>
+    <View style={styles.container}>
       <View style={styles.leftSection}>
         <TouchableOpacity
           onPress={handleProfileClick}
@@ -51,16 +51,20 @@ export const ExploreHeader: React.FC<ExploreHeaderProps> = ({
           accessibilityRole="button"
           accessibilityLabel={Strings.accessibility.avatarPicker}
         >
-          <View style={styles.avatarInner}>
-            <Text style={styles.avatarInitial}>
-              {userName ? userName.charAt(0).toUpperCase() : 'A'}
-            </Text>
-          </View>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.avatarInnerImage} />
+          ) : (
+            <View style={styles.avatarInner}>
+              <Text style={styles.avatarInitial}>
+                {userName ? userName.charAt(0).toUpperCase() : 'A'}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         <View style={styles.greetingTextGroup}>
           <Text style={styles.greetingTitle}>
-            {Strings.explore.greeting}
+            GOOD MORNING
           </Text>
           <Text style={styles.userNameText}>{userName}</Text>
         </View>
@@ -117,6 +121,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  avatarInnerImage: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
   },
   avatarInitial: {
     fontSize: 18,

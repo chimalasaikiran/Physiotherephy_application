@@ -75,7 +75,7 @@ export const ExerciseLibraryPage: React.FC<ExerciseLibraryPageProps> = ({
   };
 
   // Add New Exercise
-  const handleCreateExercise = (newEx: Exercise) => {
+  const handleCreateExercise = async (newEx: Exercise) => {
     setExercises((prev) => [newEx, ...prev]);
   };
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,16 +12,28 @@ import {
   Dimensions,
   Alert,
   Platform,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+import { fetchUserAppointmentsViaBackend } from '@/api/appointmentApi';
+import { mobileRealtimeSync } from '@/api/syncApi';
+import { auth } from '@/config/firebase';
+import { fetchUserProgressStats } from '@/api/recoveryApi';
+import { subscribeToTherapists } from '@/api/therapistService';
+import type { Therapist } from '@/api/therapistService';
+import { subscribeToPatientAssignments, toggleExerciseComplete, MobileProgramAssignment } from '@/api/programService';
+const toggleExerciseInFirestore = (_id: string, _state: boolean) => {};
+
+
+import { useAuth } from '@/context/AuthContext';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -37,19 +49,219 @@ interface ExploreScreenProps {
   onTabPress?: (tab: TabKey) => void;
 }
 
+const DEFAULT_THERAPISTS = [
+  {
+    id: 'doc-1',
+    name: 'Dr. Ananya Sharma',
+    degree: 'MPT (Ortho), BPT',
+    experience: '8+ Years Exp • Sports Rehab',
+    rating: 4.9,
+    availability: 'Available Today',
+    avatarUrl: 'https://images.unsplash.com/photo-1594824813566-88855ce78c00?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'doc-2',
+    name: 'Dr. Rohan Kapoor',
+    degree: 'MPT (Neuro), BPT',
+    experience: '10+ Years Exp • Spine Care',
+    rating: 4.8,
+    availability: 'Available Today',
+    avatarUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=150&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'doc-3',
+    name: 'Dr. Dev Mukherjee',
+    degree: 'MPT (Sports), BPT',
+    experience: '6+ Years Exp • ACL Rehab',
+    rating: 4.9,
+    availability: 'Busy',
+    avatarUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=150&auto=format&fit=crop&q=80',
+  },
+];
+
 export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar = false, onTabPress }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('home');
-  const [exercises, setExercises] = useState<ExerciseItem[]>([
-    ...Strings.explore.exercises.items,
-  ]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [therapistsList, setTherapistsList] = useState<Therapist[]>([]);
 
-  const toggleExercise = (id: string) => {
-    setExercises((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, completed: !item.completed } : item))
-    );
+  const [assignedPrograms, setAssignedPrograms] = useState<MobileProgramAssignment[]>([]);
+  const [upcomingAppointment, setUpcomingAppointment] = useState<any>(null);
+  const [userProgress, setUserProgress] = useState<{
+    completedExerciseIds: string[];
+    recoveryScore: number;
+  }>({
+    completedExerciseIds: [],
+    recoveryScore: 0,
+  });
+
+  const activeAssignment = assignedPrograms.length > 0 ? assignedPrograms[0] : null;
+
+  // Derive active program exercises
+  const currentWeekObj = activeAssignment?.programDetails?.weeks?.find(
+    (w) => w.weekNumber === (activeAssignment.currentWeek || 1)
+  ) || activeAssignment?.programDetails?.weeks?.[0];
+
+  const rawWeekExercises = currentWeekObj?.exercises || [];
+
+  const baseExercises = rawWeekExercises.length > 0
+    ? rawWeekExercises.map((ex) => ({
+        id: ex.id || ex.name,
+        name: ex.name,
+        duration: ex.duration || (ex.sets && ex.reps ? `${ex.sets} sets × ${ex.reps}` : '5 mins'),
+        completed: Boolean(
+          activeAssignment?.completedExercises?.includes(ex.id) ||
+          activeAssignment?.completedExercises?.includes(ex.name)
+        ),
+      }))
+    : Strings.explore.exercises.items.map((ex: any) => ({
+        ...ex,
+        completed: Boolean(
+          activeAssignment?.completedExercises?.includes(ex.id) ||
+          activeAssignment?.completedExercises?.includes(ex.name) ||
+          userProgress.completedExerciseIds.includes(ex.id)
+        ),
+      }));
+
+  const totalProgramExercises = activeAssignment
+    ? (activeAssignment.programDetails?.weeks && activeAssignment.programDetails.weeks.length > 0
+        ? activeAssignment.programDetails.weeks.reduce((acc, w) => acc + (w.exercises?.length || 0), 0)
+        : Number(activeAssignment.programDetails?.exercisesCount || activeAssignment.programDetails?.totalExercises || 10))
+    : baseExercises.length;
+
+  const completedCount = activeAssignment
+    ? (activeAssignment.completedExercises?.length || 0)
+    : baseExercises.filter((e) => e.completed).length;
+
+  const remainingCount = Math.max(0, totalProgramExercises - completedCount);
+  const progressRatio = totalProgramExercises > 0 ? Math.min(1, completedCount / totalProgramExercises) : 0;
+  const computedScore = activeAssignment ? activeAssignment.progressPercent : Math.round(progressRatio * 100);
+
+  // Real-Time Appointments & Progress listener on Screen Focus
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const currentUser = auth.currentUser;
+      const userId = currentUser?.uid || 'user_demo_123';
+
+      // Fetch initial upcoming appointment
+      fetchUserAppointmentsViaBackend(userId)
+        .then((firestoreBookings) => {
+          if (isMounted) {
+            if (firestoreBookings && firestoreBookings.length > 0) {
+              const upcoming = firestoreBookings.find(
+                (b: any) => !b.status || b.status === 'Upcoming' || b.status === 'Pending' || b.status === 'Confirmed'
+              );
+              setUpcomingAppointment(upcoming || null);
+            } else {
+              setUpcomingAppointment(null);
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('Error fetching appointments in ExploreScreen:', err);
+        });
+
+      // Real-Time Appointments listener
+      const unsubAppts = mobileRealtimeSync.subscribeUserCollection<any[]>(
+        'appointments',
+        userId,
+        (fsAppointments) => {
+          if (isMounted && Array.isArray(fsAppointments)) {
+            const upcoming = fsAppointments.find(
+              (b: any) => !b.status || b.status === 'Upcoming' || b.status === 'Pending' || b.status === 'Confirmed'
+            );
+            setUpcomingAppointment(upcoming || null);
+          }
+        }
+      );
+
+      // Real-Time Patient Program Assignments listener
+      const unsubAssignments = subscribeToPatientAssignments(
+        userId,
+        (assignments) => {
+          if (isMounted) {
+            setAssignedPrograms(assignments);
+          }
+        },
+        (err) => console.warn('Assignments subscription error in ExploreScreen:', err)
+      );
+
+      fetchUserProgressStats(userId)
+        .then((progressData) => {
+          if (isMounted && progressData) {
+            setUserProgress({
+              completedExerciseIds: progressData.completedExerciseIds || [],
+              recoveryScore: progressData.recoveryScore ?? progressData.recoveryPercentage ?? 68,
+            });
+          }
+        })
+        .catch((err) => {
+          console.warn('Error fetching user progress in ExploreScreen:', err);
+        });
+
+      // Real-time Firestore listener for Therapists using typed service
+      const unsubscribeTherapists = subscribeToTherapists(
+        (therapists) => {
+          if (isMounted) {
+            setTherapistsList(therapists.filter((t) => t.status === 'ACTIVE'));
+          }
+        },
+        (err) => console.warn('Therapists listener error:', err)
+      );
+
+      return () => {
+        isMounted = false;
+        unsubAppts();
+        unsubAssignments();
+        unsubscribeTherapists();
+      };
+    }, [])
+  );
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    const currentUser = auth.currentUser;
+    const userId = currentUser?.uid || 'user_demo_123';
+
+    try {
+      const [apiBookings, progressData] = await Promise.all([
+        fetchUserAppointmentsViaBackend(userId).catch(() => null),
+        fetchUserProgressStats(userId).catch(() => null),
+      ]);
+
+      if (apiBookings && apiBookings.length > 0) {
+        const upcoming = apiBookings.find(
+          (b: any) => !b.status || b.status === 'Upcoming' || b.status === 'Pending' || b.status === 'Confirmed'
+        );
+        setUpcomingAppointment(upcoming || null);
+      }
+      if (progressData) {
+        setUserProgress({
+          completedExerciseIds: progressData.completedExerciseIds || [],
+          recoveryScore: progressData.recoveryScore ?? progressData.recoveryPercentage ?? 68,
+        });
+      }
+    } catch (err) {
+      console.warn('Refresh error in ExploreScreen:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  const toggleExercise = async (id: string) => {
+    if (activeAssignment) {
+      try {
+        await toggleExerciseComplete(activeAssignment.id, id, activeAssignment);
+      } catch (err) {
+        console.warn('Error toggling exercise in ExploreScreen:', err);
+      }
+    } else {
+      const isCurrentlyCompleted = userProgress.completedExerciseIds.includes(id);
+      toggleExerciseInFirestore(id, isCurrentlyCompleted);
+    }
   };
 
   const handleTabPress = (tab: TabKey) => {
@@ -71,6 +283,20 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
     }
   };
 
+  const { userProfile } = useAuth();
+  const userName = userProfile?.fullName?.trim() || Strings.explore.userNameDefault || 'User';
+
+  const getGreetingHeading = () => {
+    const hour = new Date().getHours();
+    let timeGreeting = 'Good Morning';
+    if (hour >= 12 && hour < 17) {
+      timeGreeting = 'Good Afternoon';
+    } else if (hour >= 17 || hour < 4) {
+      timeGreeting = 'Good Evening';
+    }
+    return `${timeGreeting}, ${userName} 👋`;
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -79,10 +305,18 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
         {/* MAIN SCROLLABLE CONTENT */}
         <ScrollView
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#003D9B']}
+              tintColor="#003D9B"
+            />
+          }
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 12,
+              paddingTop: Spacing.md,
               paddingBottom: 100 + Math.max(insets.bottom, 12),
             },
           ]}
@@ -96,12 +330,16 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
               onPress={() => router.push('/profile' as any)}
             >
               <Image
-                source={require('../../../assets/images/user_sagar_avatar.png')}
+                source={
+                  userProfile?.avatarUri
+                    ? { uri: userProfile.avatarUri }
+                    : require('../../../assets/images/user_sagar_avatar.png')
+                }
                 style={styles.avatarImage}
                 resizeMode="cover"
               />
               <View style={styles.headerTextGroup}>
-                <Text style={styles.greetingText}>{Strings.explore.greeting}</Text>
+                <Text style={styles.greetingText}>{getGreetingHeading()}</Text>
                 <Text style={styles.subGreetingText}>{Strings.explore.subtitle}</Text>
               </View>
             </TouchableOpacity>
@@ -134,44 +372,73 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
             end={{ x: 1, y: 1 }}
             style={styles.appointmentCard}
           >
-            <View style={styles.appointmentHeaderRow}>
-              <Text style={styles.appointmentTag}>{Strings.explore.appointment.headerTag}</Text>
-              <View style={styles.dateBadge}>
-                <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
-                <Text style={styles.dateBadgeText}>{Strings.explore.appointment.dateTag}</Text>
-              </View>
-            </View>
+            {upcomingAppointment ? (
+              <>
+                <View style={styles.appointmentHeaderRow}>
+                  <Text style={styles.appointmentTag}>UPCOMING APPOINTMENT</Text>
+                  <View style={styles.dateBadge}>
+                    <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
+                    <Text style={styles.dateBadgeText}>{upcomingAppointment.fullDate || upcomingAppointment.dateStr || 'Scheduled'}</Text>
+                  </View>
+                </View>
 
-            <Text style={styles.appointmentTime}>{Strings.explore.appointment.time}</Text>
+                <Text style={styles.appointmentTime}>{upcomingAppointment.timeSlot || '10:00 AM'}</Text>
 
-            <View style={styles.doctorInfoRow}>
-              <Ionicons name="person-outline" size={16} color="#93C5FD" style={styles.docIcon} />
-              <Text style={styles.doctorName}>{Strings.explore.appointment.doctorName}</Text>
-            </View>
-            <Text style={styles.doctorSpecialty}>{Strings.explore.appointment.specialty}</Text>
+                <View style={styles.doctorInfoRow}>
+                  <Ionicons name="person-outline" size={16} color="#93C5FD" style={styles.docIcon} />
+                  <Text style={styles.doctorName}>{upcomingAppointment.doctorName || upcomingAppointment.therapistName}</Text>
+                </View>
+                <Text style={styles.doctorSpecialty}>{upcomingAppointment.doctorSpecialty || upcomingAppointment.serviceTitle}</Text>
 
-            <View style={styles.locationRow}>
-              <Ionicons name="location-outline" size={15} color="#60A5FA" style={styles.locIcon} />
-              <Text style={styles.locationText}>{Strings.explore.appointment.clinic}</Text>
-            </View>
+                <View style={styles.locationRow}>
+                  <Ionicons name="location-outline" size={15} color="#60A5FA" style={styles.locIcon} />
+                  <Text style={styles.locationText}>{upcomingAppointment.placeTitle || upcomingAppointment.location || 'ONE MEDICAL Clinic'}</Text>
+                </View>
 
-            <View style={styles.appointmentActionsRow}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.viewDetailsButton}
-                onPress={() => Alert.alert('Appointment Details', 'Dr. Sarah Johnson\n10:30 AM Oct 24')}
-              >
-                <Text style={styles.viewDetailsText}>{Strings.explore.appointment.viewDetails}</Text>
-              </TouchableOpacity>
+                <View style={styles.appointmentActionsRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.viewDetailsButton}
+                    onPress={() => router.push('/my-bookings' as any)}
+                  >
+                    <Text style={styles.viewDetailsText}>View Bookings</Text>
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.directionsButton}
-                onPress={() => Alert.alert('Directions', 'Opening Maps navigation to ONE MEDICAL Clinic')}
-              >
-                <Text style={styles.directionsText}>{Strings.explore.appointment.getDirections}</Text>
-              </TouchableOpacity>
-            </View>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.directionsButton}
+                    onPress={() => Alert.alert('Directions', 'Opening Maps navigation to Clinic')}
+                  >
+                    <Text style={styles.directionsText}>Get Directions</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.appointmentHeaderRow}>
+                  <Text style={styles.appointmentTag}>TODAY'S APPOINTMENT</Text>
+                  <View style={styles.dateBadge}>
+                    <Ionicons name="calendar-outline" size={13} color="#FFFFFF" />
+                    <Text style={styles.dateBadgeText}>NO BOOKINGS</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.doctorName}>No Appointments Scheduled</Text>
+                <Text style={[styles.doctorSpecialty, { marginLeft: 0 }]}>
+                  You have no upcoming physiotherapy or doctor consultations yet.
+                </Text>
+
+                <View style={styles.appointmentActionsRow}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.viewDetailsButton}
+                    onPress={() => router.push('/service-selection' as any)}
+                  >
+                    <Text style={styles.viewDetailsText}>Book Appointment</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </LinearGradient>
 
           {/* 4. YOUR RECOVERY SECTION */}
@@ -185,7 +452,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
                 <View style={styles.circularMeterOuter}>
                   <View style={styles.circularMeterInner}>
                     <Text style={styles.meterPercentText}>
-                      {Strings.explore.recovery.overallScore}%
+                      {computedScore}%
                     </Text>
                     <Text style={styles.meterSubText}>OVERALL</Text>
                   </View>
@@ -222,7 +489,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
                 <Text style={styles.timeMetricText}>{Strings.explore.exercises.duration}</Text>
               </View>
               <View style={styles.remainingMetric}>
-                <Text style={styles.remainingNumber}>{Strings.explore.exercises.remaining}</Text>
+                <Text style={styles.remainingNumber}>{remainingCount}</Text>
                 <Text style={styles.remainingText}> {Strings.explore.exercises.remainingLabel}</Text>
               </View>
             </View>
@@ -232,14 +499,14 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
               <View
                 style={[
                   styles.progressFill,
-                  { width: `${Strings.explore.exercises.progress * 100}%` },
+                  { width: `${progressRatio * 100}%` },
                 ]}
               />
             </View>
 
             {/* EXERCISE LIST */}
             <View style={styles.exerciseList}>
-              {exercises.map((item) => (
+              {baseExercises.map((item) => (
                 <TouchableOpacity
                   key={item.id}
                   activeOpacity={0.8}
@@ -343,54 +610,63 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.physioHorizontalList}
-            >
-              {Strings.explore.recommendedPhysio.doctors.map((doc) => (
-                <View key={doc.id} style={styles.physioCard}>
-                  <View style={styles.physioImageContainer}>
-                    <Image
-                      source={
-                        doc.id === 'doc_ananya'
-                          ? require('../../../assets/images/doctor_ananya.png')
-                          : require('../../../assets/images/doctor_arjun.png')
-                      }
-                      style={styles.physioImage}
-                      resizeMode="cover"
-                    />
+            {therapistsList.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.physioHorizontalList}
+              >
+                {therapistsList.map((doc: any) => (
+                  <View key={doc.id} style={styles.physioCard}>
+                    <View style={styles.physioImageContainer}>
+                      <Image
+                        source={
+                          doc.avatarUrl
+                            ? { uri: doc.avatarUrl }
+                            : require('../../../assets/images/doctor_ananya.png')
+                        }
+                        style={styles.physioImage}
+                        resizeMode="cover"
+                      />
 
-                    {/* Rating Badge Top Left */}
-                    <View style={styles.ratingBadge}>
-                      <Ionicons name="star" size={12} color="#F59E0B" />
-                      <Text style={styles.ratingText}>{doc.rating.toFixed(1)}</Text>
+                      {/* Rating Badge Top Left */}
+                      <View style={styles.ratingBadge}>
+                        <Ionicons name="star" size={12} color="#F59E0B" />
+                        <Text style={styles.ratingText}>{(doc.rating || 5.0).toFixed(1)}</Text>
+                      </View>
+
+                      {/* Available Today Pill */}
+                      {doc.availability === 'Available Today' && (
+                        <View style={styles.availableBadge}>
+                          <Text style={styles.availableText}>AVAILABLE TODAY</Text>
+                        </View>
+                      )}
                     </View>
 
-                    {/* Available Today Pill */}
-                    {doc.availableToday && (
-                      <View style={styles.availableBadge}>
-                        <Text style={styles.availableText}>AVAILABLE TODAY</Text>
-                      </View>
-                    )}
-                  </View>
+                    <View style={styles.physioCardBody}>
+                      <Text style={styles.physioName}>{doc.name}</Text>
+                      <Text style={styles.physioTitle}>{doc.degree || doc.title || 'Physiotherapist'}</Text>
+                      <Text style={styles.physioInfo}>{doc.experience || doc.info || 'Specialist'}</Text>
 
-                  <View style={styles.physioCardBody}>
-                    <Text style={styles.physioName}>{doc.name}</Text>
-                    <Text style={styles.physioTitle}>{doc.title}</Text>
-                    <Text style={styles.physioInfo}>{doc.info}</Text>
-
-                    <TouchableOpacity
-                      activeOpacity={0.8}
-                      style={styles.bookPhysioBtn}
-                      onPress={() => router.push('/service-selection' as any)}
-                    >
-                      <Text style={styles.bookPhysioBtnText}>Book Appointment</Text>
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        style={styles.bookPhysioBtn}
+                        onPress={() => router.push('/service-selection' as any)}
+                      >
+                        <Text style={styles.bookPhysioBtnText}>Book Appointment</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-              ))}
-            </ScrollView>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptyTherapistCard}>
+                <Ionicons name="medical-outline" size={24} color="#94A3B8" />
+                <Text style={styles.emptyTherapistText}>
+                  No active therapists listed at the moment.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* 8. TODAY'S RECOVERY TIP */}
@@ -1246,6 +1522,22 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 8,
+  },
+  emptyTherapistCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
+  },
+  emptyTherapistText: {
+    fontSize: Typography.fontSize.xs,
+    fontWeight: Typography.fontWeight.medium,
+    color: '#64748B',
+    textAlign: 'center',
   },
 });
 

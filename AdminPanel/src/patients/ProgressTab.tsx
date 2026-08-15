@@ -8,10 +8,12 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
+import type { Patient } from './types';
 
 interface ProgressTabProps {
   patientName?: string;
   therapistName?: string;
+  patient?: Patient;
 }
 
 interface FunctionalGoal {

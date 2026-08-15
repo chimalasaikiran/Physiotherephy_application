@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus,
   Calendar,
@@ -27,6 +27,36 @@ import { ExportFinancialsModal } from './components/ExportFinancialsModal';
 import { CreateInvoicePage } from './CreateInvoicePage';
 import { CreateTreatmentPackagePage } from './CreateTreatmentPackagePage';
 
+import {
+  subscribeToPayments,
+  subscribeToInvoices,
+  subscribeToTransactions,
+  subscribeToPackages,
+  subscribeToRefunds,
+  subscribeToPayouts,
+  calculateDashboardMetrics,
+  buildMetricCards,
+  toOutstandingItems,
+  toMethodDistribution,
+  toRevenueTrend,
+  toRecentActivity,
+  toTransactionItems,
+  applyFiltersToPayments,
+  exportPaymentsToCSV,
+  reconcileAccounts,
+} from '@/services/paymentService';
+import { seedDemoPaymentData } from './mockData';
+import { subscribeToTherapists } from '@/services/therapistService';
+import type { Therapist } from '@/therapists/types';
+import type {
+  PaymentRecord,
+  InvoiceDocument,
+  TransactionRecord,
+  PackageDocument,
+  RefundDocument,
+  PayoutDocument,
+} from './types';
+
 type SubTab = 'Overview' | 'Invoices' | 'Transactions' | 'Packages' | 'Refunds' | 'Payouts';
 
 interface PaymentsPageProps {
@@ -44,6 +74,15 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
   const [isLocalCreateInvoiceOpen, setIsLocalCreateInvoiceOpen] = useState(false);
   const [isLocalCreatePackageOpen, setIsLocalCreatePackageOpen] = useState(false);
 
+  // Firestore real-time state
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceDocument[]>([]);
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [packages, setPackages] = useState<PackageDocument[]>([]);
+  const [refunds, setRefunds] = useState<RefundDocument[]>([]);
+  const [payouts, setPayouts] = useState<PayoutDocument[]>([]);
+  const [therapists, setTherapists] = useState<Therapist[]>([]);
+
   // Filter dropdown states
   const [timeframe, setTimeframe] = useState('Last 30 Days');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -54,6 +93,82 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [isExportFinancialsOpen, setIsExportFinancialsOpen] = useState(false);
+
+  // 1. Seed demo data on initial mount if empty
+  useEffect(() => {
+    seedDemoPaymentData();
+  }, []);
+
+  // 2. Subscribe to real-time Firestore feeds
+  useEffect(() => {
+    const unsubPayments = subscribeToPayments((data) => setPayments(data));
+    const unsubInvoices = subscribeToInvoices((data) => setInvoices(data));
+    const unsubTransactions = subscribeToTransactions((data) => setTransactions(data));
+    const unsubPackages = subscribeToPackages((data) => setPackages(data));
+    const unsubRefunds = subscribeToRefunds((data) => setRefunds(data));
+    const unsubPayouts = subscribeToPayouts((data) => setPayouts(data));
+    const unsubTherapists = subscribeToTherapists((data) => setTherapists(data));
+
+    return () => {
+      unsubPayments();
+      unsubInvoices();
+      unsubTransactions();
+      unsubPackages();
+      unsubRefunds();
+      unsubPayouts();
+      unsubTherapists();
+    };
+  }, []);
+
+  // Filtered payments list
+  const filteredPayments = useMemo(() => {
+    return applyFiltersToPayments(payments, {
+      timeframe,
+      status: statusFilter,
+      method: methodFilter,
+      therapist: therapistFilter,
+    });
+  }, [payments, timeframe, statusFilter, methodFilter, therapistFilter]);
+
+  // Dashboard metrics computed from live data
+  const dashboardMetrics = useMemo(() => {
+    return calculateDashboardMetrics(filteredPayments, invoices, refunds, payouts, {
+      timeframe,
+      status: statusFilter,
+      method: methodFilter,
+      therapist: therapistFilter,
+    });
+  }, [filteredPayments, invoices, refunds, payouts, timeframe, statusFilter, methodFilter, therapistFilter]);
+
+  const metricCards = useMemo(() => buildMetricCards(dashboardMetrics), [dashboardMetrics]);
+  const outstandingItems = useMemo(() => toOutstandingItems(invoices), [invoices]);
+  const methodDistribution = useMemo(() => toMethodDistribution(filteredPayments), [filteredPayments]);
+  const revenueTrend = useMemo(() => toRevenueTrend(filteredPayments, payouts, timeframe), [filteredPayments, payouts, timeframe]);
+  const recentActivities = useMemo(() => toRecentActivity(payments, refunds, payouts), [payments, refunds, payouts]);
+
+  const combinedTransactions = useMemo(() => {
+    const items = toTransactionItems(transactions, payments);
+    return items.map((t) => ({
+      id: t.id,
+      transactionId: t.transactionId,
+      type: (t.type || 'Payment') as any,
+      patientId: '',
+      patientName: t.patientName || 'Patient',
+      therapistId: '',
+      therapistName: '',
+      appointmentId: '',
+      invoiceId: '',
+      invoiceNumber: '',
+      paymentId: '',
+      amount: Number(t.amount || 0),
+      currency: 'INR',
+      method: t.method || 'UPI',
+      status: (((t.status as string) === 'Paid' || (t.status as string) === 'PAID' || t.status === 'Completed') ? 'Completed' : t.status || 'Completed') as any,
+      description: '',
+      timestamp: t.timestamp,
+      createdAt: t.timestamp,
+    }));
+  }, [transactions, payments]);
 
   const handleCreateInvoiceClick = () => {
     if (onNavigateToCreateInvoice) {
@@ -69,6 +184,22 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
     } else {
       setIsLocalCreatePackageOpen(true);
     }
+  };
+
+  const handleQuickDownloadCSV = () => {
+    exportPaymentsToCSV(payments, transactions);
+  };
+
+  const handleQuickReconcile = () => {
+    const res = reconcileAccounts(payments, invoices);
+    alert(
+      `Reconciliation Summary:\n\n` +
+      `✓ Matched Records: ${res.matchedCount}\n` +
+      `⚠ Unmatched Payments: ${res.unmatchedPayments.length}\n` +
+      `⚠ Unmatched Invoices: ${res.unmatchedInvoices.length}\n` +
+      `Total Payments Volume: ₹${res.totalPayments.toLocaleString('en-IN')}\n` +
+      `Total Invoices Volume: ₹${res.totalInvoices.toLocaleString('en-IN')}`
+    );
   };
 
   if (isLocalCreateInvoiceOpen) {
@@ -108,7 +239,7 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
             Payments
           </h1>
           <p className="text-sm font-medium text-slate-500 mt-1">
-            Track clinic revenue, invoices and financial transactions.
+            Track clinic revenue, invoices and financial transactions in real-time.
           </p>
         </div>
 
@@ -141,7 +272,7 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
       </div>
 
       {/* KPI Metrics Row (5 Cards) */}
-      <PaymentsMetrics />
+      <PaymentsMetrics metrics={metricCards} />
 
       {/* Sub-Navigation Tabs Bar */}
       <div className="border-b border-slate-200/80 pt-2">
@@ -202,6 +333,7 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
               <option value="Paid">Paid</option>
               <option value="Pending">Pending</option>
               <option value="Overdue">Overdue</option>
+              <option value="Refunded">Refunded</option>
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
@@ -221,6 +353,7 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
               <option value="UPI">UPI</option>
               <option value="Card">Card</option>
               <option value="Net Banking">Net Banking</option>
+              <option value="Cash">Cash</option>
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
@@ -236,10 +369,12 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
               onChange={(e) => setTherapistFilter(e.target.value)}
               className="appearance-none bg-transparent pr-5 font-bold text-slate-800 focus:outline-none cursor-pointer"
             >
-              <option value="All">All</option>
-              <option value="Dr. Ananya Ray">Dr. Ananya Ray</option>
-              <option value="Dr. Vikram Seth">Dr. Vikram Seth</option>
-              <option value="Meera Nair">Meera Nair</option>
+              <option value="All">All Therapists</option>
+              {therapists.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
+                </option>
+              ))}
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
@@ -252,14 +387,15 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
           {/* Main Left Column (2 Spans) */}
           <div className="lg:col-span-2 space-y-6 sm:space-y-8">
             {/* Revenue Trend Chart */}
-            <RevenueTrendChart />
+            <RevenueTrendChart data={revenueTrend} />
 
             {/* Middle Row: Outstanding Payments & Method Distribution */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <OutstandingPaymentsCard
+                items={outstandingItems}
                 onViewAll={() => setActiveSubTab('Invoices')}
               />
-              <MethodDistributionCard />
+              <MethodDistributionCard distribution={methodDistribution} />
             </div>
 
             {/* Upcoming Therapist Payouts */}
@@ -272,24 +408,30 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
             <QuickActionsCard
               onCreateInvoice={handleCreateInvoiceClick}
               onExportFinancials={() => setIsExportFinancialsOpen(true)}
-              onDownloadCSV={() => setIsExportFinancialsOpen(true)}
-              onReconcileAccounts={() => setIsRecordPaymentOpen(true)}
+              onDownloadCSV={handleQuickDownloadCSV}
+              onReconcileAccounts={handleQuickReconcile}
             />
 
             {/* Recent Activity Card */}
-            <RecentActivityCard />
+            <RecentActivityCard activities={recentActivities} />
           </div>
         </div>
       ) : activeSubTab === 'Invoices' ? (
-        <InvoicesTabView onCreateInvoice={handleCreateInvoiceClick} />
+        <InvoicesTabView
+          onCreateInvoice={handleCreateInvoiceClick}
+          invoices={invoices}
+        />
       ) : activeSubTab === 'Transactions' ? (
-        <TransactionsTabView />
+        <TransactionsTabView transactions={combinedTransactions} />
       ) : activeSubTab === 'Packages' ? (
-        <PackagesTabView onCreatePackage={handleCreatePackageClick} />
+        <PackagesTabView
+          onCreatePackage={handleCreatePackageClick}
+          packages={packages}
+        />
       ) : activeSubTab === 'Refunds' ? (
-        <RefundsTabView />
+        <RefundsTabView refunds={refunds} />
       ) : (
-        <PayoutsTabView />
+        <PayoutsTabView payouts={payouts} />
       )}
 
       {/* Interactive Modals */}
@@ -310,3 +452,4 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
     </div>
   );
 };
+

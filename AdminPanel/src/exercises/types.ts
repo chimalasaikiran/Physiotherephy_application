@@ -36,6 +36,11 @@ export interface Exercise {
   rating?: number;
   reviewsCount?: number;
   videoUrl?: string;
+  sets?: number;
+  reps?: number;
+  holdTimeSec?: number;
+  restSec?: number;
+  assignedCount?: number;
   safetyGuidelines?: string[];
   requiredEquipment?: string[];
   clinicalOverview?: string;

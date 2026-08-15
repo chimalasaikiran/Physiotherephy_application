@@ -1,18 +1,12 @@
 export { LoginPage } from './LoginPage';
-export { ForgotPasswordPage } from './ForgotPasswordPage';
-export { VerifyIdentityPage } from './VerifyIdentityPage';
-export { CreatePasswordPage } from './CreatePasswordPage';
-export { PasswordResetSuccessPage } from './PasswordResetSuccessPage';
 export { LoginForm } from './components/LoginForm';
-export { ForgotPasswordForm } from './components/ForgotPasswordForm';
-export { VerifyIdentityForm } from './components/VerifyIdentityForm';
-export { CreatePasswordForm } from './components/CreatePasswordForm';
 export { AuthHeader } from './components/AuthHeader';
 export { AuthHero } from './components/AuthHero';
 export { AuthFooter } from './components/AuthFooter';
+export { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
+export { RBACGuard } from './components/RBACGuard';
 export { useLoginForm } from './hooks/useLoginForm';
 export { AUTH_CONFIG } from './config/authConfig';
+export { auth, db } from './config/firebase';
+export { AuthProvider, useAuth } from './context/AuthContext';
 export type * from './types/auth';
-
-
-

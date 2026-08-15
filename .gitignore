@@ -9,12 +9,23 @@ node_modules/
 
 # Logs & Environment variables
 *.log
+**/*.log
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!**/.env.example
+
+# Credentials & Service Account Keys
+*serviceAccount*
+*.pem
+*.key
+*.p12
+*.crt
+*.secret
 
 # IDE / OS files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+

@@ -14,8 +14,10 @@ import {
   HelpCircle,
   LogOut,
   X,
-  Cross
+  Cross,
+  ShieldCheck,
 } from 'lucide-react';
+import { useAuth } from '@/auth';
 
 interface SidebarProps {
   activeTab: string;
@@ -32,6 +34,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { adminProfile } = useAuth();
+
   const mainNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'patients', label: 'Patients', icon: Users },
@@ -112,8 +116,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     return currentTab.startsWith(itemId);
   };
 
-
-
   return (
     <>
       {/* Mobile Backdrop */}
@@ -154,8 +156,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
+          {/* Admin Profile & Role Banner */}
+          {adminProfile && (
+            <div className="mx-4 mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center space-x-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">
+                {adminProfile.fullName?.charAt(0) || 'A'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-slate-900 truncate">
+                  {adminProfile.fullName}
+                </div>
+                <div className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded mt-0.5">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                  <span>Full Admin Access</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Navigation Links */}
-          <nav className="p-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-220px)]">
+          <nav className="p-4 space-y-1.5 overflow-y-auto max-h-[calc(100vh-270px)]">
             {mainNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = isItemActive(item.id, activeTab);
@@ -211,7 +231,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Logout Button */}
           <button
             onClick={onLogout}
-            className="w-full flex items-center space-x-3.5 px-4 py-2.5 rounded-xl text-sm font-semibold text-rose-500 hover:bg-rose-50 transition-all duration-200"
+            className="w-full flex items-center space-x-3.5 px-4 py-2.5 rounded-xl text-sm font-semibold text-rose-500 hover:bg-rose-50 transition-all duration-200 cursor-pointer"
           >
             <LogOut className="w-5 h-5 text-rose-500" />
             <span>Logout</span>

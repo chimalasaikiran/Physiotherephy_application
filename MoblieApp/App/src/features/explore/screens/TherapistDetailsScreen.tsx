@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -26,23 +26,110 @@ import { DateTimeSelectorModal } from '@/features/appointments';
 import { PaymentSelectionModal, BookingDetails } from '@/features/appointments';
 import { BookingSuccessModal } from '@/features/appointments';
 import { EmptyStateView } from '@/components';
+import { subscribeToTherapists } from '@/api/therapistService';
 
 export const TherapistDetailsScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ doctorId?: string; serviceTitle?: string }>();
+  const params = useLocalSearchParams<{
+    doctorId?: string;
+    serviceTitle?: string;
+    doctorName?: string;
+    doctorSpecialty?: string;
+    doctorDegree?: string;
+    doctorFee?: string;
+    doctorNumericFee?: string;
+    doctorClinic?: string;
+    doctorAvatarUrl?: string;
+    doctorImageName?: string;
+    doctorRating?: string;
+    doctorExperience?: string;
+    doctorBio?: string;
+  }>();
 
   const doctorId = params.doctorId || '';
   const serviceTitle = params.serviceTitle || '';
 
+  const [firestoreTherapists, setFirestoreTherapists] = useState<Doctor[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeToTherapists(
+      (list) => {
+        const mapped: Doctor[] = list.map((t) => {
+          const numericFee = t.consultationFee || 800;
+          return {
+            id: t.id,
+            name: t.name,
+            specialty: t.specializations && t.specializations.length > 0 ? t.specializations.join(', ') : 'Physiotherapist',
+            degree: t.degree,
+            experienceYears: parseInt(t.experience) || 5,
+            experienceStr: t.experience || '5+ Years Exp',
+            rating: t.rating || 4.9,
+            reviewsCount: 18 + (t.patientsCount || 0),
+            clinicName: t.location || 'Spine & Wellness Center',
+            clinicAddress: 'Indiranagar, Bengaluru',
+            fee: `₹${numericFee}`,
+            numericFee: numericFee,
+            imageName: t.avatarUrl ? (t.avatarUrl as any) : 'doctor_ananya',
+            avatarUrl: t.avatarUrl,
+            isTopRated: (t.rating || 0) >= 4.8,
+            isNearby: true,
+            availableToday: t.availability === 'Available Today',
+            supportsOnline: true,
+            languages: ['English', 'Hindi'],
+            bio: t.bio,
+          };
+        });
+        setFirestoreTherapists(mapped);
+      },
+      (err) => console.warn('Therapists subscription error in TherapistDetailsScreen:', err)
+    );
+    return () => unsub();
+  }, []);
+
   // Doctor lookup
   const doctor = useMemo<Doctor | null>(() => {
-    if (!doctorId) {
-      return Strings.booking.doctors[1] as unknown as Doctor; // Dr. Ananya Iyer
+    if (doctorId && firestoreTherapists.length > 0) {
+      const foundFs = firestoreTherapists.find((d) => d.id === doctorId);
+      if (foundFs) return foundFs;
     }
-    const found = Strings.booking.doctors.find((d) => d.id === doctorId);
-    return (found as unknown as Doctor) || (Strings.booking.doctors[1] as unknown as Doctor);
-  }, [doctorId]);
+
+    if (params.doctorName) {
+      const numericFee = params.doctorNumericFee ? Number(params.doctorNumericFee) : 800;
+      return {
+        id: doctorId || 'custom_doc',
+        name: params.doctorName,
+        specialty: params.doctorSpecialty || 'Physiotherapist',
+        degree: params.doctorDegree || '',
+        experienceYears: parseInt(params.doctorExperience || '5') || 5,
+        experienceStr: params.doctorExperience || '5+ Years Exp',
+        rating: params.doctorRating ? Number(params.doctorRating) : 4.9,
+        reviewsCount: 25,
+        clinicName: params.doctorClinic || 'Spine & Wellness Center',
+        clinicAddress: 'Indiranagar, Bengaluru',
+        fee: params.doctorFee || `₹${numericFee}`,
+        numericFee: numericFee,
+        imageName: params.doctorImageName || 'doctor_ananya',
+        avatarUrl: params.doctorAvatarUrl,
+        isTopRated: true,
+        isNearby: true,
+        availableToday: true,
+        supportsOnline: true,
+        languages: ['English', 'Hindi'],
+        bio: params.doctorBio || '',
+      };
+    }
+
+    if (doctorId) {
+      const found = Strings.booking.doctors.find((d) => d.id === doctorId);
+      if (found) return found as unknown as Doctor;
+    }
+
+    if (firestoreTherapists.length > 0) {
+      return firestoreTherapists[0];
+    }
+    return (Strings.booking.doctors[1] as unknown as Doctor) || (Strings.booking.doctors[0] as unknown as Doctor);
+  }, [doctorId, firestoreTherapists, params]);
 
   // Selected time slot state
   const [selectedSlot, setSelectedSlot] = useState<string>('04:30 PM');
@@ -59,7 +146,10 @@ export const TherapistDetailsScreen: React.FC = () => {
   } | null>(null);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
 
-  const getImageSource = (name: string) => {
+  const getImageSource = (name?: string, avatarUrl?: string) => {
+    if (avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:image'))) {
+      return { uri: avatarUrl };
+    }
     switch (name) {
       case 'doctor_ananya':
         return require('../../../assets/images/doctor_ananya.png');
@@ -94,7 +184,21 @@ export const TherapistDetailsScreen: React.FC = () => {
     if (!doctor) return;
     router.push({
       pathname: '/select-date-time' as any,
-      params: { doctorId: doctor.id, serviceTitle },
+      params: {
+        doctorId: doctor.id,
+        serviceTitle,
+        doctorName: doctor.name,
+        doctorSpecialty: doctor.specialty,
+        doctorDegree: doctor.degree || '',
+        doctorFee: doctor.fee,
+        doctorNumericFee: doctor.numericFee ? String(doctor.numericFee) : '',
+        doctorClinic: doctor.clinicName,
+        doctorAvatarUrl: doctor.avatarUrl || '',
+        doctorImageName: doctor.imageName || '',
+        doctorRating: doctor.rating ? String(doctor.rating) : '',
+        doctorExperience: doctor.experienceStr || '',
+        doctorBio: doctor.bio || '',
+      },
     });
   };
 
@@ -174,7 +278,7 @@ export const TherapistDetailsScreen: React.FC = () => {
         {/* 1. HERO HEADER WITH DOCTOR IMAGE & OVERLAYS */}
         <View style={styles.heroContainer}>
           <ImageBackground
-            source={getImageSource(doctor.imageName)}
+            source={getImageSource(doctor.imageName, doctor.avatarUrl)}
             style={styles.heroImage}
             resizeMode="cover"
           >

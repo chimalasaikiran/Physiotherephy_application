@@ -1,47 +1,80 @@
 import React from 'react';
-import { Users, Calendar, Stethoscope, Banknote, TrendingUp } from 'lucide-react';
+import { Users, Calendar, UserCheck, Banknote, TrendingUp, Loader2 } from 'lucide-react';
+import type { DashboardMetricsSummary } from '../useDashboardData';
 
-export const MetricCards: React.FC = () => {
+interface MetricCardsProps {
+  summaryMetrics?: DashboardMetricsSummary;
+  isLoading?: boolean;
+  onNavigateToTab?: (tab: string) => void;
+}
+
+export const MetricCards: React.FC<MetricCardsProps> = ({
+  summaryMetrics,
+  isLoading = false,
+  onNavigateToTab,
+}) => {
+  const totalTherapists = summaryMetrics?.totalTherapists ?? 0;
+  const activeTherapists = summaryMetrics?.activeTherapists ?? 0;
+
+  const totalPatients = summaryMetrics?.totalPatients ?? 0;
+  const activePatients = summaryMetrics?.activePatients ?? 0;
+
+  const totalAppointments = summaryMetrics?.totalAppointments ?? 0;
+  const completedAppointments = summaryMetrics?.completedAppointments ?? 0;
+  const scheduledAppointments = summaryMetrics?.scheduledAppointments ?? 0;
+
+  const totalRevenue = summaryMetrics?.totalRevenue ?? 0;
+  const paidPaymentsTotal = summaryMetrics?.paidPaymentsTotal ?? 0;
+  const pendingPaymentsTotal = summaryMetrics?.pendingPaymentsTotal ?? 0;
+
   const metrics = [
+    {
+      id: 'total-therapists',
+      title: 'Total Therapists',
+      value: isLoading ? '...' : totalTherapists.toString(),
+      subValue: `${activeTherapists} Active Specialists`,
+      badgeText: 'Live Sync',
+      badgeType: 'positive',
+      icon: UserCheck,
+      iconBg: 'bg-[#0F4C81]/10 text-[#0F4C81]',
+      accentBorder: 'before:bg-[#0F4C81]',
+      targetTab: 'therapists',
+    },
     {
       id: 'total-patients',
       title: 'Total Patients',
-      value: '1,248',
-      badgeText: '8.4%',
+      value: isLoading ? '...' : totalPatients.toLocaleString('en-IN'),
+      subValue: `${activePatients} Active Treatment`,
+      badgeText: 'Live Sync',
       badgeType: 'positive',
       icon: Users,
       iconBg: 'bg-blue-50 text-blue-600',
       accentBorder: 'before:bg-blue-600',
+      targetTab: 'patients',
     },
     {
-      id: 'todays-appointments',
-      title: "Today's Appointments",
-      value: '36',
-      badgeText: '12%',
+      id: 'total-appointments',
+      title: 'Total Appointments',
+      value: isLoading ? '...' : totalAppointments.toString(),
+      subValue: `${completedAppointments} Completed • ${scheduledAppointments} Pending`,
+      badgeText: 'Live Sync',
       badgeType: 'positive',
       icon: Calendar,
       iconBg: 'bg-teal-50 text-teal-600',
       accentBorder: 'before:bg-teal-500',
+      targetTab: 'schedule',
     },
     {
-      id: 'active-therapists',
-      title: 'Active Therapists',
-      value: '24',
-      badgeText: '+3 this week',
-      badgeType: 'neutral',
-      icon: Stethoscope,
-      iconBg: 'bg-purple-50 text-purple-600',
-      accentBorder: 'before:bg-purple-600',
-    },
-    {
-      id: 'monthly-revenue',
-      title: 'Monthly Revenue',
-      value: '₹8.4L',
-      badgeText: '18%',
+      id: 'total-revenue',
+      title: 'Total Revenue',
+      value: isLoading ? '...' : `₹${totalRevenue.toLocaleString('en-IN')}`,
+      subValue: `Paid: ₹${paidPaymentsTotal.toLocaleString('en-IN')} • Due: ₹${pendingPaymentsTotal.toLocaleString('en-IN')}`,
+      badgeText: 'Live Sync',
       badgeType: 'positive',
       icon: Banknote,
       iconBg: 'bg-indigo-50 text-indigo-600',
       accentBorder: 'before:bg-indigo-600',
+      targetTab: 'payments',
     },
   ];
 
@@ -52,11 +85,12 @@ export const MetricCards: React.FC = () => {
         return (
           <div
             key={card.id}
-            className={`relative bg-white rounded-2xl p-5 border border-slate-100 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-r-md ${card.accentBorder}`}
+            onClick={() => onNavigateToTab && onNavigateToTab(card.targetTab)}
+            className={`relative bg-white rounded-2xl p-5 border border-slate-100 shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden cursor-pointer group before:absolute before:left-0 before:top-3 before:bottom-3 before:w-1 before:rounded-r-md ${card.accentBorder}`}
           >
             {/* Top row with icon and percentage badge */}
             <div className="flex items-center justify-between mb-4">
-              <div className={`p-3 rounded-xl ${card.iconBg} shadow-2xs`}>
+              <div className={`p-3 rounded-xl ${card.iconBg} shadow-2xs group-hover:scale-105 transition-transform`}>
                 <Icon className="w-5 h-5 stroke-[2.2]" />
               </div>
 
@@ -77,9 +111,13 @@ export const MetricCards: React.FC = () => {
               <p className="text-xs font-semibold text-slate-400 tracking-wide">
                 {card.title}
               </p>
-              <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-                {card.value}
+              <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight flex items-center space-x-2">
+                <span>{card.value}</span>
+                {isLoading && <Loader2 className="w-4 h-4 animate-spin text-slate-400 inline" />}
               </h3>
+              <p className="text-xs font-semibold text-slate-500 mt-1">
+                {card.subValue}
+              </p>
             </div>
           </div>
         );

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, CreditCard, CheckCircle2 } from 'lucide-react';
+import { createPaymentRecord } from '@/services/paymentService';
 
 interface RecordPaymentModalProps {
   isOpen: boolean;
@@ -16,18 +17,36 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('UPI');
   const [referenceId, setReferenceId] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccessMessage, setIsSuccessMessage] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSuccessMessage(true);
-    setTimeout(() => {
-      setIsSuccessMessage(false);
-      if (onSuccess) onSuccess();
-      onClose();
-    }, 1200);
+    if (!patientName || !amount) return;
+    setIsSubmitting(true);
+
+    try {
+      await createPaymentRecord({
+        patientId: `pat-${Date.now().toString(36)}`,
+        patientName,
+        amount: Number(amount) || 0,
+        paymentMethod: method,
+        description: referenceId ? `Ref: ${referenceId}` : 'Manual payment recorded',
+      });
+
+      setIsSuccessMessage(true);
+      setTimeout(() => {
+        setIsSuccessMessage(false);
+        if (onSuccess) onSuccess();
+        onClose();
+      }, 1200);
+    } catch (err) {
+      console.error('Failed to record payment:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -136,9 +155,10 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs rounded-xl transition-colors shadow-md shadow-cyan-500/20 cursor-pointer"
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-xs rounded-xl transition-colors shadow-md shadow-cyan-500/20 cursor-pointer flex items-center justify-center"
                 >
-                  Save Payment
+                  {isSubmitting ? 'Saving...' : 'Save Payment'}
                 </button>
               </div>
             </form>
@@ -148,3 +168,4 @@ export const RecordPaymentModal: React.FC<RecordPaymentModalProps> = ({
     </div>
   );
 };
+

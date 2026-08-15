@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,14 +11,22 @@ import {
   Alert,
   Platform,
   Modal,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
+import { mobileRealtimeSync } from '@/api/syncApi';
+import { fetchUserPaymentsFromApi } from '@/api/paymentApi';
+import { auth } from '@/config/firebase';
 import { BottomNavBar, TabKey } from '@/components';
+import { useAuth } from '@/context/AuthContext';
+import { subscribeToOwnPatientRecord } from '@/api/patientSyncApi';
+
 
 export interface InvoiceItem {
   id: string;
@@ -39,25 +47,168 @@ export const PaymentsInvoicesScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const pData = Strings.paymentsInvoicesDetails;
+  const { user, userProfile } = useAuth();
 
   const [selectedFilter, setSelectedFilter] = useState<string>('All');
-  const [invoicesList, setInvoicesList] = useState<InvoiceItem[]>(() =>
-    pData.invoices.map((inv) => ({
-      id: inv.id,
-      invoiceNo: inv.invoiceNo,
-      title: inv.title,
-      doctor: inv.doctor,
-      amount: inv.amount,
-      numericAmount: inv.numericAmount,
-      status: inv.status as 'PAID' | 'PENDING' | 'REFUNDED',
-      date: inv.date,
-      paymentMethod: inv.paymentMethod,
-      paymentIcon: inv.paymentIcon as keyof typeof Ionicons.glyphMap,
-      payNowBtnText: (inv as any).payNowBtnText,
-      statusNote: (inv as any).statusNote,
-    }))
-  );
+  const [invoicesList, setInvoicesList] = useState<InvoiceItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceItem | null>(null);
+
+
+  const mapPayments = useCallback((rawPayments: any[]): InvoiceItem[] => {
+    return rawPayments.map((inv, idx) => {
+      const invNo =
+        inv.invoiceNo ||
+        inv.invoiceNumber ||
+        `#INV-${(inv.id || String(idx)).slice(-4).toUpperCase()}`;
+      const amtNum =
+        typeof inv.amount === 'number'
+          ? inv.amount
+          : Number(inv.numericFee || inv.numericAmount || 0);
+      const amtStr =
+        typeof inv.amount === 'string'
+          ? inv.amount
+          : `₹${amtNum.toLocaleString('en-IN')}`;
+      const rawStatus = String(inv.status || inv.paymentStatus || 'PAID').trim().toUpperCase();
+      const validStatus: 'PAID' | 'PENDING' | 'REFUNDED' =
+        rawStatus === 'PENDING' || rawStatus === 'UNPAID' || rawStatus === 'DUE'
+          ? 'PENDING'
+          : rawStatus === 'REFUNDED' || rawStatus === 'CANCELLED'
+          ? 'REFUNDED'
+          : 'PAID';
+
+      return {
+        id: inv.id || `fs-inv-${idx}`,
+        invoiceNo: invNo,
+        title: inv.title || inv.serviceTitle || 'Physiotherapy Session',
+        doctor: inv.doctor || inv.doctorName || 'Specialist Clinician',
+        amount: amtStr,
+        numericAmount: amtNum,
+        status: validStatus,
+        date:
+          inv.date ||
+          inv.fullDate ||
+          inv.dateStr ||
+          (inv.paidAt
+            ? new Date(inv.paidAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+              })
+            : 'Recently'),
+        paymentMethod: inv.paymentMethod || inv.paymentMethodName || inv.paymentOption || 'UPI / Online',
+        paymentIcon: 'card-outline' as keyof typeof Ionicons.glyphMap,
+        payNowBtnText: inv.payNowBtnText,
+        statusNote: inv.statusNote,
+      };
+    });
+  }, []);
+
+  // Real-time listeners for payments: both the `payments` collection AND `patient details` doc
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const currentUser = auth.currentUser;
+      const userId = currentUser?.uid;
+
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+
+      // 1. Initial backend payment fetch
+      fetchUserPaymentsFromApi(userId)
+        .then((apiPayments) => {
+          if (isMounted && Array.isArray(apiPayments) && apiPayments.length > 0) {
+            setInvoicesList(mapPayments(apiPayments));
+          }
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+
+      // 2. Real-time listener: `payments` collection (written by mobile app & backend)
+      const unsubPayments = mobileRealtimeSync.subscribeUserPayments<any[]>(
+        userId,
+        (realtimePayments) => {
+          if (isMounted && Array.isArray(realtimePayments) && realtimePayments.length > 0) {
+            setInvoicesList((prev) => {
+              const mappedPayments = mapPayments(realtimePayments);
+              const payIds = new Set(mappedPayments.map((i) => i.id));
+              const prevNonDupes = prev.filter((i) => !payIds.has(i.id));
+              return [...mappedPayments, ...prevNonDupes];
+            });
+            setLoading(false);
+          }
+        }
+      );
+
+      // 3. Real-time listener: `invoices` collection (written by admin panel)
+      const unsubInvoices = mobileRealtimeSync.subscribeUserInvoices<any[]>(
+        userId,
+        (adminInvoices) => {
+          if (isMounted && Array.isArray(adminInvoices) && adminInvoices.length > 0) {
+            setInvoicesList((prev) => {
+              const mappedAdmin = mapPayments(adminInvoices);
+              const adminIds = new Set(mappedAdmin.map((i) => i.id));
+              const prevNonDupes = prev.filter((i) => !adminIds.has(i.id));
+              return [...mappedAdmin, ...prevNonDupes];
+            });
+            setLoading(false);
+          }
+        }
+      );
+
+      // 4. Real-time listener: `patient details/{uid}.payments[]` (written by admin panel)
+      const unsubPatientRecord = subscribeToOwnPatientRecord(
+        userId,
+        (record) => {
+          if (isMounted && record && Array.isArray(record.payments) && record.payments.length > 0) {
+            setInvoicesList((prev) => {
+              const adminPayments = mapPayments(record.payments);
+              const existingIds = new Set(adminPayments.map((p) => p.id));
+              const uniquePrev = prev.filter((p) => !existingIds.has(p.id));
+              return [...adminPayments, ...uniquePrev];
+            });
+            setLoading(false);
+          }
+        }
+      );
+
+      return () => {
+        isMounted = false;
+        if (typeof unsubPayments === 'function') unsubPayments();
+        if (typeof unsubInvoices === 'function') unsubInvoices();
+        if (typeof unsubPatientRecord === 'function') unsubPatientRecord();
+      };
+    }, [mapPayments])
+  );
+
+
+  // Pull-to-refresh handler
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    const currentUser = auth.currentUser;
+    const userId = currentUser?.uid;
+
+    if (!userId) {
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      const apiPayments = await fetchUserPaymentsFromApi(userId);
+      if (apiPayments && Array.isArray(apiPayments) && apiPayments.length > 0) {
+        setInvoicesList(mapPayments(apiPayments));
+      }
+    } catch (err) {
+      console.warn('Error refreshing payments:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [mapPayments]);
+
 
   // Dynamic calculations for Total Paid & Outstanding
   const { totalPaidStr, outstandingStr, lastPaymentText } = useMemo(() => {
@@ -151,7 +302,7 @@ export const PaymentsInvoicesScreen: React.FC = () => {
         issuedDate: invoice.date,
         paidDate: invoice.date,
         status: invoice.status,
-        patientName: 'Sanya Malhotra',
+        patientName: userProfile?.fullName || user?.displayName || 'Patient',
         appointmentNo: '#APT-1024',
         therapistName: invoice.doctor,
         serviceName: invoice.title,
@@ -165,6 +316,7 @@ export const PaymentsInvoicesScreen: React.FC = () => {
     });
   };
 
+
   const handlePayNow = (invoice: InvoiceItem) => {
     Alert.alert(
       'Complete Payment',
@@ -173,7 +325,21 @@ export const PaymentsInvoicesScreen: React.FC = () => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Pay Now',
-          onPress: () => {
+          onPress: async () => {
+            try {
+              await mobileRealtimeSync.processPayment({
+                id: invoice.id,
+                invoiceNumber: invoice.invoiceNo,
+                title: invoice.title,
+                doctor: invoice.doctor,
+                amount: invoice.numericAmount,
+                status: 'Paid',
+                paymentMethod: invoice.paymentMethod,
+              });
+            } catch (err) {
+              console.warn('Error persisting payment to Firestore:', err);
+            }
+
             // Update invoice state to PAID
             setInvoicesList((prev) =>
               prev.map((item) =>
@@ -218,18 +384,7 @@ export const PaymentsInvoicesScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop:
-                Math.max(
-                  insets.top,
-                  Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 16
-                ) + 8,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.headerIconButton}
@@ -256,6 +411,14 @@ export const PaymentsInvoicesScreen: React.FC = () => {
         {/* SCROLLABLE MAIN CONTENT */}
         <ScrollView
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={['#003D9B']}
+              tintColor="#003D9B"
+            />
+          }
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: 110 + Math.max(insets.bottom, 12) },
@@ -335,7 +498,14 @@ export const PaymentsInvoicesScreen: React.FC = () => {
 
           {/* INVOICES LIST */}
           <View style={styles.invoicesListContainer}>
-            {filteredInvoices.length === 0 ? (
+            {loading && invoicesList.length === 0 ? (
+              <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#003D9B" />
+                <Text style={{ marginTop: 12, color: '#64748B', fontSize: 14 }}>
+                  Loading payment invoices...
+                </Text>
+              </View>
+            ) : filteredInvoices.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="receipt-outline" size={48} color="#CBD5E1" />
                 <Text style={styles.emptyTitle}>No Invoices Found</Text>

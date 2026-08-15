@@ -11,6 +11,8 @@ import {
   ScrollView,
   Platform,
   Alert,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,13 +26,17 @@ import { BrandHeader } from '@/components';
 import { PrimaryButton } from '@/components';
 import { OtpInputGrid } from '@/components';
 
+import { useAuth } from '@/context/AuthContext';
+
+import { getAuthNavigationRoute } from '@/navigation';
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export interface OtpVerificationScreenProps {
   phoneNumber?: string;
   onBackPress?: () => void;
   onEditNumberPress?: () => void;
-  onVerifySuccess?: (code: string) => void;
+  onVerifySuccess?: (code: string, profileCompleted?: boolean) => void;
   onNeedHelpPress?: () => void;
 }
 
@@ -43,12 +49,14 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
 }) => {
   const router = useRouter();
   const params = useLocalSearchParams<{ phone?: string }>();
+  const { verifyOtp, sendOtp, pendingPhoneNumber } = useAuth();
   
-  const displayPhone = propPhoneNumber || params.phone || '+91 98765 43210';
+  const displayPhone = propPhoneNumber || params.phone || pendingPhoneNumber || '+91 98765 43210';
 
   const [otp, setOtp] = useState<string[]>(['', '', '', '', '', '']);
   const [error, setError] = useState<string | undefined>();
-  const [timer, setTimer] = useState<number>(25);
+  const [timer, setTimer] = useState<number>(30);
+  const [isVerifying, setIsVerifying] = useState<boolean>(false);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
@@ -61,7 +69,6 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
       if (interval) clearInterval(interval);
     };
   }, [timer]);
-
 
   const handleBack = () => {
     if (onBackPress) {
@@ -81,7 +88,8 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
+    if (isVerifying) return;
     const fullCode = otp.join('');
     if (fullCode.length < 6) {
       setError('Please enter the complete 6-digit verification code');
@@ -89,19 +97,47 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
     }
 
     setError(undefined);
-    if (onVerifySuccess) {
-      onVerifySuccess(fullCode);
-    } else {
-      router.push('/complete-profile');
+    setIsVerifying(true);
+
+    try {
+      const result = await verifyOtp(fullCode);
+
+      if (result.success) {
+        // Keep isVerifying true during navigation to prevent screen flash or duplicate taps
+        if (onVerifySuccess) {
+          onVerifySuccess(fullCode, result.profileCompleted);
+        } else {
+          const targetRoute = getAuthNavigationRoute({
+            isAuthenticated: true,
+            isProfileComplete: result.profileCompleted,
+            isSessionValid: true,
+          });
+          router.replace(targetRoute as any);
+        }
+      } else {
+        setIsVerifying(false);
+        setError(result.error || 'Verification failed. Please check the code.');
+      }
+    } catch (err: any) {
+      setIsVerifying(false);
+      setError(err?.message || 'An unexpected authentication error occurred. Please try again.');
     }
   };
 
-  const handleResendCode = () => {
+  const handleResendCode = async () => {
     if (timer === 0) {
-      setTimer(25);
+      setTimer(30);
       setOtp(['', '', '', '', '', '']);
       setError(undefined);
-      Alert.alert('Code Sent', `A new verification code was sent to ${displayPhone}`);
+      
+      const resendPhone = pendingPhoneNumber || displayPhone;
+      const res = await sendOtp(resendPhone);
+
+      if (res.success) {
+        Alert.alert('Code Sent', `A new verification code was sent to ${resendPhone}`);
+      } else {
+        setError(res.error || 'Could not resend OTP. Please try again.');
+      }
     }
   };
 
@@ -112,6 +148,7 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
       router.push('/help-support' as any);
     }
   };
+
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -210,6 +247,8 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
                 <PrimaryButton
                   title={Strings.otp.continue}
                   onPress={handleVerify}
+                  isLoading={isVerifying}
+                  disabled={isVerifying || otp.join('').length < 6}
                   accessibilityLabel={Strings.accessibility.continueButton}
                 />
               </View>
@@ -260,6 +299,19 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
           </SafeAreaView>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Smooth Processing & Loading Overlay Modal */}
+      <Modal transparent visible={isVerifying} animationType="fade">
+        <View style={styles.loadingModalBackdrop}>
+          <View style={styles.loadingCard}>
+            <View style={styles.loadingSpinnerCircle}>
+              <ActivityIndicator size="large" color="#003D9B" />
+            </View>
+            <Text style={styles.loadingTitle}>Verifying Code...</Text>
+            <Text style={styles.loadingSubtitle}>Checking authentication & profile information</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -420,6 +472,46 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
     alignSelf: 'center',
     marginTop: Spacing.xs,
+  },
+  loadingModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(5, 26, 62, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  loadingCard: {
+    width: '85%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  loadingSpinnerCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  loadingTitle: {
+    fontSize: Typography.fontSize.md,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#051A3E',
+    marginBottom: 6,
+  },
+  loadingSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
 

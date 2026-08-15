@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import type { Patient } from './types';
+import { updatePatientRecord } from '@/services/patientService';
 import {
   Plus,
   FileText,
@@ -70,10 +72,12 @@ interface MedicationItem {
 
 interface MedicalHistoryTabProps {
   patientName?: string;
+  patient?: Patient;
 }
 
 export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
   patientName = 'Sanya Malhotra',
+  patient,
 }) => {
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -83,25 +87,34 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Primary Diagnoses state
-  const [diagnoses, setDiagnoses] = useState<PrimaryDiagnosis[]>([
-    {
-      id: 'diag-1',
-      title: 'Lumbar Spondylosis',
-      description: 'Degenerative changes observed in L4-L5 vertebrae.',
-      diagnosedDate: 'JAN 2024',
-      status: 'CURRENT',
-      statusColor: 'bg-amber-50 text-amber-700 border-amber-200/80',
-    },
-    {
-      id: 'diag-2',
-      title: 'Post-Operative ACL Recovery',
-      description: 'Strength maintenance program following reconstruction.',
-      diagnosedDate: 'OCT 2022',
-      status: 'PAST',
-      statusColor: 'bg-slate-100 text-slate-600 border-slate-200',
-    },
-  ]);
+  // Extract medical history from patient if present
+  const medHistory = patient?.medicalHistory;
+
+  // Primary Diagnoses state initialized dynamically
+  const [diagnoses, setDiagnoses] = useState<PrimaryDiagnosis[]>(() => {
+    if (medHistory?.primaryDiagnosis) {
+      return [
+        {
+          id: 'diag-main',
+          title: medHistory.primaryDiagnosis,
+          description: `Primary condition: ${medHistory.severity || 'Moderate'} severity.`,
+          diagnosedDate: 'AUG 2026',
+          status: 'CURRENT',
+          statusColor: 'bg-amber-50 text-amber-700 border-amber-200/80',
+        },
+      ];
+    }
+    return [
+      {
+        id: 'diag-1',
+        title: patient?.condition || 'Lumbar Spondylosis',
+        description: 'Degenerative changes and physical rehab evaluation.',
+        diagnosedDate: 'JAN 2026',
+        status: 'CURRENT',
+        statusColor: 'bg-amber-50 text-amber-700 border-amber-200/80',
+      },
+    ];
+  });
 
   // Timeline state
   const [timeline, setTimeline] = useState<TimelineItem[]>([

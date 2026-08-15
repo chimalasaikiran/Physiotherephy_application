@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
-import { MOCK_TRANSACTIONS } from '../mockData';
 import { ArrowUpRight, ArrowDownLeft, RotateCcw, Filter } from 'lucide-react';
+import type { TransactionRecord } from '../types';
 
-export const TransactionsTabView: React.FC = () => {
+interface TransactionsTabViewProps {
+  transactions?: TransactionRecord[];
+}
+
+export const TransactionsTabView: React.FC<TransactionsTabViewProps> = ({
+  transactions = [],
+}) => {
   const [typeFilter, setTypeFilter] = useState('All');
 
-  const filteredTransactions = MOCK_TRANSACTIONS.filter((txn) => {
+  const filteredTransactions = transactions.filter((txn) => {
     return typeFilter === 'All' || txn.type === typeFilter;
   });
 
@@ -53,59 +59,76 @@ export const TransactionsTabView: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 text-xs font-medium text-slate-700">
-            {filteredTransactions.map((txn) => (
-              <tr key={txn.id} className="hover:bg-slate-50/80 transition-colors">
-                <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
-                  {txn.transactionId}
-                </td>
-                <td className="py-3.5 px-4 font-bold text-slate-900">
-                  {txn.patientName}
-                </td>
-                <td className="py-3.5 px-4">
-                  <span className="inline-flex items-center text-xs font-bold space-x-1">
-                    {txn.type === 'Payment' && (
-                      <>
-                        <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="text-emerald-600">Payment</span>
-                      </>
-                    )}
-                    {txn.type === 'Payout' && (
-                      <>
-                        <ArrowUpRight className="w-3.5 h-3.5 text-blue-500" />
-                        <span className="text-blue-600">Payout</span>
-                      </>
-                    )}
-                    {txn.type === 'Refund' && (
-                      <>
-                        <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
-                        <span className="text-rose-600">Refund</span>
-                      </>
-                    )}
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-slate-500">{txn.method}</td>
-                <td className="py-3.5 px-4 text-slate-400">{txn.timestamp}</td>
-                <td className="py-3.5 px-4 font-extrabold text-slate-900">
-                  ₹{txn.amount.toLocaleString('en-IN')}
-                </td>
-                <td className="py-3.5 px-4">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      txn.status === 'Completed'
-                        ? 'bg-emerald-50 text-emerald-600'
-                        : txn.status === 'Failed'
-                        ? 'bg-rose-50 text-rose-600'
-                        : 'bg-blue-50 text-blue-600'
-                    }`}
-                  >
-                    {txn.status}
-                  </span>
+            {filteredTransactions.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                  No transactions found.
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredTransactions.map((txn) => (
+                <tr key={txn.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-3.5 px-4 font-mono font-bold text-slate-900">
+                    {txn.transactionId}
+                  </td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">
+                    {txn.patientName || txn.therapistName || 'System'}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className="inline-flex items-center text-xs font-bold space-x-1">
+                      {txn.type === 'Payment' && (
+                        <>
+                          <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-500" />
+                          <span className="text-emerald-600">Payment</span>
+                        </>
+                      )}
+                      {txn.type === 'Payout' && (
+                        <>
+                          <ArrowUpRight className="w-3.5 h-3.5 text-blue-500" />
+                          <span className="text-blue-600">Payout</span>
+                        </>
+                      )}
+                      {txn.type === 'Refund' && (
+                        <>
+                          <RotateCcw className="w-3.5 h-3.5 text-rose-500" />
+                          <span className="text-rose-600">Refund</span>
+                        </>
+                      )}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-500">{txn.method || 'UPI'}</td>
+                  <td className="py-3.5 px-4 text-slate-400">
+                    {new Date(txn.timestamp).toLocaleDateString('en-IN', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </td>
+                  <td className="py-3.5 px-4 font-extrabold text-slate-900">
+                    ₹{txn.amount.toLocaleString('en-IN')}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        txn.status === 'Completed'
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : txn.status === 'Failed'
+                          ? 'bg-rose-50 text-rose-600'
+                          : 'bg-blue-50 text-blue-600'
+                      }`}
+                    >
+                      {txn.status}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
     </div>
   );
 };
+

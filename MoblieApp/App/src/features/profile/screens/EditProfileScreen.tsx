@@ -23,27 +23,68 @@ import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
 
+import { useAuth } from '@/context/AuthContext';
+import { promptAndPickImage } from '../../../utils/imagePickerHelper';
+
 export const EditProfileScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userProfile, user, completeProfile, updateAvatar } = useAuth();
 
   // Form State with explicit string types
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [fullName, setFullName] = useState<string>(Strings.editProfileDetails.personalInfo.fullNameValue);
+  const [avatarUri, setAvatarUri] = useState<string | null>(userProfile?.avatarUri || null);
+  const [fullName, setFullName] = useState<string>(userProfile?.fullName || Strings.editProfileDetails.personalInfo.fullNameValue);
   const [email, setEmail] = useState<string>(Strings.editProfileDetails.personalInfo.emailValue);
-  const [mobileNumber, setMobileNumber] = useState<string>(Strings.editProfileDetails.personalInfo.mobileValue);
-  const [dob, setDob] = useState<string>(Strings.editProfileDetails.personalInfo.dobValue);
-  const [gender, setGender] = useState<string>(Strings.editProfileDetails.personalInfo.genderValue);
+  const [mobileNumber, setMobileNumber] = useState<string>(userProfile?.phone || user?.phoneNumber || Strings.editProfileDetails.personalInfo.mobileValue);
+  const [dob, setDob] = useState<string>(userProfile?.dob || Strings.editProfileDetails.personalInfo.dobValue);
+  const [gender, setGender] = useState<string>(userProfile?.gender || Strings.editProfileDetails.personalInfo.genderValue);
 
-  const [height, setHeight] = useState<string>(Strings.editProfileDetails.bodyInfo.heightValue);
-  const [weight, setWeight] = useState<string>(Strings.editProfileDetails.bodyInfo.weightValue);
+  const [height, setHeight] = useState<string>(userProfile?.height ? String(userProfile.height) : Strings.editProfileDetails.bodyInfo.heightValue);
+  const [weight, setWeight] = useState<string>(userProfile?.weight ? String(userProfile.weight) : Strings.editProfileDetails.bodyInfo.weightValue);
   const [bloodGroup, setBloodGroup] = useState<string>(Strings.editProfileDetails.bodyInfo.bloodGroupValue);
 
   const [contactName, setContactName] = useState<string>(Strings.editProfileDetails.emergencyContact.nameValue);
   const [relationship, setRelationship] = useState<string>(Strings.editProfileDetails.emergencyContact.relationshipValue);
   const [emergencyPhone, setEmergencyPhone] = useState<string>(Strings.editProfileDetails.emergencyContact.phoneValue);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
 
   const e = Strings.editProfileDetails;
+
+  const handleSaveProfile = async () => {
+    if (!fullName.trim()) {
+      Alert.alert('Validation Error', 'Please enter your full name.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const parsedHeight = parseFloat(height) || userProfile?.height || 170;
+      const parsedWeight = parseFloat(weight) || userProfile?.weight || 70;
+
+      const success = await completeProfile({
+        fullName: fullName.trim(),
+        dob: dob.trim(),
+        gender: gender.toLowerCase() as any,
+        height: parsedHeight,
+        weight: parsedWeight,
+        avatarUri,
+        phone: mobileNumber.trim(),
+        profileCompleted: true,
+      });
+
+      setIsSaving(false);
+      if (success) {
+        Alert.alert('Success', 'Profile updated successfully!', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+      } else {
+        Alert.alert('Error', 'Failed to save profile. Please try again.');
+      }
+    } catch (err) {
+      setIsSaving(false);
+      Alert.alert('Error', 'An unexpected error occurred while saving profile.');
+    }
+  };
 
   const handleShare = async () => {
     try {
@@ -69,27 +110,12 @@ export const EditProfileScreen: React.FC = () => {
     }
   };
 
-  const handleChangePhoto = () => {
-    Alert.alert(
-      'Profile Photo',
-      'Choose an option to update your photo:',
-      [
-        {
-          text: 'Take Photo',
-          onPress: () => {
-            setAvatarUri('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80');
-          },
-        },
-        {
-          text: 'Choose from Library',
-          onPress: () => {
-            setAvatarUri('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80');
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
+  const handleChangePhoto = async () => {
+    const selectedUri = await promptAndPickImage();
+    if (selectedUri) {
+      setAvatarUri(selectedUri);
+      await updateAvatar(selectedUri);
+    }
   };
 
   const handleChangeMobile = () => {
@@ -156,17 +182,7 @@ export const EditProfileScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(
-                insets.top,
-                Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16
-              ) + 8,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.headerIconButton}
@@ -408,6 +424,18 @@ export const EditProfileScreen: React.FC = () => {
               </View>
             </View>
 
+            {/* SAVE PROFILE CHANGES BUTTON */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.saveButton}
+              onPress={handleSaveProfile}
+              disabled={isSaving}
+            >
+              <Text style={styles.saveButtonText}>
+                {isSaving ? 'Saving Changes...' : 'Save Profile Changes'}
+              </Text>
+            </TouchableOpacity>
+
             {/* DELETE MY HEALTH PROFILE BUTTON */}
             <TouchableOpacity
               activeOpacity={0.8}
@@ -601,6 +629,27 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.md,
   },
 
+  /* SAVE BUTTON */
+  saveButton: {
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#003D9B',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 12,
+    shadowColor: '#003D9B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  saveButtonText: {
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#FFFFFF',
+  },
+
   /* DELETE BUTTON */
   deleteButton: {
     height: 52,
@@ -610,7 +659,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 0,
     marginBottom: 20,
   },
   deleteButtonText: {

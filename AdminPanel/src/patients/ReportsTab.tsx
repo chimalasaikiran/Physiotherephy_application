@@ -19,10 +19,15 @@ import {
   Printer,
   AlertCircle,
 } from 'lucide-react';
+import type { Patient } from './types';
+import type { PatientReportItem } from './usePatientProfileData';
 
 interface ReportsTabProps {
   patientName?: string;
   therapistName?: string;
+  patient?: Patient;
+  reports?: PatientReportItem[];
+  onUploadReport?: (fileData: any) => Promise<string>;
 }
 
 interface ReportItem {
@@ -39,6 +44,9 @@ interface ReportItem {
 export const ReportsTab: React.FC<ReportsTabProps> = ({
   patientName = 'Sanya Malhotra',
   therapistName = 'Dr. Ananya Iyer',
+  patient,
+  reports = [],
+  onUploadReport,
 }) => {
   // Notification Feedback Toast State
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -171,24 +179,37 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
   const [genIncludeNotes, setGenIncludeNotes] = useState(true);
 
   // File upload Handler
-  const handleFileUpload = (files: FileList | null) => {
+  const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
 
-    const newReport: ReportItem = {
-      id: `rr-${Date.now()}`,
+    const reportData = {
       name: file.name.replace(/\.[^/.]+$/, ''),
-      category: 'Assessment',
-      date: 'Today',
+      category: 'Assessment' as const,
       size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-      status: 'PENDING',
-      typeIcon: 'teal',
-      summaryText: `Uploaded document ${file.name}. Verification pending clinician review.`,
+      status: 'VERIFIED' as const,
+      typeIcon: 'teal' as const,
+      summaryText: `Uploaded clinical document ${file.name} for ${patientName}.`,
     };
 
-    setRecentReports((prev) => [newReport, ...prev]);
-    setUsedStorageMB((prev) => parseFloat((prev + file.size / (1024 * 1024)).toFixed(1)));
-    showToast(`Uploaded "${file.name}" successfully! Status: Pending Verification.`);
+    if (onUploadReport) {
+      try {
+        await onUploadReport(reportData);
+        setUsedStorageMB((prev) => parseFloat((prev + file.size / (1024 * 1024)).toFixed(1)));
+        showToast(`Uploaded "${file.name}" to Firestore & Patient Mobile App!`);
+      } catch (err: any) {
+        showToast(`Error saving document to Firestore: ${err.message}`);
+      }
+    } else {
+      const newReport: ReportItem = {
+        id: `rr-${Date.now()}`,
+        ...reportData,
+        date: 'Today',
+      };
+      setRecentReports((prev) => [newReport, ...prev]);
+      setUsedStorageMB((prev) => parseFloat((prev + file.size / (1024 * 1024)).toFixed(1)));
+      showToast(`Uploaded "${file.name}" successfully! Status: Verified.`);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -317,7 +338,7 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
 
             {/* 2x2 Grid of Recent Report Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {recentReports.map((report) => (
+              {(reports.length > 0 ? (reports as any[]) : recentReports).map((report) => (
                 <div
                   key={report.id}
                   className="bg-white rounded-3xl p-5 border border-slate-100 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4 group"

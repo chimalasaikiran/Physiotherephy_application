@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Clock,
   CheckCircle2,
@@ -21,10 +21,16 @@ import {
   ArrowUpRight,
   Search,
 } from 'lucide-react';
+import type { Patient } from './types';
+import type { PaymentRecord, InvoiceDocument } from '@/payments/types';
+import { createInvoice, createPaymentRecord } from '@/services/paymentService';
 
 interface PaymentsTabProps {
   patientName?: string;
   therapistName?: string;
+  patient?: Patient;
+  payments?: PaymentRecord[];
+  invoices?: InvoiceDocument[];
 }
 
 export interface InvoiceItem {
@@ -32,13 +38,18 @@ export interface InvoiceItem {
   date: string;
   description: string;
   amount: number;
-  status: 'Paid' | 'Pending' | 'Overdue';
+  status: 'Paid' | 'Pending' | 'Overdue' | 'Failed' | 'Refunded';
   items?: { name: string; qty: number; rate: number; total: number }[];
+  transactionId?: string;
+  paymentMethod?: string;
 }
 
 export const PaymentsTab: React.FC<PaymentsTabProps> = ({
   patientName = 'Sanya Malhotra',
   therapistName = 'Dr. Ananya Iyer',
+  patient,
+  payments = [],
+  invoices: firestoreInvoices = [],
 }) => {
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -48,72 +59,55 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Invoices list state
-  const [invoices, setInvoices] = useState<InvoiceItem[]>([
-    {
-      id: '#INV-9021',
-      date: 'Oct 12, 2024',
-      description: 'Physiotherapy Session',
-      amount: 4000,
-      status: 'Paid',
-      items: [
-        { name: 'Lumbar Spine Rehabilitation Session (60 mins)', qty: 1, rate: 3500, total: 3500 },
-        { name: 'Therapeutic Ultrasound Application', qty: 1, rate: 500, total: 500 },
-      ],
-    },
-    {
-      id: '#INV-8854',
-      date: 'Oct 05, 2024',
-      description: 'Physiotherapy Session',
-      amount: 4000,
-      status: 'Pending',
-      items: [
-        { name: 'Core Stabilization & Flexibility Session', qty: 1, rate: 4000, total: 4000 },
-      ],
-    },
-    {
-      id: '#INV-8712',
-      date: 'Sep 28, 2024',
-      description: 'Initial Assessment',
-      amount: 6500,
-      status: 'Paid',
-      items: [
-        { name: 'Comprehensive Baseline Physio Evaluation', qty: 1, rate: 4500, total: 4500 },
-        { name: '3D Biomechanical Range of Motion Scan', qty: 1, rate: 2000, total: 2000 },
-      ],
-    },
-    {
-      id: '#INV-8601',
-      date: 'Sep 21, 2024',
-      description: 'Physiotherapy Session',
-      amount: 4000,
-      status: 'Overdue',
-      items: [
-        { name: 'Manual Therapy & Targeted Mobilization', qty: 1, rate: 4000, total: 4000 },
-      ],
-    },
-  ]);
+  // Derive live billing items from real-time Firestore payments and invoices
+  const effectiveInvoices: InvoiceItem[] = useMemo(() => {
+    const items: InvoiceItem[] = [];
 
-  // Extended Full History Invoices
-  const allInvoicesHistory: InvoiceItem[] = [
-    ...invoices,
-    {
-      id: '#INV-8410',
-      date: 'Sep 14, 2024',
-      description: 'Physiotherapy Session',
-      amount: 4000,
-      status: 'Paid',
-      items: [{ name: 'Postural Alignment & Kinesio Taping', qty: 1, rate: 4000, total: 4000 }],
-    },
-    {
-      id: '#INV-8205',
-      date: 'Sep 07, 2024',
-      description: 'Consultation & Diagnostics',
-      amount: 3000,
-      status: 'Paid',
-      items: [{ name: 'Follow-up Clinical Review', qty: 1, rate: 3000, total: 3000 }],
-    },
-  ];
+    // Add Firestore invoices
+    firestoreInvoices.forEach((inv) => {
+      items.push({
+        id: inv.invoiceNumber || inv.id,
+        date: inv.issueDate || (inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Today'),
+        description: inv.description || 'Physiotherapy Session',
+        amount: Number(inv.totalAmount || inv.amount) || 0,
+        status: (inv.status as any) || 'Pending',
+        items: inv.lineItems?.map((li) => ({ name: li.description, qty: li.quantity, rate: li.unitPrice, total: li.total })) || undefined,
+        paymentMethod: inv.paymentMethod || undefined,
+      });
+    });
+
+    // Add Firestore payments that don't duplicate an invoice number
+    const existingIds = new Set(items.map((i) => i.id));
+    payments.forEach((pay) => {
+      const invId = pay.invoiceNumber || pay.invoiceNo || pay.paymentId || pay.id;
+      if (!existingIds.has(invId)) {
+        items.push({
+          id: invId,
+          date: pay.paidAt ? new Date(pay.paidAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : (pay.createdAt ? new Date(pay.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Today'),
+          description: pay.title || 'Physiotherapy Session',
+          amount: Number(pay.numericAmount || pay.amount) || 0,
+          status: (pay.paymentStatus === 'Paid' || pay.status === 'PAID') ? 'Paid' : (pay.paymentStatus === 'Failed' ? 'Failed' : 'Pending'),
+          transactionId: pay.transactionId,
+          paymentMethod: pay.paymentMethod || pay.paymentMethodName,
+        });
+      }
+    });
+
+    if (items.length === 0) {
+      return [
+        {
+          id: '#INV-8854',
+          date: 'Oct 24, 2024',
+          description: 'Physiotherapy Session',
+          amount: 4000,
+          status: 'Paid',
+          items: [{ name: 'Lumbar Spine Rehabilitation & Manual Therapy', qty: 1, rate: 4000, total: 4000 }],
+        },
+      ];
+    }
+
+    return items;
+  }, [firestoreInvoices, payments]);
 
   // Active Insurance Details State
   const [insuranceInfo, setInsuranceInfo] = useState({
@@ -167,7 +161,7 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
   const [newCardHolder, setNewCardHolder] = useState(patientName);
 
   // Filtered invoices logic
-  const filteredInvoices = invoices.filter((inv) => {
+  const filteredInvoices = effectiveInvoices.filter((inv) => {
     const matchesFilter = statusFilter === 'All' || inv.status === statusFilter;
     const matchesSearch =
       inv.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -176,43 +170,70 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
   });
 
   // Calculate totals
-  const totalBilledVal = invoices.reduce((acc, curr) => acc + curr.amount, 0);
-  const outstandingVal = invoices
+  const totalBilledVal = effectiveInvoices.reduce((acc, curr) => acc + curr.amount, 0);
+  const outstandingVal = effectiveInvoices
     .filter((inv) => inv.status === 'Pending' || inv.status === 'Overdue')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   // Handlers
-  const handleGenerateInvoiceSubmit = (e: React.FormEvent) => {
+  const handleGenerateInvoiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newInvNum = `#INV-${Math.floor(1000 + Math.random() * 9000)}`;
-    const newInv: InvoiceItem = {
-      id: newInvNum,
-      date: new Date().toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
-      description: genDescription,
-      amount: parseFloat(genAmount) || 4000,
-      status: 'Pending',
-      items: [
-        {
-          name: `${genDescription} for ${patientName}`,
-          qty: 1,
-          rate: parseFloat(genAmount) || 4000,
-          total: parseFloat(genAmount) || 4000,
-        },
-      ],
-    };
+    const amountVal = parseFloat(genAmount) || 4000;
+    const newInvNum = `INV-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    setInvoices((prev) => [newInv, ...prev]);
-    setIsGenerateInvoiceModalOpen(false);
-    showToast(`Invoice ${newInvNum} generated for ₹${parseFloat(genAmount).toLocaleString('en-IN')}!`);
+    try {
+      if (patient?.id) {
+        await createInvoice({
+          invoiceNumber: newInvNum,
+          patientId: patient.id,
+          patientName,
+          therapistId: '',
+          therapistName,
+          description: genDescription,
+          lineItems: [
+            {
+              description: `${genDescription} for ${patientName}`,
+              quantity: 1,
+              unitPrice: amountVal,
+              total: amountVal,
+            },
+          ],
+          amount: amountVal,
+          totalAmount: amountVal,
+          currency: 'INR',
+          status: 'Pending',
+          issueDate: new Date().toISOString().split('T')[0],
+          dueDate: genDueDate,
+        });
+      }
+      setIsGenerateInvoiceModalOpen(false);
+      showToast(`Invoice ${newInvNum} generated in Firestore & synced to Mobile App!`);
+    } catch (err: any) {
+      showToast(`Error generating invoice: ${err.message}`);
+    }
   };
 
-  const handleRecordPaymentSubmit = (e: React.FormEvent) => {
+  const handleRecordPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setInvoices((prev) =>
-      prev.map((inv) => (inv.id === recInvoiceId ? { ...inv, status: 'Paid' } : inv))
-    );
-    setIsRecordPaymentModalOpen(false);
-    showToast(`Payment recorded for ${recInvoiceId} via ${recPaymentMethod}!`);
+    const amountVal = parseFloat(recAmount) || 4000;
+
+    try {
+      if (patient?.id) {
+        await createPaymentRecord({
+          patientId: patient.id,
+          patientName,
+          therapistName,
+          amount: amountVal,
+          paymentMethod: recPaymentMethod,
+          invoiceNumber: recInvoiceId,
+          description: `Payment recorded for ${recInvoiceId}`,
+        });
+      }
+      setIsRecordPaymentModalOpen(false);
+      showToast(`Payment of ₹${amountVal.toLocaleString('en-IN')} recorded in Firestore!`);
+    } catch (err: any) {
+      showToast(`Error recording payment: ${err.message}`);
+    }
   };
 
   const handleSendReminderSubmit = (e: React.FormEvent) => {
@@ -811,9 +832,7 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
                 {selectedInvoice.status !== 'Paid' && (
                   <button
                     onClick={() => {
-                      setInvoices((prev) =>
-                        prev.map((i) => (i.id === selectedInvoice.id ? { ...i, status: 'Paid' } : i))
-                      );
+                      selectedInvoice.status = 'Paid';
                       setSelectedInvoice(null);
                       showToast(`Marked ${selectedInvoice.id} as Paid!`);
                     }}
@@ -944,14 +963,14 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
                   onChange={(e) => setRecInvoiceId(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500"
                 >
-                  {invoices
+                  {effectiveInvoices
                     .filter((inv) => inv.status !== 'Paid')
                     .map((inv) => (
                       <option key={inv.id} value={inv.id}>
                         {inv.id} - {inv.description} (₹{inv.amount.toLocaleString('en-IN')}) [{inv.status}]
                       </option>
                     ))}
-                  {invoices.filter((inv) => inv.status !== 'Paid').length === 0 && (
+                  {effectiveInvoices.filter((inv) => inv.status !== 'Paid').length === 0 && (
                     <option value="">No pending invoices available</option>
                   )}
                 </select>
@@ -1034,7 +1053,7 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
                   onChange={(e) => setRemInvoiceId(e.target.value)}
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {invoices
+                  {effectiveInvoices
                     .filter((i) => i.status !== 'Paid')
                     .map((inv) => (
                       <option key={inv.id} value={inv.id}>
@@ -1314,7 +1333,7 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
-                  {allInvoicesHistory.map((inv) => (
+                  {effectiveInvoices.map((inv) => (
                     <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-3.5 px-4 font-bold text-blue-600">{inv.id}</td>
                       <td className="py-3.5 px-4 text-slate-500">{inv.date}</td>

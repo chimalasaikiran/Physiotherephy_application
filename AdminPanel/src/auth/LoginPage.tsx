@@ -7,12 +7,10 @@ import type { LoginFormValues } from './types/auth';
 
 interface LoginPageProps {
   onLoginSuccess?: (values: LoginFormValues) => void;
-  onNavigateToForgotPassword?: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLoginSuccess,
-  onNavigateToForgotPassword,
 }) => {
   const handleSuccess = (values: LoginFormValues) => {
     console.log('Login successful with values:', values);
@@ -32,7 +30,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <AuthHeader />
           <LoginForm
             onSuccess={handleSuccess}
-            onForgotPasswordClick={onNavigateToForgotPassword}
           />
         </div>
         <div className="w-full max-w-md mx-auto">

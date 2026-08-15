@@ -9,6 +9,7 @@ import { TodaysSchedule } from './components/TodaysSchedule';
 import { RecentPatientsWidget } from './components/RecentPatientsWidget';
 import { QuickActionsWidget } from './components/QuickActionsWidget';
 import { NewAppointmentModal } from './components/NewAppointmentModal';
+import { RealtimeGuideModal } from '@/components/RealtimeGuideModal';
 import { PatientsView, AddPatientPage, PatientProfilePage, type Patient } from '@/patients';
 import { TherapistsView, AddTherapistPage, TherapistProfilePage, type Therapist } from '@/therapists';
 import { SchedulePage, CreateAppointmentPage, AppointmentDetailsPage, RescheduleAppointmentPage, SessionSummaryPage } from '@/schedule';
@@ -18,19 +19,23 @@ import { ReportsPage } from '@/reports';
 import { AnalyticsPage } from '@/analytics';
 import { PaymentsPage, CreateInvoicePage, CreateTreatmentPackagePage } from '@/payments';
 import { SettingsPage } from '@/settings';
+import { useDashboardData } from './useDashboardData';
 
 interface DashboardPageProps {
   onLogout: () => void;
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
-  const [activeTab, setActiveTab] = useState('settings');
+  const dashboardData = useDashboardData();
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedTherapist, setSelectedTherapist] = useState<Therapist | null>(null);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isNewAppointmentOpen, setIsNewAppointmentOpen] = useState(false);
+  const [isRealtimeGuideOpen, setIsRealtimeGuideOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-slate-50/60 font-sans text-slate-900 flex antialiased">
@@ -49,6 +54,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         <TopHeader
           onMenuToggle={() => setIsSidebarOpen(true)}
           onOpenNewAppointment={() => setActiveTab('create-appointment')}
+          onOpenRealtimeGuide={() => setIsRealtimeGuideOpen(true)}
+          onNavigateToSettings={() => setActiveTab('settings')}
         />
 
         {/* Page Content Body */}
@@ -56,8 +63,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           {activeTab === 'schedule' ? (
             <SchedulePage
               onOpenNewAppointment={() => setActiveTab('create-appointment')}
-              onOpenSessionDetails={() => setActiveTab('session-summary')}
-              onOpenReschedule={() => setActiveTab('reschedule-appointment')}
+              onOpenSessionDetails={(appt) => {
+                if (appt) setSelectedAppointment(appt);
+                setActiveTab('appointment-details');
+              }}
+              onOpenReschedule={(appt) => {
+                if (appt) setSelectedAppointment(appt);
+                setActiveTab('reschedule-appointment');
+              }}
             />
           ) : activeTab === 'session-summary' || activeTab === 'session-details' ? (
             <SessionSummaryPage
@@ -68,6 +81,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             />
           ) : activeTab === 'appointment-details' ? (
             <AppointmentDetailsPage
+              appointment={selectedAppointment}
               onBack={() => setActiveTab('schedule')}
               onNavigateToPatient={() => setActiveTab('patient-profile')}
               onNavigateToTherapist={() => setActiveTab('therapist-profile')}
@@ -75,13 +89,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             />
           ) : activeTab === 'reschedule-appointment' ? (
             <RescheduleAppointmentPage
+              appointment={selectedAppointment}
               onBack={() => setActiveTab('schedule')}
               onSuccess={() => setActiveTab('schedule')}
             />
           ) : activeTab === 'create-appointment' ? (
-
             <CreateAppointmentPage
-              initialStep={5}
+              initialStep={1}
               onBack={() => setActiveTab('schedule')}
               onSuccess={() => setActiveTab('schedule')}
             />
@@ -111,11 +125,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
           ) : activeTab === 'add-patient' ? (
             <AddPatientPage onBack={() => setActiveTab('patients')} />
           ) : activeTab === 'patient-profile' ? (
-            <PatientProfilePage
-              patient={selectedPatient}
-              onBack={() => setActiveTab('patients')}
-            />
+            selectedPatient ? (
+              <PatientProfilePage
+                patient={selectedPatient}
+                onBack={() => setActiveTab('patients')}
+              />
+            ) : (
+              <PatientsView
+                onNavigateToAddPatient={() => setActiveTab('add-patient')}
+                onSelectPatient={(patient) => {
+                  setSelectedPatient(patient);
+                  setActiveTab('patient-profile');
+                }}
+              />
+            )
           ) : activeTab === 'programs' ? (
+
             <ProgramsPage
               onNavigateToCreateProgram={() => setActiveTab('create-program')}
               onNavigateToProgramDetails={(prog) => {
@@ -221,7 +246,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
               </div>
 
               {/* Metric Stat Cards */}
-              <MetricCards />
+              <MetricCards
+                summaryMetrics={dashboardData.summaryMetrics}
+                isLoading={dashboardData.isLoading}
+                onNavigateToTab={(tab) => setActiveTab(tab)}
+              />
 
               {/* Core Dashboard Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
@@ -229,21 +258,43 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 <div className="lg:col-span-2 space-y-6 sm:space-y-8">
                   {/* Two Charts Side by Side */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <AppointmentsTrendChart />
-                    <PatientGrowthChart />
+                    <AppointmentsTrendChart getAppointmentsTrend={dashboardData.getAppointmentsTrend} />
+                    <PatientGrowthChart getRevenueTrend={dashboardData.getRevenueTrend} />
                   </div>
 
                   {/* Recent Appointments Table */}
-                  <RecentAppointmentsTable onSelectSession={() => setActiveTab('session-details')} />
+                  <RecentAppointmentsTable
+                    recentAppointments={dashboardData.recentAppointments}
+                    isLoading={dashboardData.isLoading}
+                    onSelectSession={(session) => {
+                      if (session) setSelectedAppointment(session);
+                      setActiveTab('appointment-details');
+                    }}
+                    onViewAll={() => setActiveTab('schedule')}
+                  />
                 </div>
 
                 {/* Right Column (1 Span on Desktop) */}
                 <div className="space-y-6 sm:space-y-8">
                   {/* Today's Schedule Widget */}
-                  <TodaysSchedule />
+                  <TodaysSchedule
+                    todaysSchedule={dashboardData.todaysSchedule}
+                    isLoading={dashboardData.isLoading}
+                    onSelectAppointment={(item) => {
+                      if (item) setSelectedAppointment(item);
+                      setActiveTab('appointment-details');
+                    }}
+                    onNavigateToSchedule={() => setActiveTab('schedule')}
+                  />
 
                   {/* Recent Patients Widget */}
-                  <RecentPatientsWidget />
+                  <RecentPatientsWidget
+                    onNavigateToPatients={() => setActiveTab('patients')}
+                    onSelectPatient={(pt) => {
+                      setSelectedPatient(pt);
+                      setActiveTab('patient-profile');
+                    }}
+                  />
 
                   {/* Quick Actions Widget */}
                   <QuickActionsWidget
@@ -283,6 +334,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
       <NewAppointmentModal
         isOpen={isNewAppointmentOpen}
         onClose={() => setIsNewAppointmentOpen(false)}
+      />
+
+      {/* Real-Time Workflow Guide Modal */}
+      <RealtimeGuideModal
+        isOpen={isRealtimeGuideOpen}
+        onClose={() => setIsRealtimeGuideOpen(false)}
       />
     </div>
   );

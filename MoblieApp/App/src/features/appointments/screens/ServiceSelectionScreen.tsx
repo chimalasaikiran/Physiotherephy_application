@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -24,31 +24,60 @@ import { ServiceCard, MedicalService } from '@/features/appointments';
 import { BottomNavBar, TabKey } from '@/components';
 import { EmptyStateView } from '@/components';
 import { SkeletonLoader } from '@/components';
+import { fetchServicesFromApi } from '@/api/appointmentApi';
+
 
 export const ServiceSelectionScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [servicesList, setServicesList] = useState<MedicalService[]>([...Strings.serviceSelection.services]);
   const [selectedService, setSelectedService] = useState<MedicalService | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('schedule');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
   const recentlyBookedList: RecentlyBookedDoctor[] = [...Strings.serviceSelection.recentlyBooked];
-  const allServicesList: MedicalService[] = [...Strings.serviceSelection.services];
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadServices = async () => {
+      setIsLoading(true);
+      const apiServices = await fetchServicesFromApi();
+      if (isMounted) {
+        if (apiServices && apiServices.length > 0) {
+          const mapped: MedicalService[] = apiServices.map((s) => ({
+            id: s.id,
+            title: s.title,
+            description: s.description,
+            category: s.category,
+            iconName: s.iconName as any,
+            startingFee: s.startingFee,
+            numericFee: s.numericFee,
+          }));
+          setServicesList(mapped);
+        }
+        setIsLoading(false);
+      }
+    };
+    loadServices();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Search filtering logic
   const filteredServices = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return allServicesList;
-    return allServicesList.filter(
+    if (!q) return servicesList;
+    return servicesList.filter(
       (s) =>
         s.title.toLowerCase().includes(q) ||
         s.description.toLowerCase().includes(q) ||
         (s.category && s.category.toLowerCase().includes(q))
     );
-  }, [allServicesList, searchQuery]);
+  }, [servicesList, searchQuery]);
 
   const handleServiceSelect = (service: MedicalService) => {
     if (selectedService?.id === service.id) {
@@ -80,9 +109,9 @@ export const ServiceSelectionScreen: React.FC = () => {
 
   const handleRebookDoctor = (doctor: RecentlyBookedDoctor) => {
     // Quick shortcut: select a matching service or directly open book appointment
-    const matchingService = allServicesList.find(
-      (s) => doctor.specialty.toLowerCase().includes(s.title.toLowerCase()) || s.id === 'back_pain'
-    ) || allServicesList[0];
+    const matchingService = servicesList.find(
+      (s: MedicalService) => doctor.specialty.toLowerCase().includes(s.title.toLowerCase()) || s.id === 'back_pain'
+    ) || servicesList[0];
 
     setSelectedService(matchingService);
   };
@@ -140,7 +169,7 @@ export const ServiceSelectionScreen: React.FC = () => {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingBottom: 160 + Math.max(insets.bottom, 12) },
+            { paddingBottom: 170 + Math.max(insets.bottom, 12) },
           ]}
         >
           {hasError ? (
@@ -223,11 +252,11 @@ export const ServiceSelectionScreen: React.FC = () => {
           )}
         </ScrollView>
 
-        {/* 4. STICKY BOTTOM CONTINUE BUTTON */}
+        {/* 4. STICKY BOTTOM CONTINUE BUTTON (POSITIONED ABOVE NAV BAR) */}
         <View
           style={[
             styles.bottomStickyBar,
-            { paddingBottom: Math.max(insets.bottom, 12) + 60 },
+            { bottom: 74 + Math.max(insets.bottom, 10) },
           ]}
         >
           <TouchableOpacity
@@ -351,14 +380,14 @@ const styles = StyleSheet.create({
   /* STICKY BOTTOM BAR */
   bottomStickyBar: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
     paddingHorizontal: Spacing.xl,
-    paddingTop: 12,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: '#F1F5F9',
+    zIndex: 90,
   },
   continueButton: {
     height: 52,

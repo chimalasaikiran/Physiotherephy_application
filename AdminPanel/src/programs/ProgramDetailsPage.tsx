@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   ArrowLeft,
   Calendar,
@@ -23,12 +24,17 @@ import {
   ShieldCheck,
   X,
   ChevronDown,
+  Loader2,
 } from 'lucide-react';
 import type { Program } from './types';
 import WeeksTabContent from './components/WeeksTabContent';
 import ExercisesTabContent from './components/ExercisesTabContent';
 import AssignedPatientsTabContent from './components/AssignedPatientsTabContent';
 import OutcomesTabContent from './components/OutcomesTabContent';
+import { assignPatientsToProgram, subscribeToAssignedPatients } from '@/services/programService';
+import { subscribeToPatients } from '@/services/patientService';
+import type { Patient } from '@/patients/types';
+
 
 interface ProgramDetailsPageProps {
   program?: Program | null;
@@ -56,6 +62,16 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
   const [selectedPatientIds, setSelectedPatientIds] = useState<string[]>([]);
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
 
+  // Real patients from Firestore (for Assign modal)
+  const [realPatients, setRealPatients] = useState<Patient[]>([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+
+  // Already-assigned patient IDs for duplicate prevention
+  const [assignedPatientIds, setAssignedPatientIds] = useState<Set<string>>(new Set());
+
+  // Assigning state
+  const [isAssigning, setIsAssigning] = useState(false);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -76,24 +92,54 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
       ? program.activePatients
       : program?.activePatients && program.activePatients !== '--'
       ? program.activePatients
-      : '126';
+      : 0;
   const completionRate = program?.completionRate && program.completionRate !== 'N/A'
     ? program.completionRate
-    : '87%';
+    : '0%';
 
-  // Sample data for Assign Patients Modal
-  const SAMPLE_PATIENTS = [
-    { id: 'p1', name: 'Robert Vance', age: 48, condition: 'Lumbar L4-L5 Disc Herniation', clinic: 'Downtown Clinic' },
-    { id: 'p2', name: 'Elena Rostova', age: 36, condition: 'Chronic Sciatica Right Leg', clinic: 'Westside Rehab' },
-    { id: 'p3', name: 'Michael Chang', age: 52, condition: 'Post-op Microdiscectomy', clinic: 'Downtown Clinic' },
-    { id: 'p4', name: 'Sophia Martinez', age: 29, condition: 'Core Instability & Lower Back Pain', clinic: 'Northside Center' },
-    { id: 'p5', name: 'David Miller', age: 61, condition: 'Lumbar Spinal Stenosis', clinic: 'Eastside Health' },
-  ];
+  // Parse total weeks from program duration string (e.g. "8 Weeks" → 8)
+  const parsedTotalWeeks = (() => {
+    const match = String(durationWeeks).match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 8;
+  })();
 
-  const filteredPatients = SAMPLE_PATIENTS.filter(
+  // ─── Load real patients from Firestore when modal opens ───
+  useEffect(() => {
+    if (!isAssignModalOpen) return;
+    setPatientsLoading(true);
+    const unsub = subscribeToPatients(
+      (patients) => {
+        setRealPatients(patients);
+        setPatientsLoading(false);
+      },
+      (err) => {
+        console.warn('Failed to load patients for assignment modal:', err);
+        setPatientsLoading(false);
+      }
+    );
+    return () => unsub();
+  }, [isAssignModalOpen]);
+
+  // ─── Track already-assigned patients for duplicate prevention ───
+  useEffect(() => {
+    if (!program?.id) return;
+    const unsub = subscribeToAssignedPatients(
+      program.id,
+      (assignments) => {
+        setAssignedPatientIds(new Set(assignments.map((a) => a.patientId)));
+      }
+    );
+    return () => unsub();
+  }, [program?.id]);
+
+  // ─── Filtered patients for modal (exclude already-assigned) ───
+  const filteredPatients = realPatients.filter(
     (p) =>
-      p.name.toLowerCase().includes(patientSearchQuery.toLowerCase()) ||
-      p.condition.toLowerCase().includes(patientSearchQuery.toLowerCase())
+      !assignedPatientIds.has(p.id) &&
+      (
+        p.name.toLowerCase().includes(patientSearchQuery.toLowerCase()) ||
+        p.condition.toLowerCase().includes(patientSearchQuery.toLowerCase())
+      )
   );
 
   const togglePatientSelection = (id: string) => {
@@ -610,11 +656,7 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
               <div className="space-y-4">
                 {/* Activity Item 1 */}
                 <div className="flex items-start space-x-3">
-                  <img
-                    src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=150&q=80"
-                    alt="Dr. Sarah Chen"
-                    className="w-9 h-9 rounded-full object-cover shrink-0 mt-0.5 border border-slate-200"
-                  />
+                  <InitialsAvatar name="Dr. Sarah Chen" className="w-9 h-9 text-xs font-bold shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 leading-tight">
                       Dr. Sarah Chen updated 3 exercises in Week 4
@@ -627,11 +669,7 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
 
                 {/* Activity Item 2 */}
                 <div className="flex items-start space-x-3">
-                  <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"
-                    alt="Marcus Reed"
-                    className="w-9 h-9 rounded-full object-cover shrink-0 mt-0.5 border border-slate-200"
-                  />
+                  <InitialsAvatar name="Marcus Reed" className="w-9 h-9 text-xs font-bold shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 leading-tight">
                       Marcus Reed published v2.1 of the program
@@ -644,11 +682,7 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
 
                 {/* Activity Item 3 */}
                 <div className="flex items-start space-x-3">
-                  <img
-                    src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80"
-                    alt="Dr. James Wilson"
-                    className="w-9 h-9 rounded-full object-cover shrink-0 mt-0.5 border border-slate-200"
-                  />
+                  <InitialsAvatar name="Dr. James Wilson" className="w-9 h-9 text-xs font-bold shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-bold text-slate-900 leading-tight">
                       Dr. James Wilson added internal clinical notes
@@ -687,6 +721,7 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
         <AssignedPatientsTabContent
           onShowToast={showToast}
           onOpenAssignModal={() => setIsAssignModalOpen(true)}
+          programId={program?.id}
         />
       )}
 
@@ -723,7 +758,11 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-100 relative space-y-6">
             <button
-              onClick={() => setIsAssignModalOpen(false)}
+              onClick={() => {
+                setIsAssignModalOpen(false);
+                setSelectedPatientIds([]);
+                setPatientSearchQuery('');
+              }}
               className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -732,8 +771,13 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
             <div>
               <h3 className="text-xl font-extrabold text-slate-900">Assign Patients to Program</h3>
               <p className="text-xs text-slate-500 font-medium mt-1">
-                Select patients to assign to "{programTitle}"
+                Select patients to assign to &ldquo;{programTitle}&rdquo;
               </p>
+              {assignedPatientIds.size > 0 && (
+                <p className="text-[11px] text-blue-600 font-medium mt-1">
+                  {assignedPatientIds.size} patient{assignedPatientIds.size > 1 ? 's' : ''} already assigned (hidden)
+                </p>
+              )}
             </div>
 
             {/* Search input */}
@@ -749,56 +793,123 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
             </div>
 
             {/* Patient List checkboxes */}
-            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-              {filteredPatients.map((pt) => {
-                const isChecked = selectedPatientIds.includes(pt.id);
-                return (
-                  <div
-                    key={pt.id}
-                    onClick={() => togglePatientSelection(pt.id)}
-                    className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition-colors ${
-                      isChecked
-                        ? 'bg-blue-50/60 border-blue-300'
-                        : 'bg-white border-slate-200/70 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">{pt.name}</h4>
-                      <p className="text-[11px] text-slate-500">{pt.condition}</p>
-                    </div>
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              {patientsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+                  <span className="ml-2 text-xs font-medium text-slate-500">Loading patients…</span>
+                </div>
+              ) : filteredPatients.length === 0 ? (
+                <div className="py-8 text-center">
+                  <Users className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-slate-500">
+                    {realPatients.length === 0
+                      ? 'No patients found in the system.'
+                      : patientSearchQuery
+                      ? 'No patients match your search.'
+                      : 'All patients are already assigned to this program.'}
+                  </p>
+                </div>
+              ) : (
+                filteredPatients.map((pt) => {
+                  const isChecked = selectedPatientIds.includes(pt.id);
+                  return (
                     <div
-                      className={`w-5 h-5 rounded-md flex items-center justify-center border ${
-                        isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
+                      key={pt.id}
+                      onClick={() => togglePatientSelection(pt.id)}
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-colors ${
+                        isChecked
+                          ? 'bg-blue-50/60 border-blue-300'
+                          : 'bg-white border-slate-200/70 hover:bg-slate-50'
                       }`}
                     >
-                      {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      <div className="flex items-center space-x-3">
+                        <InitialsAvatar name={pt.name} className="w-9 h-9 text-xs font-bold shrink-0" />
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-900">{pt.name}</h4>
+                          <p className="text-[11px] text-slate-500">{pt.condition}</p>
+                        </div>
+                      </div>
+                      <div
+                        className={`w-5 h-5 rounded-md flex items-center justify-center border shrink-0 ${
+                          isChecked ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
+                        }`}
+                      >
+                        {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                onClick={() => setIsAssignModalOpen(false)}
-                className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-900 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setIsAssignModalOpen(false);
-                  showToast(
-                    `Successfully assigned ${
-                      selectedPatientIds.length > 0 ? selectedPatientIds.length : 1
-                    } patient(s) to ${programTitle}`
-                  );
-                }}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md shadow-blue-500/20"
-              >
-                Confirm Assignment
-              </button>
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs font-bold text-slate-400">
+                {selectedPatientIds.length > 0 ? `${selectedPatientIds.length} selected` : 'None selected'}
+              </span>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => {
+                    setIsAssignModalOpen(false);
+                    setSelectedPatientIds([]);
+                    setPatientSearchQuery('');
+                  }}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-900 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={selectedPatientIds.length === 0 || isAssigning}
+                  onClick={async () => {
+                    if (!program?.id || selectedPatientIds.length === 0) return;
+                    setIsAssigning(true);
+                    try {
+                      const selectedPatients = realPatients
+                        .filter((p) => selectedPatientIds.includes(p.id))
+                        .map((p) => ({
+                          id: p.id,
+                          name: p.name,
+                          avatar: p.avatarUrl,
+                          condition: p.condition,
+                          email: p.email,
+                          phone: p.phone,
+                        }));
+
+                      const results = await assignPatientsToProgram(
+                        program.id,
+                        programTitle,
+                        selectedPatients,
+                        parsedTotalWeeks
+                      );
+
+                      const newAssignments = results.filter((r) => r.isNew).length;
+                      const duplicates = results.filter((r) => !r.isNew).length;
+
+                      setIsAssignModalOpen(false);
+                      setSelectedPatientIds([]);
+                      setPatientSearchQuery('');
+
+                      if (duplicates > 0 && newAssignments === 0) {
+                        showToast(`All selected patients are already assigned to this program.`);
+                      } else if (duplicates > 0) {
+                        showToast(`Assigned ${newAssignments} patient(s). ${duplicates} were already assigned.`);
+                      } else {
+                        showToast(`Successfully assigned ${newAssignments} patient(s) to ${programTitle}!`);
+                      }
+                    } catch (err: any) {
+                      console.error('Error assigning patients:', err);
+                      showToast(`Assignment failed: ${err.message || 'Unknown error'}`);
+                    } finally {
+                      setIsAssigning(false);
+                    }
+                  }}
+                  className="inline-flex items-center space-x-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold rounded-xl cursor-pointer shadow-md shadow-blue-500/20 transition-all"
+                >
+                  {isAssigning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{isAssigning ? 'Assigning…' : 'Confirm Assignment'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

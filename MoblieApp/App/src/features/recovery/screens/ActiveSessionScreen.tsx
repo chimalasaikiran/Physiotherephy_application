@@ -17,7 +17,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
-import { WORKOUT_EXERCISES, getExerciseByIndex } from '@/constants';
+import { WORKOUT_EXERCISES, getExerciseByIndex } from '@/constants/workoutData';
+import { recordExerciseCompletionForUser } from '@/api/programService';
+import { auth } from '@/config/firebase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_IMAGE_HEIGHT = Math.min(SCREEN_HEIGHT * 0.38, 320);
@@ -28,6 +30,7 @@ export const ActiveSessionScreen: React.FC = () => {
   const params = useLocalSearchParams();
 
   // Dynamic route parameters
+  const assignmentId = (params.assignmentId as string) || '';
   const parsedIndex = params.exerciseIndex ? parseInt(params.exerciseIndex as string, 10) : 0;
   const exerciseIndex = isNaN(parsedIndex) ? 0 : Math.max(0, Math.min(parsedIndex, WORKOUT_EXERCISES.length - 1));
   const currentExerciseObj = getExerciseByIndex(exerciseIndex);
@@ -48,11 +51,11 @@ export const ActiveSessionScreen: React.FC = () => {
   const [quoteIndex, setQuoteIndex] = useState<number>(0);
 
   const instructions = [
-    '"Breathe normally."',
-    '"Engage your core gently."',
-    '"Keep your feet flat on the floor."',
-    '"Maintain smooth, controlled motion."',
-    '"Exhale as you tilt your pelvis."',
+    '"Breathe normally and maintain steady core engagement."',
+    '"Focus on slow, controlled extension without sudden straining."',
+    '"Keep shoulders relaxed and flat against the mat."',
+    '"Exhale on exertion, inhale returning to starting position."',
+    '"Listen to your body; stop if pain exceeds 3/10."',
   ];
 
   // Timer effect
@@ -80,7 +83,16 @@ export const ActiveSessionScreen: React.FC = () => {
     setIsPaused(!isPaused);
   };
 
-  const handleMarkRepComplete = () => {
+  const handleMarkRepComplete = async () => {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      try {
+        await recordExerciseCompletionForUser(uid, exerciseName);
+      } catch (e) {
+        console.warn('Record exercise completion warning:', e);
+      }
+    }
+
     router.push({
       pathname: '/exercise-progress',
       params: {
@@ -89,30 +101,58 @@ export const ActiveSessionScreen: React.FC = () => {
         totalSets: totalSets.toString(),
         totalExercises: totalExercises.toString(),
         name: exerciseName,
+        assignmentId,
       },
     });
   };
 
-  const handlePreviousRep = () => {
-    if (currentRep > 1) {
-      setCurrentRep((prev) => prev - 1);
+  const handlePreviousExercise = () => {
+    if (exerciseIndex > 0) {
+      router.push({
+        pathname: '/active-session',
+        params: {
+          exerciseIndex: (exerciseIndex - 1).toString(),
+          assignmentId,
+        },
+      } as any);
     }
   };
 
-  const handleNextRep = () => {
-    handleMarkRepComplete();
+  const handleNextExercise = () => {
+    if (exerciseIndex < totalExercises - 1) {
+      router.push({
+        pathname: '/active-session',
+        params: {
+          exerciseIndex: (exerciseIndex + 1).toString(),
+          assignmentId,
+        },
+      } as any);
+    } else {
+      handleMarkRepComplete();
+    }
   };
 
-  const handleBack = () => {
-    if (!isPaused) {
-      setIsPaused(true);
-    }
+  const handleExitSession = () => {
+    setIsPaused(true);
     Alert.alert(
-      'Pause Session?',
-      'Are you sure you want to exit your active exercise session?',
+      'Exit Exercise Session?',
+      'All completed exercises and progress are safely saved to your program in Firestore.',
       [
-        { text: 'Resume', onPress: () => setIsPaused(false), style: 'cancel' },
-        { text: 'Exit Session', style: 'destructive', onPress: () => router.back() },
+        { text: 'Resume Session', onPress: () => setIsPaused(false), style: 'cancel' },
+        {
+          text: 'Exit Session',
+          style: 'destructive',
+          onPress: () => {
+            if (assignmentId) {
+              router.push({
+                pathname: '/recovery-program-details' as any,
+                params: { assignmentId },
+              });
+            } else {
+              router.push('/recovery' as any);
+            }
+          },
+        },
       ]
     );
   };
@@ -131,22 +171,11 @@ export const ActiveSessionScreen: React.FC = () => {
           />
 
           {/* OVERLAY TOP HEADER ROW */}
-          <View
-            style={[
-              styles.topOverlayHeader,
-              {
-                paddingTop:
-                  Math.max(
-                    insets.top,
-                    Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 16
-                  ) + 6,
-              },
-            ]}
-          >
+          <View style={styles.topOverlayHeader}>
             {/* Back Button */}
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={handleBack}
+              onPress={handleExitSession}
               style={styles.backCircleBtn}
               accessibilityLabel="Go back"
             >
@@ -160,8 +189,16 @@ export const ActiveSessionScreen: React.FC = () => {
               </Text>
             </View>
 
-            {/* Spacer for symmetry */}
-            <View style={styles.headerSpacer} />
+            {/* TOP RIGHT EXIT BUTTON */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handleExitSession}
+              style={styles.headerExitBtn}
+              accessibilityLabel="Exit session"
+            >
+              <Ionicons name="close" size={20} color="#EF4444" />
+              <Text style={styles.headerExitText}>Exit</Text>
+            </TouchableOpacity>
           </View>
 
           {/* CENTER PAUSE / PLAY OVERLAY BUTTON */}
@@ -212,6 +249,16 @@ export const ActiveSessionScreen: React.FC = () => {
           <View style={styles.quoteContainer}>
             <Text style={styles.quoteText}>{instructions[quoteIndex]}</Text>
           </View>
+
+          {/* MIDDLE EXIT ACTION BAR */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleExitSession}
+            style={styles.middleExitBanner}
+          >
+            <Ionicons name="log-out-outline" size={18} color="#DC2626" />
+            <Text style={styles.middleExitBannerText}>Exit Session Safely</Text>
+          </TouchableOpacity>
         </View>
 
         {/* 3. BOTTOM FLOATING ACTION CONTROLS */}
@@ -219,9 +266,9 @@ export const ActiveSessionScreen: React.FC = () => {
           {/* STEP BACK BUTTON */}
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={handlePreviousRep}
+            onPress={handlePreviousExercise}
             style={styles.stepIconBtn}
-            accessibilityLabel="Previous rep"
+            accessibilityLabel="Previous exercise"
           >
             <Ionicons name="play-skip-back-outline" size={20} color="#003D9B" />
           </TouchableOpacity>
@@ -231,22 +278,22 @@ export const ActiveSessionScreen: React.FC = () => {
             activeOpacity={0.88}
             onPress={handleMarkRepComplete}
             style={styles.markCompleteBtn}
-            accessibilityLabel="Mark rep complete"
+            accessibilityLabel="Mark exercise complete"
           >
             <View style={styles.checkCircleIcon}>
               <Ionicons name="checkmark" size={16} color="#003D9B" />
             </View>
             <Text style={styles.markCompleteBtnText}>
-              {Strings.activeSession.markRepCompleteBtn}
+              Mark Exercise Complete
             </Text>
           </TouchableOpacity>
 
           {/* STEP FORWARD BUTTON */}
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={handleNextRep}
+            onPress={handleNextExercise}
             style={styles.stepIconBtn}
-            accessibilityLabel="Next rep"
+            accessibilityLabel="Next exercise"
           >
             <Ionicons name="play-skip-forward-outline" size={20} color="#003D9B" />
           </TouchableOpacity>
@@ -319,6 +366,40 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 44,
   },
+  headerExitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    gap: 4,
+  },
+  headerExitText: {
+    fontSize: 13,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#EF4444',
+  },
+  middleExitBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 14,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  middleExitBannerText: {
+    fontSize: 13,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#DC2626',
+  },
   centerPlayPauseContainer: {
     position: 'absolute',
     top: '50%',
@@ -339,6 +420,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 5,
   },
+
 
   /* 2. MAIN CONTENT CARD */
   contentCard: {

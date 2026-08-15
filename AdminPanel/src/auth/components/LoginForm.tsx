@@ -8,10 +8,9 @@ import type { LoginFormValues } from '../types/auth';
 
 interface LoginFormProps {
   onSuccess?: (values: LoginFormValues) => void;
-  onForgotPasswordClick?: () => void;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onForgotPasswordClick }) => {
+export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const {
     values,
     errors,
@@ -95,7 +94,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onForgotPasswor
         }
       />
 
-      {/* Options Row: Remember Me & Forgot Password */}
+      {/* Options Row: Remember Me */}
       <div className="flex items-center justify-between pt-1 pb-1">
         <Checkbox
           id="rememberMe"
@@ -104,13 +103,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onForgotPasswor
           checked={values.rememberMe}
           onChange={handleChange}
         />
-        <button
-          type="button"
-          onClick={onForgotPasswordClick}
-          className="text-xs font-semibold text-[#0b419c] hover:underline focus:outline-none focus:ring-1 focus:ring-[#0b419c] rounded px-1 transition-all cursor-pointer"
-        >
-          {AUTH_CONFIG.forgotPasswordText}
-        </button>
       </div>
 
       {/* Primary Sign In Button */}

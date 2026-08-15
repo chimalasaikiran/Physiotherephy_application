@@ -4,7 +4,7 @@ import { X, Upload, FileSpreadsheet, Check, Download, AlertCircle } from 'lucide
 interface ImportPatientsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportSuccess: (count: number) => void;
+  onImportSuccess?: (count: number) => void;
 }
 
 export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
@@ -51,7 +51,7 @@ export const ImportPatientsModal: React.FC<ImportPatientsModalProps> = ({
       setIsUploading(false);
       setIsComplete(true);
       setTimeout(() => {
-        onImportSuccess(12);
+        onImportSuccess?.(12);
         setIsComplete(false);
         setSelectedFile(null);
         onClose();

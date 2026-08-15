@@ -27,6 +27,10 @@ import { GenderSelector, GenderOption } from '@/components';
 import { MeasurementInput } from '@/components';
 import { PrimaryConcernCard, ConcernItem } from '@/features/recovery';
 
+import { useAuth } from '@/context/AuthContext';
+import { getAuthNavigationRoute } from '@/navigation';
+import { promptAndPickImage } from '../../../utils/imagePickerHelper';
+
 export interface CompleteProfileScreenProps {
   onBackPress?: () => void;
   onCompleteSuccess?: (data: ProfileData) => void;
@@ -48,6 +52,18 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { completeProfile, isProfileComplete, userProfile, isLoading: isAuthLoading } = useAuth();
+
+  const hasCompleteProfile =
+    isProfileComplete ||
+    Boolean(userProfile?.profileCompleted) ||
+    Boolean(userProfile?.fullName && userProfile.fullName.trim().length > 0);
+
+  React.useEffect(() => {
+    if (hasCompleteProfile) {
+      router.replace('/explore');
+    }
+  }, [hasCompleteProfile]);
 
   // Form State
   const [fullName, setFullName] = useState('');
@@ -61,6 +77,17 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
   // Status & Validation State
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ fullName?: string; dob?: string }>({});
+
+  if (hasCompleteProfile || isAuthLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={{ marginTop: 12, fontSize: 14, color: Colors.darkBlue, fontWeight: 'bold' }}>
+          Redirecting to Home...
+        </Text>
+      </View>
+    );
+  }
 
   const isFormValid =
     fullName.trim().length > 0 &&
@@ -82,27 +109,11 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
     }
   };
 
-  const handleAvatarSelect = () => {
-    Alert.alert(
-      'Profile Photo',
-      'Choose an option to update your photo:',
-      [
-        {
-          text: 'Take Photo',
-          onPress: () => {
-            setAvatarUri('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80');
-          },
-        },
-        {
-          text: 'Choose from Library',
-          onPress: () => {
-            setAvatarUri('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80');
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
+  const handleAvatarSelect = async () => {
+    const selectedUri = await promptAndPickImage();
+    if (selectedUri) {
+      setAvatarUri(selectedUri);
+    }
   };
 
   const validateForm = (): boolean => {
@@ -116,7 +127,7 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
     return Object.keys(newErrors).length === 0 && isFormValid;
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!validateForm() || height === null || weight === null) {
       return;
     }
@@ -133,30 +144,42 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
       avatarUri,
     };
 
-    // Simulate async submission for realistic UX loading state
-    setTimeout(() => {
+    try {
+      // Store in Firestore and set profileCompleted: true
+      await completeProfile({
+        fullName: profileData.fullName,
+        dob: profileData.dob,
+        gender: profileData.gender,
+        height: profileData.height,
+        weight: profileData.weight,
+        primaryConcernId: profileData.primaryConcernId,
+        avatarUri: profileData.avatarUri,
+        profileCompleted: true,
+      });
+
       setIsLoading(false);
       if (onCompleteSuccess) {
         onCompleteSuccess(profileData);
       } else {
-        router.push({
-          pathname: '/enable-experience',
-          params: { profileName: profileData.fullName },
+        const targetRoute = getAuthNavigationRoute({
+          isAuthenticated: true,
+          isProfileComplete: true,
+          isSessionValid: true,
         });
+        router.replace(targetRoute as any);
       }
-    }, 800);
+    } catch (err) {
+      setIsLoading(false);
+      Alert.alert('Error', 'Failed to save profile. Please try again.');
+    }
   };
+
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} translucent />
 
-      <SafeAreaView
-        style={[
-          styles.topSafeArea,
-          { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4 },
-        ]}
-      >
+      <SafeAreaView style={styles.topSafeArea}>
         {/* Top Header Row with Back Button & Brand Logo */}
         <View style={styles.headerRow}>
           <TouchableOpacity

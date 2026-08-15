@@ -17,10 +17,12 @@ import {
   Clock,
   Send,
 } from 'lucide-react';
+import type { Patient } from './types';
 
 interface NotesTabProps {
   patientName?: string;
   therapistName?: string;
+  patient?: Patient;
 }
 
 export interface ClinicalNoteItem {

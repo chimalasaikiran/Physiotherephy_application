@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   FileText,
   Download,
@@ -486,12 +487,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                             </span>
                           )}
 
-                          <img
-                            src={report.author.avatarUrl}
-                            alt={report.author.name}
-                            title={report.author.name}
-                            className="w-8 h-8 rounded-full object-cover ring-2 ring-white"
-                          />
+                          <InitialsAvatar name={report.author.name} className="w-8 h-8 text-xs font-bold ring-2 ring-white shrink-0" />
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

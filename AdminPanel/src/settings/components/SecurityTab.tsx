@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -11,8 +11,11 @@ import {
   Shield,
   Server,
   Key,
-  Database
+  Database,
+  User,
+  Loader2,
 } from 'lucide-react';
+import { useAuth } from '@/auth';
 
 interface SecurityTabProps {
   onShowToast: (message: string) => void;
@@ -42,6 +45,50 @@ const ToggleSwitch: React.FC<{
 );
 
 export const SecurityTab: React.FC<SecurityTabProps> = ({ onShowToast }) => {
+  const { adminProfile, updateAdminProfileName, updateAdminEmail, updateAdminPassword } = useAuth();
+  const [adminName, setAdminName] = useState(adminProfile?.fullName || 'Dr. Sarah Smith');
+  const [adminEmail, setAdminEmail] = useState(adminProfile?.email || 'admin@physiotherapy.com');
+  const [newPassword, setNewPassword] = useState('');
+  const [isSubmittingCredentials, setIsSubmittingCredentials] = useState(false);
+
+  useEffect(() => {
+    if (adminProfile) {
+      setAdminName(adminProfile.fullName || '');
+      setAdminEmail(adminProfile.email || '');
+    }
+  }, [adminProfile]);
+
+  const handleUpdateAdminProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingCredentials(true);
+    try {
+      let changes = 0;
+      if (adminName.trim() && adminName.trim() !== adminProfile?.fullName) {
+        await updateAdminProfileName(adminName.trim());
+        changes++;
+      }
+      if (adminEmail.trim() && adminEmail.trim() !== adminProfile?.email) {
+        await updateAdminEmail(adminEmail.trim());
+        changes++;
+      }
+      if (newPassword.trim()) {
+        await updateAdminPassword(newPassword.trim());
+        setNewPassword('');
+        changes++;
+      }
+
+      if (changes > 0) {
+        onShowToast('Admin profile and credentials updated successfully!');
+      } else {
+        onShowToast('No changes detected.');
+      }
+    } catch (err: any) {
+      onShowToast(err?.message || 'Failed to update credentials.');
+    } finally {
+      setIsSubmittingCredentials(false);
+    }
+  };
+
   // Authentication & MFA State
   const [smsVerification, setSmsVerification] = useState(true);
   const [emailVerification, setEmailVerification] = useState(true);
@@ -157,6 +204,90 @@ export const SecurityTab: React.FC<SecurityTabProps> = ({ onShowToast }) => {
               </div>
             </div>
           </div>
+
+          {/* Card 1.5: Update Admin Profile & Credentials */}
+          <form onSubmit={handleUpdateAdminProfile} className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden hover:shadow-sm transition-shadow">
+            <div className="p-6 sm:p-7 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">
+                  Admin Profile & Authentication Credentials
+                </h3>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">
+                  Update administrator identity and login credentials securely.
+                </p>
+              </div>
+              <span className="text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full shrink-0">
+                Active Admin
+              </span>
+            </div>
+
+            <div className="p-6 sm:p-7 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Admin Name */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Admin Name
+                  </label>
+                  <input
+                    type="text"
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    placeholder="Administrator Name"
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  />
+                </div>
+
+                {/* Email Address */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    placeholder="admin@onemedical.com"
+                    required
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  />
+                </div>
+
+                {/* Password */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    New Password (Optional)
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    minLength={6}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-[11px] font-medium text-slate-400">
+                  Password will be updated securely via Firebase Auth and never stored in plain text.
+                </span>
+                <button
+                  type="submit"
+                  disabled={isSubmittingCredentials}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-50"
+                >
+                  {isSubmittingCredentials ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Key className="w-4 h-4" />
+                  )}
+                  <span>Save Profile & Credentials</span>
+                </button>
+              </div>
+            </div>
+          </form>
 
           {/* Card 2: Password Governance */}
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden hover:shadow-sm transition-shadow">

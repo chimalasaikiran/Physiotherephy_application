@@ -1,10 +1,24 @@
 import React, { useState } from 'react';
-import { REVENUE_TREND_DATA } from '../mockData';
+import type { RevenueTrendPoint } from '../types';
 
-export const RevenueTrendChart: React.FC = () => {
+interface RevenueTrendChartProps {
+  data?: RevenueTrendPoint[];
+}
+
+export const RevenueTrendChart: React.FC<RevenueTrendChartProps> = ({ data = [] }) => {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
-  const maxVal = 100; // max scale for percentage/thousands
+  const displayData = data.length > 0 ? data : [
+    { label: 'Week 1', netRevenue: 45, payouts: 30 },
+    { label: 'Week 2', netRevenue: 60, payouts: 40 },
+    { label: 'Week 3', netRevenue: 75, payouts: 55 },
+    { label: 'Week 4', netRevenue: 90, payouts: 65 },
+  ];
+
+  const maxVal = Math.max(
+    10,
+    ...displayData.map((d) => Math.max(d.netRevenue, d.payouts))
+  ) * 1.2;
 
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between h-full">
@@ -40,9 +54,9 @@ export const RevenueTrendChart: React.FC = () => {
 
         {/* Bars Container */}
         <div className="relative z-10 flex items-end justify-between px-2 sm:px-6 h-56">
-          {REVENUE_TREND_DATA.map((item, idx) => {
-            const netHeightPercent = (item.netRevenue / maxVal) * 100;
-            const payoutHeightPercent = (item.payouts / maxVal) * 100;
+          {displayData.map((item, idx) => {
+            const netHeightPercent = Math.min(100, (item.netRevenue / maxVal) * 100);
+            const payoutHeightPercent = Math.min(100, (item.payouts / maxVal) * 100);
             const isHovered = hoveredIdx === idx;
 
             return (
@@ -57,8 +71,8 @@ export const RevenueTrendChart: React.FC = () => {
                   <div className="absolute -top-14 z-30 bg-slate-900 text-white text-[11px] font-medium py-1.5 px-3 rounded-lg shadow-xl whitespace-nowrap animate-fade-in pointer-events-none">
                     <div className="font-bold text-slate-200">{item.label}</div>
                     <div className="flex items-center justify-between gap-3 text-[10px]">
-                      <span className="text-blue-300">Net: ₹{(item.netRevenue * 100).toLocaleString()}k</span>
-                      <span className="text-cyan-300">Payout: ₹{(item.payouts * 100).toLocaleString()}k</span>
+                      <span className="text-blue-300">Net: ₹{Math.round(item.netRevenue * 1000).toLocaleString('en-IN')}</span>
+                      <span className="text-cyan-300">Payout: ₹{Math.round(item.payouts * 1000).toLocaleString('en-IN')}</span>
                     </div>
                   </div>
                 )}
@@ -68,17 +82,15 @@ export const RevenueTrendChart: React.FC = () => {
                   {/* Payout Bar (Cyan) */}
                   <div
                     className="w-1/2 rounded-t-sm bg-blue-100 hover:bg-blue-200 transition-all duration-300 relative"
-                    style={{ height: `${payoutHeightPercent}%` }}
+                    style={{ height: `${Math.max(4, payoutHeightPercent)}%` }}
                   >
-                    <div
-                      className="absolute inset-0 bg-cyan-400 opacity-30 rounded-t-sm"
-                    />
+                    <div className="absolute inset-0 bg-cyan-400 opacity-30 rounded-t-sm" />
                   </div>
 
                   {/* Net Revenue Bar (Dark Blue) */}
                   <div
                     className="w-1/2 rounded-t-sm bg-blue-800 hover:bg-blue-900 transition-all duration-300 shadow-xs"
-                    style={{ height: `${netHeightPercent}%` }}
+                    style={{ height: `${Math.max(4, netHeightPercent)}%` }}
                   >
                     <div className="w-full h-1 bg-blue-400 rounded-t-sm" />
                   </div>
@@ -96,3 +108,4 @@ export const RevenueTrendChart: React.FC = () => {
     </div>
   );
 };
+

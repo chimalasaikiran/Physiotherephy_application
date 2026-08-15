@@ -26,6 +26,8 @@ import { PrimaryButton } from '@/components';
 import { PhoneInputField } from '@/components';
 import { CountryPickerModal } from '@/components';
 
+import { useAuth } from '@/context/AuthContext';
+
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export interface PhoneLoginScreenProps {
@@ -44,10 +46,12 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
   onPrivacyPress,
 }) => {
   const router = useRouter();
+  const { sendOtp } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(getDefaultCountry);
   const [isCountryPickerVisible, setIsCountryPickerVisible] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   const handleBack = () => {
     if (onBackPress) {
@@ -59,22 +63,33 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
     }
   };
 
-  const handleContinue = () => {
-    if (!phoneNumber.trim() || phoneNumber.replace(/\D/g, '').length < 6) {
+  const handleContinue = async () => {
+    const rawDigits = phoneNumber.replace(/\D/g, '');
+    if (!phoneNumber.trim() || rawDigits.length < 6) {
       setError('Please enter a valid mobile number');
       return;
     }
     setError(undefined);
-    const fullNumber = `${selectedCountry.dialCode} ${phoneNumber.trim()}`;
-    if (onContinuePress) {
-      onContinuePress(phoneNumber, selectedCountry);
+    setIsSendingOtp(true);
+    const fullNumber = `${selectedCountry.dialCode}${rawDigits}`;
+
+    const result = await sendOtp(fullNumber);
+    setIsSendingOtp(false);
+
+    if (result.success) {
+      if (onContinuePress) {
+        onContinuePress(phoneNumber, selectedCountry);
+      } else {
+        router.push({
+          pathname: '/otp',
+          params: { phone: `${selectedCountry.dialCode} ${rawDigits}` },
+        });
+      }
     } else {
-      router.push({
-        pathname: '/otp',
-        params: { phone: fullNumber },
-      });
+      setError(result.error || 'Failed to send OTP. Please try again.');
     }
   };
+
 
 
   const handleNeedHelp = () => {
@@ -164,6 +179,7 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
                 <PrimaryButton
                   title={Strings.login.continue}
                   onPress={handleContinue}
+                  isLoading={isSendingOtp}
                   accessibilityLabel={Strings.accessibility.continueButton}
                 />
               </View>

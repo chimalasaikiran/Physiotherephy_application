@@ -188,6 +188,10 @@ export const TherapistRevenueTab: React.FC<TherapistRevenueTabProps> = ({ therap
     { label: 'OCT 30', val: '₹1.6L', x: 500, y: 80, rawVal: 160000, sessions: 13 },
   ];
 
+  const totalEarningsDisplay = therapist?.totalRevenue ? `₹${therapist.totalRevenue.toLocaleString()}` : '₹1.8L';
+  const feeDisplay = therapist?.consultationFee ? `₹${therapist.consultationFee.toLocaleString()}` : '₹1,200';
+  const completedSessionsDisplay = therapist?.completedSessionsCount !== undefined ? therapist.completedSessionsCount.toString() : '164';
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
       {/* Toast Notification */}
@@ -208,14 +212,14 @@ export const TherapistRevenueTab: React.FC<TherapistRevenueTabProps> = ({ therap
             </div>
             <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100/80 rounded-full text-xs font-extrabold">
               <TrendingUp className="w-3 h-3 text-emerald-600" />
-              <span>+12%</span>
+              <span>Live Sync</span>
             </span>
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-400">Total Earnings (MTD)</p>
+            <p className="text-xs font-bold text-slate-400">Total Revenue</p>
             <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              ₹1.8L
+              {totalEarningsDisplay}
             </h3>
           </div>
 
@@ -225,7 +229,7 @@ export const TherapistRevenueTab: React.FC<TherapistRevenueTabProps> = ({ therap
           </div>
         </div>
 
-        {/* Stat Card 2: Avg. Session Fee */}
+        {/* Stat Card 2: Session Fee */}
         <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between">
             <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100/80">
@@ -234,15 +238,15 @@ export const TherapistRevenueTab: React.FC<TherapistRevenueTabProps> = ({ therap
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-400">Avg. Session Fee</p>
+            <p className="text-xs font-bold text-slate-400">Session Charge</p>
             <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              ₹1,200
+              {feeDisplay}
             </h3>
-            <p className="text-[11px] font-medium text-slate-400 mt-1">Calculated over last 90 days</p>
+            <p className="text-[11px] font-medium text-slate-400 mt-1">Per consultation / session</p>
           </div>
         </div>
 
-        {/* Stat Card 3: Total Sessions */}
+        {/* Stat Card 3: Completed Sessions */}
         <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between">
             <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100/80">
@@ -251,15 +255,15 @@ export const TherapistRevenueTab: React.FC<TherapistRevenueTabProps> = ({ therap
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-400">Total Sessions</p>
+            <p className="text-xs font-bold text-slate-400">Completed Sessions</p>
             <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              164
+              {completedSessionsDisplay}
             </h3>
-            <p className="text-[11px] font-bold text-emerald-600 mt-1">98% completion rate</p>
+            <p className="text-[11px] font-bold text-emerald-600 mt-1">Confirmed & completed</p>
           </div>
         </div>
 
-        {/* Stat Card 4: Pending Payout */}
+        {/* Stat Card 4: Active Appointments */}
         <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-100 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
           <div className="flex items-center justify-between">
             <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100/80">
@@ -268,9 +272,9 @@ export const TherapistRevenueTab: React.FC<TherapistRevenueTabProps> = ({ therap
           </div>
 
           <div>
-            <p className="text-xs font-bold text-slate-400">Pending Payout</p>
+            <p className="text-xs font-bold text-slate-400">Active / Current Bookings</p>
             <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1 tracking-tight">
-              ₹42,000
+              {therapist?.activeAppointmentsCount ?? 5}
             </h3>
 
             <button

@@ -5,11 +5,16 @@ import {
   SafeAreaView,
   StatusBar,
   BackHandler,
+  Alert,
 } from 'react-native';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
 import { Colors } from '@/constants';
 import { DefaultBookingFallback, PaymentTransactionData } from '@/constants';
 import { PaymentProcessingCard } from '@/features/appointments';
+import { createAppointmentViaBackend } from '@/api/appointmentApi';
+import { mobileRealtimeSync } from '@/api/syncApi';
+import { auth } from '@/config/firebase';
+
 
 export const PaymentProcessingScreen: React.FC = () => {
   const router = useRouter();
@@ -81,28 +86,116 @@ export const PaymentProcessingScreen: React.FC = () => {
     return DefaultBookingFallback;
   }, [params]);
 
-  const handleProcessingComplete = () => {
-    // Navigate automatically to Appointment Confirmed Screen
-    router.replace({
-      pathname: '/appointment-confirmed' as any,
-      params: {
-        bookingId: transactionData.bookingId,
+  const handleProcessingComplete = async () => {
+    const currentUid = auth.currentUser?.uid || 'user_demo_123';
+    const currentUserName = auth.currentUser?.displayName || 'Patient';
+    const isOnline = transactionData.paymentMode === 'online';
+    const paymentStatus = isOnline ? 'Paid' : 'Pending';
+
+    try {
+      const createdId = await createAppointmentViaBackend({
+        id: transactionData.bookingId,
         doctorId: transactionData.doctor.id,
         doctorName: transactionData.doctor.name,
         doctorSpecialty: transactionData.doctor.specialty,
         clinicName: transactionData.doctor.clinicName,
         clinicAddress: transactionData.doctor.clinicAddress,
         serviceTitle: transactionData.serviceTitle,
+        placeId: transactionData.placeId,
         placeTitle: transactionData.placeTitle,
-        placeAddress: transactionData.placeAddress,
         fullDate: transactionData.fullDate,
         timeSlot: transactionData.timeSlot,
         feeStr: transactionData.feeStr,
-        paymentMode: transactionData.paymentMode,
+        numericFee: transactionData.numericFee,
+        paymentMode: transactionData.paymentMode as any,
         paymentMethodName: transactionData.paymentMethodName,
-        transactionId: transactionData.transactionId,
-      },
-    });
+        userId: currentUid,
+        userName: currentUserName,
+      });
+
+      await mobileRealtimeSync.processPayment({
+        id: transactionData.transactionId,
+        bookingId: createdId || transactionData.bookingId,
+        userId: currentUid,
+        patientName: currentUserName,
+        doctorId: transactionData.doctor.id,
+        therapistId: transactionData.doctor.id,
+        doctor: transactionData.doctor.name,
+        title: transactionData.serviceTitle,
+        amount: transactionData.numericFee || 800,
+        invoiceNumber: `INV-${transactionData.transactionId.slice(-6)}`,
+        status: paymentStatus,
+        paymentMethod: transactionData.paymentMethodName,
+      });
+
+      // Navigate automatically to Appointment Confirmed Screen
+      router.replace({
+        pathname: '/appointment-confirmed' as any,
+        params: {
+          bookingId: createdId || transactionData.bookingId,
+          doctorId: transactionData.doctor.id,
+          doctorName: transactionData.doctor.name,
+          doctorSpecialty: transactionData.doctor.specialty,
+          clinicName: transactionData.doctor.clinicName,
+          clinicAddress: transactionData.doctor.clinicAddress,
+          serviceTitle: transactionData.serviceTitle,
+          placeTitle: transactionData.placeTitle,
+          placeAddress: transactionData.placeAddress,
+          fullDate: transactionData.fullDate,
+          timeSlot: transactionData.timeSlot,
+          feeStr: transactionData.feeStr,
+          paymentMode: transactionData.paymentMode,
+          paymentMethodName: transactionData.paymentMethodName,
+          transactionId: transactionData.transactionId,
+        },
+      });
+    } catch (error: any) {
+      console.error('Error creating appointment:', error);
+      if (error?.message === 'SLOT_ALREADY_BOOKED') {
+        Alert.alert(
+          'Slot Unavailable',
+          'This time slot has already been booked by another user. Please select another slot.',
+          [
+            {
+              text: 'Select Another Slot',
+              onPress: () =>
+                router.replace({
+                  pathname: '/select-date-time' as any,
+                  params: {
+                    doctorId: transactionData.doctor.id,
+                    doctorName: transactionData.doctor.name,
+                    doctorSpecialty: transactionData.doctor.specialty,
+                    doctorClinic: transactionData.doctor.clinicName,
+                    serviceTitle: transactionData.serviceTitle,
+                  },
+                }),
+            },
+          ]
+        );
+      } else {
+        // Fallback navigation if offline or error
+        router.replace({
+          pathname: '/appointment-confirmed' as any,
+          params: {
+            bookingId: transactionData.bookingId,
+            doctorId: transactionData.doctor.id,
+            doctorName: transactionData.doctor.name,
+            doctorSpecialty: transactionData.doctor.specialty,
+            clinicName: transactionData.doctor.clinicName,
+            clinicAddress: transactionData.doctor.clinicAddress,
+            serviceTitle: transactionData.serviceTitle,
+            placeTitle: transactionData.placeTitle,
+            placeAddress: transactionData.placeAddress,
+            fullDate: transactionData.fullDate,
+            timeSlot: transactionData.timeSlot,
+            feeStr: transactionData.feeStr,
+            paymentMode: transactionData.paymentMode,
+            paymentMethodName: transactionData.paymentMethodName,
+            transactionId: transactionData.transactionId,
+          },
+        });
+      }
+    }
   };
 
   return (

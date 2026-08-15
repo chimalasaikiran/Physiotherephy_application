@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, FilePlus2 } from 'lucide-react';
+import { createInvoice, generateInvoiceNumber } from '@/services/paymentService';
 
 interface CreateInvoiceModalProps {
   isOpen: boolean;
@@ -17,13 +18,42 @@ export const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
   const [dueDate, setDueDate] = useState('2026-10-31');
   const [service, setService] = useState('Physiotherapy Session (ACL Recovery)');
   const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (onSuccess) onSuccess();
-    onClose();
+    if (!patientName || !amount) return;
+    setIsSubmitting(true);
+
+    try {
+      const invNum = await generateInvoiceNumber();
+      const numAmount = Number(amount) || 0;
+
+      await createInvoice({
+        invoiceNumber: invNum,
+        patientId: `pat-${Date.now().toString(36)}`,
+        patientName,
+        therapistId: '',
+        therapistName: 'Clinic Specialist',
+        description: service,
+        amount: numAmount,
+        totalAmount: numAmount,
+        currency: 'INR',
+        status: 'Pending',
+        paymentMethod,
+        issueDate: new Date().toISOString().split('T')[0],
+        dueDate,
+      });
+
+      if (onSuccess) onSuccess();
+      onClose();
+    } catch (err) {
+      console.error('Failed to create invoice:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -139,9 +169,10 @@ export const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors shadow-md shadow-blue-500/20 cursor-pointer"
+              disabled={isSubmitting}
+              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-colors shadow-md shadow-blue-500/20 cursor-pointer flex items-center justify-center"
             >
-              Issue Invoice
+              {isSubmitting ? 'Issuing...' : 'Issue Invoice'}
             </button>
           </div>
         </form>
@@ -149,3 +180,4 @@ export const CreateInvoiceModal: React.FC<CreateInvoiceModalProps> = ({
     </div>
   );
 };
+

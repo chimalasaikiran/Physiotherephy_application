@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   ShieldCheck,
   TrendingDown,
@@ -559,11 +560,7 @@ export const OutcomesTabContent: React.FC<OutcomesTabContentProps> = ({ onShowTo
               >
                 {/* Left side: Avatar + Info */}
                 <div className="flex items-center space-x-3 min-w-0">
-                  <img
-                    src={perf.avatar}
-                    alt={perf.name}
-                    className="w-11 h-11 rounded-full object-cover shrink-0 border border-slate-200"
-                  />
+                  <InitialsAvatar name={perf.name} className="w-11 h-11 text-xs font-bold shrink-0" />
                   <div className="min-w-0">
                     <h4 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
                       {perf.name}
@@ -635,11 +632,7 @@ export const OutcomesTabContent: React.FC<OutcomesTabContentProps> = ({ onShowTo
                   className="p-4 rounded-2xl border border-slate-200/80 hover:border-blue-300 hover:bg-blue-50/40 transition-all flex items-center justify-between cursor-pointer"
                 >
                   <div className="flex items-center space-x-3.5">
-                    <img
-                      src={perf.avatar}
-                      alt={perf.name}
-                      className="w-12 h-12 rounded-full object-cover border border-slate-200"
-                    />
+                    <InitialsAvatar name={perf.name} className="w-12 h-12 text-xs font-bold shrink-0" />
                     <div>
                       <h4 className="text-sm font-extrabold text-slate-900">{perf.name}</h4>
                       <p className="text-xs text-slate-500 font-medium mt-0.5">
@@ -693,11 +686,7 @@ export const OutcomesTabContent: React.FC<OutcomesTabContentProps> = ({ onShowTo
             </button>
 
             <div className="flex items-center space-x-4">
-              <img
-                src={selectedPerformer.avatar}
-                alt={selectedPerformer.name}
-                className="w-14 h-14 rounded-full object-cover border-2 border-blue-500/20"
-              />
+              <InitialsAvatar name={selectedPerformer.name} className="w-14 h-14 text-sm font-bold shrink-0" />
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900">{selectedPerformer.name}</h3>
                 <p className="text-xs font-semibold text-blue-600">{selectedPerformer.condition}</p>

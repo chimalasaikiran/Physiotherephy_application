@@ -79,7 +79,7 @@ export const AppointmentCancelledScreen: React.FC = () => {
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 16,
+              paddingTop: Spacing.md,
               paddingBottom: 110 + Math.max(insets.bottom, 12),
             },
           ]}

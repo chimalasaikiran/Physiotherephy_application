@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   ChevronRight,
   ArrowLeft,
@@ -16,36 +17,60 @@ import {
   CalendarCheck,
   UserPlus,
   FilePlus,
+  X,
+  Loader2,
+  Save,
 } from 'lucide-react';
-import type { Therapist } from './types';
+import type { Therapist, AvailabilityStatus, TherapistStatus } from './types';
 import { AvailabilityTab } from './AvailabilityTab';
 import { AssignedPatientsTab } from './AssignedPatientsTab';
 import { TherapistProgramsTab } from './TherapistProgramsTab';
 import { TherapistRevenueTab } from './TherapistRevenueTab';
 import { TherapistCertificationsTab } from './TherapistCertificationsTab';
+import { updateTherapistRecord } from '@/services/therapistService';
 
 interface TherapistProfilePageProps {
   therapist?: Therapist | null;
   onBack?: () => void;
   defaultTab?: string;
+  /** Callback invoked after a successful edit so parent can refresh its local state */
+  onTherapistUpdated?: (updated: Therapist) => void;
 }
 
 export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
   therapist: initialTherapist,
   onBack,
   defaultTab = 'Profile',
+  onTherapistUpdated,
 }) => {
-  // Fallback to Dr. Ananya Iyer from Figma design if initialTherapist is missing/partial
-  const therapistName = initialTherapist?.name || 'Dr. Ananya Iyer';
-  const therapistDegree = initialTherapist?.degree || 'MPT Orthopedic Physiotherapy';
-  const therapistExp = initialTherapist?.experience || '8 Years Exp';
-  const therapistRating = initialTherapist?.rating ?? 4.9;
+  // Live therapist state — starts from prop, updated after edits
+  const [therapist, setTherapist] = useState<Therapist | null | undefined>(initialTherapist);
+
+  // Edit modal state
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editName, setEditName] = useState(initialTherapist?.name || '');
+  const [editDegree, setEditDegree] = useState(initialTherapist?.degree || '');
+  const [editExperience, setEditExperience] = useState(initialTherapist?.experience || '');
+  const [editPhone, setEditPhone] = useState(initialTherapist?.phone || '');
+  const [editEmail, setEditEmail] = useState(initialTherapist?.email || '');
+  const [editLocation, setEditLocation] = useState(initialTherapist?.location || '');
+  const [editBio, setEditBio] = useState(initialTherapist?.bio || '');
+  const [editWorkingHours, setEditWorkingHours] = useState(initialTherapist?.workingHours || '');
+  const [editAvailability, setEditAvailability] = useState<AvailabilityStatus>(initialTherapist?.availability || 'Available Today');
+  const [editStatus, setEditStatus] = useState<TherapistStatus>(initialTherapist?.status || 'ACTIVE');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const therapistName = therapist?.name || 'Dr. Ananya Iyer';
+  const therapistDegree = therapist?.degree || 'MPT Orthopedic Physiotherapy';
+  const therapistExp = therapist?.experience || '8 Years Exp';
+  const therapistRating = therapist?.rating ?? 4.9;
   const therapistAvatar =
-    initialTherapist?.avatarUrl ||
+    therapist?.avatarUrl ||
     'https://images.unsplash.com/photo-1594824813566-88855ce78905?w=400&auto=format&fit=crop&q=80';
-  const specializations = initialTherapist?.specializations || ['Sports Rehabilitation', 'Active'];
-  const patientsCount = initialTherapist?.patientsCount ?? 42;
-  const therapistStatus = initialTherapist?.status || 'ACTIVE';
+  const specializations = therapist?.specializations || ['Sports Rehabilitation'];
+  const patientsCount = therapist?.patientsCount ?? 0;
+  const therapistStatus = therapist?.status || 'ACTIVE';
 
   // Sub-tab navigation state
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -56,6 +81,53 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  // ── Handle Edit Submit ────────────────────────────────────────────────────
+  const openEdit = () => {
+    setEditName(therapist?.name || '');
+    setEditDegree(therapist?.degree || '');
+    setEditExperience(therapist?.experience || '');
+    setEditPhone(therapist?.phone || '');
+    setEditEmail(therapist?.email || '');
+    setEditLocation(therapist?.location || '');
+    setEditBio(therapist?.bio || '');
+    setEditWorkingHours(therapist?.workingHours || '');
+    setEditAvailability(therapist?.availability || 'Available Today');
+    setEditStatus(therapist?.status || 'ACTIVE');
+    setSaveError(null);
+    setIsEditOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!therapist?.id) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const updates: Partial<Therapist> = {
+        name: editName,
+        degree: editDegree,
+        experience: editExperience,
+        phone: editPhone,
+        email: editEmail,
+        location: editLocation,
+        bio: editBio,
+        workingHours: editWorkingHours,
+        availability: editAvailability,
+        status: editStatus,
+      };
+      await updateTherapistRecord(therapist.id, updates);
+      const updated = { ...therapist, ...updates };
+      setTherapist(updated);
+      if (onTherapistUpdated) onTherapistUpdated(updated);
+      setIsEditOpen(false);
+      showToast('Profile updated successfully!');
+    } catch (err: any) {
+      setSaveError(err.message || 'Failed to save changes.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const tabs = [
@@ -74,6 +146,111 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center space-x-2 animate-in slide-in-from-bottom duration-200">
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Edit Profile Modal */}
+      {isEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-900">Edit Therapist Profile</h3>
+                <p className="text-xs text-slate-500 font-medium">Changes are saved to Firestore in real time</p>
+              </div>
+              <button onClick={() => setIsEditOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Full Name *</label>
+                  <input type="text" required value={editName} onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Degrees & Qualifications</label>
+                  <input type="text" value={editDegree} onChange={(e) => setEditDegree(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Experience</label>
+                  <input type="text" value={editExperience} onChange={(e) => setEditExperience(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Phone</label>
+                  <input type="text" value={editPhone} onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Email *</label>
+                  <input type="email" required value={editEmail} onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Clinic Location / Room</label>
+                  <input type="text" value={editLocation} onChange={(e) => setEditLocation(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Working Hours</label>
+                  <input type="text" placeholder="e.g. 09:00 AM - 05:00 PM" value={editWorkingHours} onChange={(e) => setEditWorkingHours(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Availability</label>
+                  <select value={editAvailability} onChange={(e) => setEditAvailability(e.target.value as AvailabilityStatus)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                    <option value="Available Today">Available Today</option>
+                    <option value="Busy">Busy</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Account Status</label>
+                <select value={editStatus} onChange={(e) => setEditStatus(e.target.value as TherapistStatus)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="INACTIVE">INACTIVE</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">Professional Bio</label>
+                <textarea rows={3} value={editBio} onChange={(e) => setEditBio(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none" />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex flex-col items-stretch space-y-2">
+                {saveError && <p className="text-xs text-rose-600 font-semibold text-center">{saveError}</p>}
+                <div className="flex items-center justify-end space-x-3">
+                  <button type="button" onClick={() => setIsEditOpen(false)} disabled={isSaving}
+                    className="px-4 py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <button type="submit" disabled={isSaving}
+                    className="flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer disabled:opacity-60">
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>{isSaving ? 'Saving…' : 'Save Changes'}</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
@@ -105,11 +282,10 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           {/* Left: Avatar + Details */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
-            <div className="relative flex-shrink-0">
-              <img
-                src={therapistAvatar}
-                alt={therapistName}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover border-4 border-slate-50 shadow-sm"
+            <div className="relative shrink-0">
+              <InitialsAvatar
+                name={therapistName}
+                className="w-20 h-20 sm:w-24 sm:h-24 text-2xl sm:text-3xl font-extrabold border-4 border-slate-50 shadow-sm shrink-0"
               />
               <span className="absolute bottom-1 right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full" />
             </div>
@@ -160,7 +336,7 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
           {/* Right Action Buttons */}
           <div className="flex items-center space-x-3 self-start lg:self-center flex-wrap gap-y-2">
             <button
-              onClick={() => showToast('Edit Profile dialog opened.')}
+              onClick={openEdit}
               className="px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm font-bold rounded-2xl shadow-2xs hover:shadow-xs transition-all cursor-pointer"
             >
               Edit Profile
@@ -511,15 +687,15 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
           </div>
         </div>
       ) : activeTab === 'Availability' ? (
-        <AvailabilityTab therapist={initialTherapist} />
+        <AvailabilityTab therapist={therapist || initialTherapist} />
       ) : activeTab === 'Assigned Patients' ? (
-        <AssignedPatientsTab therapist={initialTherapist} />
+        <AssignedPatientsTab therapist={therapist || initialTherapist} />
       ) : activeTab === 'Programs' ? (
-        <TherapistProgramsTab therapist={initialTherapist} />
+        <TherapistProgramsTab therapist={therapist || initialTherapist} />
       ) : activeTab === 'Revenue' ? (
-        <TherapistRevenueTab therapist={initialTherapist} />
+        <TherapistRevenueTab therapist={therapist || initialTherapist} />
       ) : activeTab === 'Certifications' ? (
-        <TherapistCertificationsTab therapist={initialTherapist} />
+        <TherapistCertificationsTab therapist={therapist || initialTherapist} />
       ) : (
         /* Sub-tab view placeholders */
         <div className="bg-white rounded-3xl p-10 sm:p-14 border border-slate-100 shadow-2xs text-center max-w-2xl mx-auto my-6 space-y-4">

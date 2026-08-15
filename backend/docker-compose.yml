@@ -1,0 +1,51 @@
+services:
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    container_name: physiotherapy-user-service
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+      - NODE_ENV=development
+      - FIREBASE_PROJECT_ID=physicotherephy-c28dd
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/serviceAccountKey.json
+      - CORS_ORIGIN=*
+    volumes:
+      - ./serviceAccountKey.json.json:/app/serviceAccountKey.json:ro
+    restart: unless-stopped
+
+  appointment-service:
+    build:
+      context: ./appointment-service
+      dockerfile: Dockerfile
+    container_name: physiotherapy-appointment-service
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - NODE_ENV=development
+      - FIREBASE_PROJECT_ID=physicotherephy-c28dd
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/serviceAccountKey.json
+      - CORS_ORIGIN=*
+    volumes:
+      - ./serviceAccountKey.json.json:/app/serviceAccountKey.json:ro
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: physiotherapy-payment-service
+    ports:
+      - "5003:5003"
+    environment:
+      - PORT=5003
+      - NODE_ENV=development
+      - FIREBASE_PROJECT_ID=physicotherephy-c28dd
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/serviceAccountKey.json
+      - CORS_ORIGIN=*
+    volumes:
+      - ./serviceAccountKey.json.json:/app/serviceAccountKey.json:ro
+    restart: unless-stopped

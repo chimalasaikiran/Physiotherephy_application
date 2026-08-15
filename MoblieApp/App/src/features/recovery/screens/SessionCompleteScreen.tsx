@@ -31,6 +31,9 @@ export interface SessionCompleteScreenProps {
   onViewProgress?: () => void;
 }
 
+const recordSessionCompletionInFirestore = (_title: string, _count: number) => {};
+
+
 export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
   completedCount,
   totalCount,
@@ -45,6 +48,10 @@ export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
+
+  React.useEffect(() => {
+    recordSessionCompletionInFirestore('Recovery Exercise Session', 5);
+  }, []);
 
   // Dynamic parameters with Figma default values
   const sStrings = Strings.sessionComplete || {};

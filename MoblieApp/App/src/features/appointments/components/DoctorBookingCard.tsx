@@ -10,20 +10,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
+import { TherapistAvatar } from '@/components';
 
 export interface Doctor {
   id: string;
   name: string;
   specialty: string;
-  degree: string;
-  institution: string;
+  degree?: string;
+  institution?: string;
   rating: number;
   reviewsCount: number;
   experienceYears: number;
   experienceStr: string;
   clinicName: string;
   clinicAddress: string;
-  distance: string;
+  distance?: string;
   fee: string;
   numericFee: number;
   availableToday: boolean;
@@ -31,9 +32,10 @@ export interface Doctor {
   isNearby: boolean;
   supportsOnline: boolean;
   languages: readonly string[] | string[];
-  imageName: string;
-  avatarBg: string;
-  bio: string;
+  imageName?: string;
+  avatarUrl?: string;
+  avatarBg?: string;
+  bio?: string;
 }
 
 export interface DoctorBookingCardProps {
@@ -49,18 +51,6 @@ export const DoctorBookingCard: React.FC<DoctorBookingCardProps> = ({
   onCardPress,
   buttonLabel = 'View Details',
 }) => {
-  const getImageSource = (name: string) => {
-    switch (name) {
-      case 'doctor_ananya':
-        return require('../../../assets/images/doctor_ananya.png');
-      case 'care_team_doctor':
-        return require('../../../assets/images/care_team_doctor.png');
-      case 'doctor_arjun':
-      default:
-        return require('../../../assets/images/doctor_arjun.png');
-    }
-  };
-
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -69,16 +59,18 @@ export const DoctorBookingCard: React.FC<DoctorBookingCardProps> = ({
     >
       {/* Top Main Section */}
       <View style={styles.topRow}>
-        <View style={[styles.avatarContainer, { backgroundColor: doctor.avatarBg }]}>
-          <Image
-            source={getImageSource(doctor.imageName)}
-            style={styles.avatarImage}
-            resizeMode="cover"
+        <View style={styles.avatarContainer}>
+          <TherapistAvatar
+            name={doctor.name}
+            avatarUrl={doctor.avatarUrl}
+            imageName={doctor.imageName}
+            avatarBg={doctor.avatarBg}
+            size={76}
           />
           {/* Rating Badge */}
           <View style={styles.ratingBadge}>
             <Ionicons name="star" size={11} color="#F59E0B" />
-            <Text style={styles.ratingText}>{doctor.rating.toFixed(1)}</Text>
+            <Text style={styles.ratingText}>{(doctor.rating ?? 0).toFixed(1)}</Text>
           </View>
         </View>
 
@@ -99,9 +91,11 @@ export const DoctorBookingCard: React.FC<DoctorBookingCardProps> = ({
             {doctor.specialty}
           </Text>
 
-          <Text style={styles.degreeText} numberOfLines={1}>
-            {doctor.degree}
-          </Text>
+          {Boolean(doctor.degree) && (
+            <Text style={styles.degreeText} numberOfLines={1}>
+              {doctor.degree}
+            </Text>
+          )}
 
           {/* Key Badges Row */}
           <View style={styles.badgeRow}>
@@ -111,7 +105,7 @@ export const DoctorBookingCard: React.FC<DoctorBookingCardProps> = ({
             </View>
             <View style={styles.badgePill}>
               <Ionicons name="chatbubble-ellipses-outline" size={12} color="#0284C7" />
-              <Text style={styles.badgeText}>{doctor.reviewsCount} Reviews</Text>
+              <Text style={styles.badgeText}>{doctor.reviewsCount ?? 0} Reviews</Text>
             </View>
           </View>
         </View>
@@ -121,13 +115,19 @@ export const DoctorBookingCard: React.FC<DoctorBookingCardProps> = ({
       <View style={styles.clinicRow}>
         <Ionicons name="location-outline" size={14} color="#64748B" style={styles.locIcon} />
         <Text style={styles.clinicText} numberOfLines={1}>
-          {doctor.clinicName} <Text style={styles.bulletDot}>•</Text> {doctor.distance}
+          {doctor.clinicName}
+          {Boolean(doctor.distance) && (
+            <>
+              {' '}
+              <Text style={styles.bulletDot}>•</Text> {doctor.distance}
+            </>
+          )}
         </Text>
       </View>
 
       {/* Languages Pills */}
       <View style={styles.languagesRow}>
-        {doctor.languages.map((lang, idx) => (
+        {(doctor.languages || []).map((lang, idx) => (
           <View key={idx} style={styles.langPill}>
             <Text style={styles.langText}>{lang}</Text>
           </View>

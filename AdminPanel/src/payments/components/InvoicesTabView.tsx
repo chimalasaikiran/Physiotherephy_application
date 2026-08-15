@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { Search, Filter, Download, Plus, Eye, MoreVertical } from 'lucide-react';
-import { MOCK_INVOICES } from '../mockData';
-import type { InvoiceItem } from '../types';
+import { Search, Filter, Download, Plus, Eye, CheckCircle, Trash2 } from 'lucide-react';
+import type { InvoiceDocument } from '../types';
+import { markInvoiceAsPaid, deleteInvoice } from '@/services/paymentService';
 
 interface InvoicesTabViewProps {
   onCreateInvoice: () => void;
+  invoices?: InvoiceDocument[];
 }
 
 export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
   onCreateInvoice,
+  invoices = [],
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const filteredInvoices = MOCK_INVOICES.filter((inv) => {
+  const filteredInvoices = invoices.filter((inv) => {
     const matchesSearch =
       inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inv.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -22,6 +25,29 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
       statusFilter === 'All' || inv.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const handleMarkPaid = async (id: string) => {
+    setActionLoadingId(id);
+    try {
+      await markInvoiceAsPaid(id, 'UPI');
+    } catch (err) {
+      console.error('Error marking invoice paid:', err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this invoice?')) return;
+    setActionLoadingId(id);
+    try {
+      await deleteInvoice(id);
+    } catch (err) {
+      console.error('Error deleting invoice:', err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs space-y-6">
@@ -94,52 +120,67 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 text-xs font-medium text-slate-700">
-            {filteredInvoices.map((inv) => (
-              <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
-                <td className="py-3.5 px-4 font-bold text-blue-600">
-                  {inv.invoiceNumber}
-                </td>
-                <td className="py-3.5 px-4 font-bold text-slate-900">
-                  {inv.patientName}
-                </td>
-                <td className="py-3.5 px-4 text-slate-500">{inv.therapistName}</td>
-                <td className="py-3.5 px-4 text-slate-400">{inv.issueDate}</td>
-                <td className="py-3.5 px-4 text-slate-400">{inv.dueDate}</td>
-                <td className="py-3.5 px-4 font-extrabold text-slate-900">
-                  ₹{inv.amount.toLocaleString('en-IN')}
-                </td>
-                <td className="py-3.5 px-4">
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      inv.status === 'Paid'
-                        ? 'bg-emerald-50 text-emerald-600'
-                        : inv.status === 'Overdue'
-                        ? 'bg-rose-50 text-rose-600'
-                        : 'bg-amber-50 text-amber-600'
-                    }`}
-                  >
-                    {inv.status}
-                  </span>
-                </td>
-                <td className="py-3.5 px-4 text-right space-x-2">
-                  <button
-                    title="View details"
-                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <button
-                    title="Download PDF"
-                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
+            {filteredInvoices.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
+                  No invoices match your filters.
                 </td>
               </tr>
-            ))}
+            ) : (
+              filteredInvoices.map((inv) => (
+                <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-3.5 px-4 font-bold text-blue-600">
+                    {inv.invoiceNumber}
+                  </td>
+                  <td className="py-3.5 px-4 font-bold text-slate-900">
+                    {inv.patientName}
+                  </td>
+                  <td className="py-3.5 px-4 text-slate-500">{inv.therapistName || 'Unassigned'}</td>
+                  <td className="py-3.5 px-4 text-slate-400">{inv.issueDate}</td>
+                  <td className="py-3.5 px-4 text-slate-400">{inv.dueDate || '--'}</td>
+                  <td className="py-3.5 px-4 font-extrabold text-slate-900">
+                    ₹{(inv.totalAmount || inv.amount).toLocaleString('en-IN')}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        inv.status === 'Paid'
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : inv.status === 'Overdue'
+                          ? 'bg-rose-50 text-rose-600'
+                          : 'bg-amber-50 text-amber-600'
+                      }`}
+                    >
+                      {inv.status}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-right space-x-1.5">
+                    {inv.status !== 'Paid' && (
+                      <button
+                        onClick={() => handleMarkPaid(inv.id)}
+                        disabled={actionLoadingId === inv.id}
+                        title="Mark as Paid"
+                        className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(inv.id)}
+                      disabled={actionLoadingId === inv.id}
+                      title="Delete Invoice"
+                      className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
     </div>
   );
 };
+

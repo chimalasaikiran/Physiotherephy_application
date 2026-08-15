@@ -22,39 +22,154 @@ import { Strings } from '@/constants';
 import { Doctor } from '@/features/appointments';
 import { PaymentSelectionModal, BookingDetails } from '@/features/appointments';
 import { BookingSuccessModal } from '@/features/appointments';
-import { EmptyStateView } from '@/components';
-import { SkeletonLoader } from '@/components';
+import { EmptyStateView, TherapistAvatar } from '@/components';
+import { fetchAvailableSlotsFromApi } from '@/api/appointmentApi';
+import { subscribeToTherapists, Therapist } from '@/api/therapistService';
+import { getDynamicBookingDates, isTimeSlotPast } from '@/utils/dateUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 
 export const SelectDateTimeScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ doctorId?: string; serviceTitle?: string }>();
+  const params = useLocalSearchParams<{
+    doctorId?: string;
+    serviceTitle?: string;
+    doctorName?: string;
+    doctorSpecialty?: string;
+    doctorDegree?: string;
+    doctorFee?: string;
+    doctorNumericFee?: string;
+    doctorClinic?: string;
+    doctorAvatarUrl?: string;
+    doctorImageName?: string;
+    doctorRating?: string;
+    doctorExperience?: string;
+    doctorBio?: string;
+  }>();
 
   const doctorId = params.doctorId || '';
   const serviceTitle = params.serviceTitle || '';
 
+  const [firestoreTherapists, setFirestoreTherapists] = useState<Doctor[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeToTherapists(
+      (list) => {
+        const mapped: Doctor[] = list.map((t) => {
+          const numericFee = t.consultationFee || 800;
+          return {
+            id: t.id,
+            name: t.name,
+            specialty: t.specializations && t.specializations.length > 0 ? t.specializations.join(', ') : 'Physiotherapist',
+            degree: t.degree,
+            experienceYears: parseInt(t.experience) || 5,
+            experienceStr: t.experience || '5+ Years Exp',
+            rating: t.rating || 4.9,
+            reviewsCount: 18 + (t.patientsCount || 0),
+            clinicName: t.location || 'Spine & Wellness Center',
+            clinicAddress: 'Indiranagar, Bengaluru',
+            fee: `₹${numericFee}`,
+            numericFee: numericFee,
+            imageName: undefined,
+            avatarUrl: t.avatarUrl || undefined,
+            isTopRated: (t.rating || 0) >= 4.8,
+            isNearby: true,
+            availableToday: t.availability === 'Available Today',
+            supportsOnline: true,
+            languages: ['English', 'Hindi'],
+            bio: t.bio,
+          };
+        });
+        setFirestoreTherapists(mapped);
+      },
+      (err) => console.warn('Therapists subscription error in SelectDateTimeScreen:', err)
+    );
+    return () => unsub();
+  }, []);
+
   // 1. Resolve Doctor Data dynamically
   const doctor = useMemo<Doctor | null>(() => {
-    if (!doctorId) {
-      return Strings.booking.doctors[1] as unknown as Doctor; // Dr. Ananya Iyer as default
+    // a) Search real-time Firestore therapists list
+    if (doctorId && firestoreTherapists.length > 0) {
+      const foundFs = firestoreTherapists.find((d) => d.id === doctorId);
+      if (foundFs) return foundFs;
     }
-    const found = Strings.booking.doctors.find((d) => d.id === doctorId);
-    return (found as unknown as Doctor) || (Strings.booking.doctors[1] as unknown as Doctor);
-  }, [doctorId]);
+
+    // b) Construct from route params if passed
+    if (params.doctorName) {
+      const numericFee = params.doctorNumericFee ? Number(params.doctorNumericFee) : 800;
+      return {
+        id: doctorId || 'custom_doc',
+        name: params.doctorName,
+        specialty: params.doctorSpecialty || 'Physiotherapist',
+        degree: params.doctorDegree || '',
+        experienceYears: parseInt(params.doctorExperience || '5') || 5,
+        experienceStr: params.doctorExperience || '5+ Years Exp',
+        rating: params.doctorRating ? Number(params.doctorRating) : 4.9,
+        reviewsCount: 25,
+        clinicName: params.doctorClinic || 'Spine & Wellness Center',
+        clinicAddress: 'Indiranagar, Bengaluru',
+        fee: params.doctorFee || `₹${numericFee}`,
+        numericFee: numericFee,
+        imageName: params.doctorImageName || 'doctor_ananya',
+        avatarUrl: params.doctorAvatarUrl,
+        isTopRated: true,
+        isNearby: true,
+        availableToday: true,
+        supportsOnline: true,
+        languages: ['English', 'Hindi'],
+        bio: params.doctorBio || '',
+      };
+    }
+
+    // c) Search static mock list
+    if (doctorId) {
+      const foundStatic = Strings.booking.doctors.find((d) => d.id === doctorId);
+      if (foundStatic) return foundStatic as unknown as Doctor;
+    }
+
+    // d) Fallback if no specific doctorId requested
+    if (firestoreTherapists.length > 0) {
+      return firestoreTherapists[0];
+    }
+    return (Strings.booking.doctors[1] as unknown as Doctor) || (Strings.booking.doctors[0] as unknown as Doctor);
+  }, [doctorId, firestoreTherapists, params]);
 
   // Data constants
   const places = Strings.booking.places;
-  const dates = Strings.booking.dates;
+  const dates = useMemo(() => getDynamicBookingDates(7), []);
   const timeSlots = Strings.booking.timeSlots;
   const strings = Strings.selectDateTime;
 
   // Screen interactive state
   const [selectedPlaceId, setSelectedPlaceId] = useState<string>('clinic');
-  const [selectedDateId, setSelectedDateId] = useState<string>('d1');
+  const [selectedDateId, setSelectedDateId] = useState<string>(dates[0]?.id || 'd1');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('04:30 PM');
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
   const [isLoadingSlots, setIsLoadingSlots] = useState<boolean>(false);
+  const [bookedTimeSlots, setBookedTimeSlots] = useState<string[]>([]);
+
+  // Filter time slots dynamically based on period selection
+  const filteredTimeSlots = useMemo(() => {
+    if (selectedPeriodFilter === 'all') return timeSlots;
+    return timeSlots.filter((slot) => {
+      if (slot.period && slot.period === selectedPeriodFilter) return true;
+      const timeUpper = slot.time.toUpperCase();
+      const hourStr = timeUpper.split(':')[0];
+      const hour = parseInt(hourStr, 10);
+      const isPM = timeUpper.includes('PM');
+      let hour24 = hour;
+      if (isPM && hour !== 12) hour24 += 12;
+      if (!isPM && hour === 12) hour24 = 0;
+
+      if (selectedPeriodFilter === 'morning') return hour24 < 12;
+      if (selectedPeriodFilter === 'afternoon') return hour24 >= 12 && hour24 < 16;
+      if (selectedPeriodFilter === 'evening') return hour24 >= 16;
+      return true;
+    });
+  }, [timeSlots, selectedPeriodFilter]);
 
   // Modals for complete booking flow
   const [pendingBookingDetails, setPendingBookingDetails] = useState<BookingDetails | null>(null);
@@ -73,6 +188,21 @@ export const SelectDateTimeScreen: React.FC = () => {
   const selectedDate = useMemo(() => {
     return dates.find((d) => d.id === selectedDateId) || dates[0];
   }, [dates, selectedDateId]);
+
+  // Fetch booked slots for selected doctor and date via API
+  useEffect(() => {
+    if (!doctor) return;
+    let isMounted = true;
+    fetchAvailableSlotsFromApi(doctor.id, selectedDate.fullDate).then((slotsRes) => {
+      if (isMounted && slotsRes) {
+        setBookedTimeSlots(slotsRes.bookedSlots || []);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [doctor, selectedDate.fullDate]);
+
 
   // Simulate loading state on date or place change
   const handleSelectDate = (dateId: string) => {
@@ -154,7 +284,10 @@ export const SelectDateTimeScreen: React.FC = () => {
   };
 
   // Helper for doctor profile images
-  const getImageSource = (name: string) => {
+  const getImageSource = (name?: string, avatarUrl?: string) => {
+    if (avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:image'))) {
+      return { uri: avatarUrl };
+    }
     switch (name) {
       case 'doctor_ananya':
         return require('../../../assets/images/doctor_ananya.png');
@@ -187,15 +320,7 @@ export const SelectDateTimeScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* HEADER BAR */}
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-            height: 56 + Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-          },
-        ]}
-      >
+      <View style={styles.header}>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={handleBack}
@@ -232,10 +357,11 @@ export const SelectDateTimeScreen: React.FC = () => {
       >
         {/* 1. DOCTOR SUMMARY SNAPSHOT CARD */}
         <View style={styles.doctorCard}>
-          <Image
-            source={getImageSource(doctor.imageName)}
-            style={styles.docAvatarImage}
-            resizeMode="cover"
+          <TherapistAvatar
+            name={doctor.name}
+            avatarUrl={doctor.avatarUrl}
+            imageName={doctor.imageName}
+            size={60}
           />
 
           <View style={styles.docInfo}>
@@ -354,9 +480,51 @@ export const SelectDateTimeScreen: React.FC = () => {
         {/* 4. SELECT TIME SLOT */}
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>
-              {strings.timeSlotsTitle} ({selectedDate.fullDate})
-            </Text>
+            <View style={styles.timeSlotTitleGroup}>
+              <Text style={styles.sectionTitle}>
+                {strings.timeSlotsTitle} ({selectedDate.fullDate})
+              </Text>
+              <Text style={styles.sectionSubtitle}>
+                Select an available slot for your consultation
+              </Text>
+            </View>
+          </View>
+
+          {/* Period Filter Pills */}
+          <View style={styles.periodTabsRow}>
+            {[
+              { id: 'all', label: 'All Slots', icon: 'time-outline' },
+              { id: 'morning', label: 'Morning', icon: 'sunny-outline' },
+              { id: 'afternoon', label: 'Afternoon', icon: 'partly-sunny-outline' },
+              { id: 'evening', label: 'Evening', icon: 'moon-outline' },
+            ].map((period) => {
+              const isPeriodSelected = selectedPeriodFilter === period.id;
+              return (
+                <TouchableOpacity
+                  key={period.id}
+                  activeOpacity={0.8}
+                  onPress={() => setSelectedPeriodFilter(period.id)}
+                  style={[
+                    styles.periodTabPill,
+                    isPeriodSelected && styles.periodTabPillSelected,
+                  ]}
+                >
+                  <Ionicons
+                    name={period.icon as any}
+                    size={13}
+                    color={isPeriodSelected ? Colors.white : Colors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.periodTabText,
+                      isPeriodSelected && styles.periodTabTextSelected,
+                    ]}
+                  >
+                    {period.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           {isLoadingSlots ? (
@@ -364,34 +532,70 @@ export const SelectDateTimeScreen: React.FC = () => {
               <ActivityIndicator size="small" color={Colors.primary} />
               <Text style={styles.loadingText}>Fetching available time slots...</Text>
             </View>
-          ) : (timeSlots as readonly any[]).length === 0 ? (
+          ) : filteredTimeSlots.length === 0 ? (
             <EmptyStateView
               title={strings.emptyState.title}
               subtitle={strings.emptyState.subtitle}
-              onReset={() => setSelectedDateId('d1')}
+              onReset={() => {
+                setSelectedPeriodFilter('all');
+                setSelectedDateId('d1');
+              }}
             />
           ) : (
             <View style={styles.timeSlotsGrid}>
-              {timeSlots.map((slot) => {
+              {filteredTimeSlots.map((slot) => {
                 const isSelected = slot.time === selectedTimeSlot;
+                const isBooked = bookedTimeSlots.includes(slot.time);
+                const isPast = isTimeSlotPast(slot.time, selectedDate.isoDate);
+                const isDisabled = isBooked || isPast;
                 return (
                   <TouchableOpacity
                     key={slot.id}
+                    disabled={isDisabled}
                     activeOpacity={0.8}
                     onPress={() => setSelectedTimeSlot(slot.time)}
                     style={[
                       styles.timeSlotChip,
-                      isSelected && styles.timeSlotChipSelected,
+                      isSelected && !isDisabled && styles.timeSlotChipSelected,
+                      isDisabled && styles.timeSlotChipBooked,
                     ]}
                   >
                     <Ionicons
-                      name="time-outline"
-                      size={15}
-                      color={isSelected ? Colors.white : Colors.primary}
+                      name={
+                        isBooked
+                          ? 'lock-closed-outline'
+                          : isPast
+                          ? 'close-circle-outline'
+                          : isSelected
+                          ? 'checkmark-circle-outline'
+                          : 'time-outline'
+                      }
+                      size={14}
+                      color={
+                        isDisabled
+                          ? '#94A3B8'
+                          : isSelected
+                          ? Colors.white
+                          : Colors.primary
+                      }
                     />
-                    <Text style={[styles.timeSlotText, isSelected && styles.timeSlotTextSelected]}>
-                      {slot.time}
-                    </Text>
+                    <View style={styles.timeSlotTextGroup}>
+                      <Text
+                        numberOfLines={1}
+                        style={[
+                          styles.timeSlotText,
+                          isSelected && !isDisabled && styles.timeSlotTextSelected,
+                          isDisabled && styles.timeSlotTextBooked,
+                        ]}
+                      >
+                        {slot.time}
+                      </Text>
+                      {isDisabled && (
+                        <Text style={styles.timeSlotStatusSub}>
+                          {isBooked ? 'Booked' : 'Passed'}
+                        </Text>
+                      )}
+                    </View>
                   </TouchableOpacity>
                 );
               })}
@@ -703,6 +907,38 @@ const styles = StyleSheet.create({
   dateStrSelected: {
     color: Colors.white,
   },
+  timeSlotTitleGroup: {
+    gap: 2,
+  },
+  periodTabsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginVertical: 4,
+  },
+  periodTabPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 9999,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    gap: 5,
+  },
+  periodTabPillSelected: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  periodTabText: {
+    fontSize: 11,
+    fontWeight: Typography.fontWeight.bold,
+    color: Colors.primary,
+  },
+  periodTabTextSelected: {
+    color: Colors.white,
+  },
   loadingBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -721,11 +957,11 @@ const styles = StyleSheet.create({
   timeSlotsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
   timeSlotChip: {
-    width: (SCREEN_WIDTH - 48 - 24) / 3,
-    paddingVertical: 12,
+    width: (SCREEN_WIDTH - 40 - 20) / 3,
+    height: 48,
     borderRadius: 14,
     backgroundColor: Colors.white,
     borderWidth: 1.5,
@@ -734,18 +970,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    paddingHorizontal: 6,
   },
   timeSlotChipSelected: {
     backgroundColor: Colors.primary,
     borderColor: Colors.primary,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  timeSlotChipBooked: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    opacity: 0.7,
+  },
+  timeSlotTextGroup: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timeSlotText: {
-    fontSize: Typography.fontSize.xs,
+    fontSize: 12,
     fontWeight: Typography.fontWeight.bold,
     color: Colors.darkBlue,
   },
   timeSlotTextSelected: {
     color: Colors.white,
+  },
+  timeSlotTextBooked: {
+    color: '#94A3B8',
+    textDecorationLine: 'line-through',
+  },
+  timeSlotStatusSub: {
+    fontSize: 9,
+    fontWeight: Typography.fontWeight.semiBold,
+    color: '#94A3B8',
+    marginTop: -2,
   },
   infoBox: {
     flexDirection: 'row',

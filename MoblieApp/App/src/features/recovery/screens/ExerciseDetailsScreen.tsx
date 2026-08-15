@@ -101,18 +101,7 @@ export const ExerciseDetailsScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop:
-                Math.max(
-                  insets.top,
-                  Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 16
-                ) + 4,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -126,11 +115,12 @@ export const ExerciseDetailsScreen: React.FC = () => {
 
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={handleShare}
-            style={styles.headerIconBtn}
-            accessibilityLabel="Share exercise"
+            onPress={() => router.push('/recovery' as any)}
+            style={styles.headerExitBtn}
+            accessibilityLabel="Exit to recovery dashboard"
           >
-            <Ionicons name="share-social-outline" size={20} color="#003D9B" />
+            <Ionicons name="close" size={18} color="#EF4444" />
+            <Text style={styles.headerExitText}>Exit</Text>
           </TouchableOpacity>
         </View>
 
@@ -348,6 +338,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#EEF2F6',
+  },
+  headerExitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    gap: 4,
+  },
+  headerExitText: {
+    fontSize: 12,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#EF4444',
   },
   headerTitle: {
     fontSize: 20,

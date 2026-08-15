@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, UserPlus, Mail, Shield, Check } from 'lucide-react';
+import { X, UserPlus, Mail, Shield, Check, AlertCircle } from 'lucide-react';
 
 interface InviteUserModalProps {
   isOpen: boolean;
@@ -14,19 +14,25 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
 }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState('Senior Therapist');
+  const [role, setRole] = useState<string>('Senior Therapist');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
     onInviteSent(fullName, role);
     setIsSuccess(true);
     setTimeout(() => {
       setIsSuccess(false);
       setFullName('');
       setEmail('');
+      setIsSubmitting(false);
       onClose();
     }, 1200);
   };
@@ -64,6 +70,12 @@ export const InviteUserModal: React.FC<InviteUserModalProps> = ({
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            {errorMessage && (
+              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs font-semibold text-red-600 flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                 Full Name

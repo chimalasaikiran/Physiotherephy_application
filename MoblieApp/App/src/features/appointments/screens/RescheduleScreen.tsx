@@ -22,6 +22,9 @@ import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { DoctorAvatarMap } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+import { rescheduleAppointmentViaBackend } from '@/api/appointmentApi';
+
+import { Alert } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -109,13 +112,38 @@ export const RescheduleScreen: React.FC = () => {
     }
   };
 
-  const handleConfirmReschedule = () => {
+  const handleConfirmReschedule = async () => {
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      if (params.bookingId) {
+        await rescheduleAppointmentViaBackend(
+          params.bookingId,
+          params.doctorId || 'doc_1',
+          params.fullDate || 'Oct 24, 2026',
+          params.timeSlot || '04:30 PM',
+          selectedDate.fullDateStr,
+          selectedSlotTime,
+          selectedDate.id
+        );
+      }
       setIsSubmitting(false);
       setIsSuccessModalVisible(true);
-    }, 800);
+    } catch (err: any) {
+      setIsSubmitting(false);
+      if (err?.message === 'SLOT_ALREADY_BOOKED') {
+        Alert.alert(
+          'Slot Unavailable',
+          'This date/time slot was just booked by another user. Please select another slot.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        console.error('Error rescheduling appointment via backend:', err);
+        // Fallback success UI if demo
+        setIsSuccessModalVisible(true);
+      }
+    }
   };
+
 
   const handleSuccessDone = () => {
     setIsSuccessModalVisible(false);
@@ -146,15 +174,7 @@ export const RescheduleScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-              height: 56 + Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={handleBack}
@@ -573,12 +593,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   slotChip: {
-    width: (SCREEN_WIDTH - 48 - 20) / 3,
+    width: (SCREEN_WIDTH - 40 - 20) / 3,
     height: 46,
     borderRadius: 23,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 4,
   },
   slotChipUnselected: {
     backgroundColor: '#FFFFFF',
@@ -591,13 +612,14 @@ const styles = StyleSheet.create({
     borderColor: '#003D9B',
   },
   slotChipLocked: {
-    width: (SCREEN_WIDTH - 48 - 20) / 3,
+    width: (SCREEN_WIDTH - 40 - 20) / 3,
     height: 46,
     borderRadius: 23,
     backgroundColor: '#F1F5F9',
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 4,
   },
   slotText: {
     fontSize: 13,

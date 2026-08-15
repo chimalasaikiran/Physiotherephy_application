@@ -7,11 +7,18 @@ import {
   CalendarDays,
 } from 'lucide-react';
 import { METRIC_CARDS_DATA } from '../mockData';
+import type { MetricCardData } from '../types';
 
-export const PaymentsMetrics: React.FC = () => {
+interface PaymentsMetricsProps {
+  metrics?: MetricCardData[];
+}
+
+export const PaymentsMetrics: React.FC<PaymentsMetricsProps> = ({ metrics }) => {
+  const cardsToDisplay = metrics && metrics.length > 0 ? metrics : METRIC_CARDS_DATA;
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-      {METRIC_CARDS_DATA.map((card, index) => {
+      {cardsToDisplay.map((card: MetricCardData, index: number) => {
         const isHighlighted = card.isHighlighted;
 
         return (
@@ -60,6 +67,11 @@ export const PaymentsMetrics: React.FC = () => {
                     <CalendarDays className="w-4 h-4" />
                   </div>
                 )}
+                {card.iconType === 'attention' && (
+                  <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
+                    <AlertCircle className="w-4 h-4" />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -92,3 +104,4 @@ export const PaymentsMetrics: React.FC = () => {
     </div>
   );
 };
+

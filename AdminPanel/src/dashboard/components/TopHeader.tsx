@@ -1,18 +1,67 @@
-import React, { useState } from 'react';
-import { Search, Plus, Bell, HelpCircle, Menu } from 'lucide-react';
-import doctorAvatar from '@/assets/sarah-chen.png';
+import React, { useState, useRef, useEffect } from 'react';
+import { Search, Plus, Bell, HelpCircle, Menu, LogOut, Shield, Settings } from 'lucide-react';
+import { useAuth } from '@/auth';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
+
+interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+}
 
 interface TopHeaderProps {
   onMenuToggle: () => void;
   onOpenNewAppointment: () => void;
+  onOpenRealtimeGuide?: () => void;
+  onLogout?: () => void;
+  onNavigateToSettings?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   onMenuToggle,
   onOpenNewAppointment,
+  onOpenRealtimeGuide,
+  onLogout,
+  onNavigateToSettings,
 }) => {
+  const { adminProfile, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  const adminName = adminProfile?.fullName || 'System Administrator';
+  const adminEmail = adminProfile?.email || 'admin@physiotherapy.com';
+  const adminRole = adminProfile?.role
+    ? adminProfile.role.charAt(0).toUpperCase() + adminProfile.role.slice(1)
+    : 'Superadmin';
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
+
+  // Click-outside handler to close the admin profile dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleSignOut = async () => {
+    setIsProfileOpen(false);
+    if (onLogout) {
+      onLogout();
+    } else {
+      await logout();
+    }
+  };
 
   return (
     <header className="h-20 bg-white border-b border-slate-100 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30 shadow-xs">
@@ -43,6 +92,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Right Header Actions */}
       <div className="flex items-center space-x-3 sm:space-x-4">
+        {/* Live Realtime Sync Status Badge */}
+        <button
+          onClick={onOpenRealtimeGuide}
+          className="flex items-center space-x-2 bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-3 py-1.5 rounded-full text-xs font-bold shadow-2xs hover:bg-emerald-100 transition-all cursor-pointer"
+          title="Click to view Real-time Workflow Guide"
+        >
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <span className="hidden md:inline">Real-Time Sync Active</span>
+          <span className="md:hidden">Sync Live</span>
+        </button>
+
         {/* New Appointment Button */}
         <button
           onClick={onOpenNewAppointment}
@@ -52,42 +115,59 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <span>New Appointment</span>
         </button>
 
-        {/* Mobile New Appointment Icon */}
-        <button
-          onClick={onOpenNewAppointment}
-          className="sm:hidden w-9 h-9 bg-blue-600 hover:bg-blue-700 text-white rounded-full flex items-center justify-center shadow-xs"
-          title="New Appointment"
-        >
-          <Plus className="w-5 h-5 stroke-[2.5]" />
-        </button>
-
         {/* Notifications Icon Button */}
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full relative transition-colors"
+            className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full relative transition-colors cursor-pointer"
             title="Notifications"
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[10px] font-bold flex items-center justify-center">
+                {unreadCount}
+              </span>
+            )}
           </button>
 
           {/* Notifications Dropdown */}
           {showNotifications && (
-            <div className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+            <div className="absolute right-0 mt-3 w-88 bg-white rounded-2xl shadow-xl border border-slate-100 py-3 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
               <div className="px-4 py-2 border-b border-slate-50 flex items-center justify-between">
-                <h4 className="font-bold text-slate-800 text-sm">Notifications</h4>
-                <span className="text-xs text-blue-600 font-semibold cursor-pointer">Mark all as read</span>
+                <h4 className="font-bold text-slate-800 text-sm flex items-center space-x-2">
+                  <span>Live System Alerts</span>
+                  <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[10px]">
+                    {notifications.length}
+                  </span>
+                </h4>
+                <button
+                  onClick={() => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))}
+                  className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer"
+                >
+                  Mark as read
+                </button>
               </div>
-              <div className="divide-y divide-slate-50 max-h-64 overflow-y-auto">
-                <div className="p-3 hover:bg-slate-50 text-xs">
-                  <p className="font-medium text-slate-800">New patient registration</p>
-                  <p className="text-slate-400 mt-0.5">Kabir Singh joined 10 mins ago</p>
-                </div>
-                <div className="p-3 hover:bg-slate-50 text-xs">
-                  <p className="font-medium text-slate-800">Appointment rescheduled</p>
-                  <p className="text-slate-400 mt-0.5">Dr. Emily Watson moved meeting to 11:30</p>
-                </div>
+              <div className="divide-y divide-slate-50 max-h-72 overflow-y-auto">
+                {notifications.length > 0 ? (
+                  notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`p-3.5 hover:bg-slate-50 text-xs transition-colors ${
+                        !n.read ? 'bg-blue-50/30' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-slate-900">{n.title}</p>
+                        <span className="text-[10px] text-slate-400">{n.timestamp}</span>
+                      </div>
+                      <p className="text-slate-600 mt-1 leading-snug">{n.message}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-6 text-center text-slate-400 text-xs">
+                    No recent notifications
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -95,8 +175,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Support/Help Icon */}
         <button
-          className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors hidden sm:block"
-          title="Support & Help"
+          onClick={onOpenRealtimeGuide}
+          className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors hidden sm:block cursor-pointer"
+          title="Real-Time System Guide"
         >
           <HelpCircle className="w-5 h-5" />
         </button>
@@ -104,24 +185,67 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         {/* Vertical Separator */}
         <div className="h-7 w-[1px] bg-slate-200 hidden sm:block" />
 
-        {/* Profile Card */}
-        <div className="flex items-center space-x-3 pl-1">
-          <div className="text-right hidden md:block">
-            <h3 className="font-bold text-sm text-slate-900 leading-none">Dr. Sarah Chen</h3>
-            <p className="text-[11px] font-semibold text-slate-400 tracking-wider uppercase mt-1">
-              Clinic Admin
-            </p>
-          </div>
-          <div className="relative">
-            <img
-              src={doctorAvatar}
-              alt="Dr. Sarah Chen"
-              className="w-10 h-10 rounded-full object-cover border-2 border-blue-100 shadow-xs"
-            />
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" />
-          </div>
+        {/* Admin Profile Dropdown Container */}
+        <div className="relative" ref={profileRef}>
+          <button
+            onClick={() => setIsProfileOpen(!isProfileOpen)}
+            className="flex items-center space-x-3 p-1.5 rounded-2xl hover:bg-slate-100/80 transition-colors cursor-pointer text-left focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            aria-expanded={isProfileOpen}
+            aria-haspopup="true"
+            title="Click for Admin Profile & Sign Out"
+          >
+            <div className="text-right hidden sm:block">
+              <h3 className="font-bold text-sm text-slate-900 leading-none">{adminName}</h3>
+              <p className="text-[11px] font-semibold text-slate-400 tracking-wider uppercase mt-1">
+                {adminRole}
+              </p>
+            </div>
+            <div className="relative">
+              <InitialsAvatar name={adminName} className="w-10 h-10 text-sm font-bold" />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white" />
+            </div>
+          </button>
+
+          {/* Admin Profile Dropdown Menu */}
+          {isProfileOpen && (
+            <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="px-4 py-3 border-b border-slate-100 flex items-center space-x-3">
+                <InitialsAvatar name={adminName} className="w-11 h-11 text-base font-bold" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-slate-900 text-sm truncate">{adminName}</p>
+                  <p className="text-xs text-slate-500 truncate">{adminEmail}</p>
+                  <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700">
+                    <Shield className="w-3 h-3" />
+                    {adminRole}
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-1 space-y-1">
+                <button
+                  onClick={() => {
+                    setIsProfileOpen(false);
+                    if (onNavigateToSettings) onNavigateToSettings();
+                  }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-blue-600 rounded-xl transition-colors cursor-pointer"
+                >
+                  <Settings className="w-4 h-4 text-slate-500 hover:text-blue-600" />
+                  <span>Settings & Profile</span>
+                </button>
+                <button
+                  onClick={handleSignOut}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 text-rose-600" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>
   );
 };
+
+

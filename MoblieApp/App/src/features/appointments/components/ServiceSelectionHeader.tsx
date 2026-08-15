@@ -26,11 +26,8 @@ export const ServiceSelectionHeader: React.FC<ServiceSelectionHeaderProps> = ({
   onBack,
   onAvatarPress,
 }) => {
-  const insets = useSafeAreaInsets();
-  const topInset = Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4;
-
   return (
-    <View style={[styles.headerContainer, { paddingTop: topInset, height: 56 + topInset }]}>
+    <View style={styles.headerContainer}>
       {/* Back Button */}
       <TouchableOpacity
         style={styles.backButton}

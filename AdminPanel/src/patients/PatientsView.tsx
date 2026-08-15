@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   Search,
   Plus,
@@ -18,13 +19,15 @@ import {
   Trash2,
   Filter,
   ArrowUpDown,
+  Radio,
+  AlertCircle,
+  Database,
+  Loader2,
 } from 'lucide-react';
 
 import type { Patient, PatientFilters, ConditionType, PatientStatus } from './types';
-import { INITIAL_PATIENTS } from './mockData';
-import { AddPatientModal } from './AddPatientModal';
+import { usePatients } from './usePatients';
 import { ImportPatientsModal } from './ImportPatientsModal';
-import { PatientDetailModal } from './PatientDetailModal';
 import { AddPatientPage } from './AddPatientPage';
 import { PatientProfilePage } from './PatientProfilePage';
 
@@ -39,21 +42,35 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
   onSelectPatient,
   initialAddMode = false,
 }) => {
-  const [patients, setPatients] = useState<Patient[]>(INITIAL_PATIENTS);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const {
+    patients,
+    stats,
+    isLoading,
+    error,
+    isRealtimeActive,
+    refresh,
+    deletePatient,
+    addPatient,
+  } = usePatients();
+
   const [isAddPageOpen, setIsAddPageOpen] = useState(initialAddMode);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // Selected patient dynamically pulled from live patients array
+  const selectedPatient = useMemo(() => {
+    if (!selectedPatientId) return null;
+    return patients.find((p) => p.id === selectedPatientId) || null;
+  }, [patients, selectedPatientId]);
 
   const handleSelectPatient = (patient: Patient) => {
     if (onSelectPatient) {
       onSelectPatient(patient);
     } else {
-      setSelectedPatient(patient);
+      setSelectedPatientId(patient.id);
     }
   };
-
 
   // Filters State
   const [filters, setFilters] = useState<PatientFilters>({
@@ -68,22 +85,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
-
-  // Handler for adding a new patient
-  const handleAddPatient = (newPatientData: Omit<Patient, 'id'>) => {
-    const newPatient: Patient = {
-      ...newPatientData,
-      id: `p-${Date.now()}`,
-    };
-    setPatients((prev) => [newPatient, ...prev]);
-  };
-
-  // Handler for deleting a patient
-  const handleDeletePatient = (patientId: string) => {
-    setPatients((prev) => prev.filter((p) => p.id !== patientId));
-    setActiveMenuId(null);
-  };
+  const itemsPerPage = 8;
 
   // Filter & Sort Logic
   const filteredPatients = useMemo(() => {
@@ -94,8 +96,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
           const query = filters.searchQuery.toLowerCase();
           const matchesName = p.name.toLowerCase().includes(query);
           const matchesId = p.patientId.toLowerCase().includes(query);
-          const matchesCondition = p.condition.toLowerCase().includes(query);
-          const matchesTherapist = p.therapistName.toLowerCase().includes(query);
+          const matchesCondition = (p.condition || '').toLowerCase().includes(query);
+          const matchesTherapist = (p.therapistName || '').toLowerCase().includes(query);
           if (!matchesName && !matchesId && !matchesCondition && !matchesTherapist) {
             return false;
           }
@@ -130,13 +132,16 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
           return a.name.localeCompare(b.name);
         }
         if (filters.sortBy === 'score_desc') {
-          return b.recoveryScore - a.recoveryScore;
+          return (b.recoveryScore || 0) - (a.recoveryScore || 0);
         }
         if (filters.sortBy === 'id') {
           return a.patientId.localeCompare(b.patientId);
         }
-        // Recently updated default:
-        return 0;
+        // Recently updated default
+        return (
+          new Date(b.updatedAt || b.createdAt || 0).getTime() -
+          new Date(a.updatedAt || a.createdAt || 0).getTime()
+        );
       });
   }, [patients, filters]);
 
@@ -147,9 +152,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
     return filteredPatients.slice(start, start + itemsPerPage);
   }, [filteredPatients, currentPage, itemsPerPage]);
 
-  // Badge Color Helper for Conditions
+  // Condition Badge Style Helper
   const getConditionStyle = (condition: ConditionType | string) => {
-
     switch (condition) {
       case 'Post-Op Rehab':
         return 'bg-teal-50 text-teal-700 border-teal-100';
@@ -174,6 +178,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
   const getStatusStyle = (status: PatientStatus) => {
     switch (status) {
       case 'Active Treatment':
+      case 'active':
         return {
           bg: 'bg-teal-50 text-teal-700 border-teal-100',
           dot: 'bg-teal-500',
@@ -184,11 +189,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
           dot: 'bg-slate-400',
         };
       case 'Recovered':
+      case 'completed':
         return {
           bg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
           dot: 'bg-emerald-500',
         };
       case 'On Hold':
+      case 'pending':
         return {
           bg: 'bg-amber-50 text-amber-700 border-amber-100',
           dot: 'bg-amber-500',
@@ -205,8 +212,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
     return (
       <AddPatientPage
         onBack={() => setIsAddPageOpen(false)}
-        onPatientCreated={(newPatient) => {
-          handleAddPatient(newPatient);
+        onPatientCreated={async (newPatientData) => {
+          await addPatient(newPatientData);
           setIsAddPageOpen(false);
         }}
       />
@@ -217,34 +224,54 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
     return (
       <PatientProfilePage
         patient={selectedPatient}
-        onBack={() => setSelectedPatient(null)}
+        onBack={() => setSelectedPatientId(null)}
       />
     );
   }
 
-
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
-      {/* 1. Page Header Section */}
+      {/* 1. Page Header Section with Real-time Badge & Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Patients
-          </h2>
+          <div className="flex items-center space-x-3">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Patients
+            </h2>
+            {/* Real-time sync status badge */}
+            <div className="flex items-center space-x-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100/80 rounded-full text-xs font-bold shadow-2xs">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span>Firestore Real-time Active</span>
+            </div>
+          </div>
           <p className="text-sm text-slate-500 font-medium mt-1 max-w-xl">
-            Manage patient records and recovery journeys with precision tools designed for clinical excellence.
+            Live patient details connected to backend Patients Service & Firestore (`patient details`).
           </p>
         </div>
 
         {/* Right Header Action Buttons */}
         <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+          {/* Refresh Button */}
+          <button
+            onClick={refresh}
+            disabled={isLoading}
+            className="flex items-center space-x-2 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-semibold text-sm transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+            title="Manual Refresh from Backend"
+          >
+            <RefreshCw className={`w-4 h-4 text-slate-500 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
           {/* Import Patients Button */}
           <button
             onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-blue-50/80 hover:bg-blue-100 text-blue-700 border border-blue-100 rounded-xl font-semibold text-sm transition-all duration-200 shadow-2xs hover:shadow-xs cursor-pointer"
+            className="flex items-center space-x-2 px-4 py-2.5 bg-blue-50/80 hover:bg-blue-100 text-blue-700 border border-blue-100 rounded-xl font-semibold text-sm transition-all shadow-2xs hover:shadow-xs cursor-pointer"
           >
             <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-            <span>Import Patients</span>
+            <span className="hidden sm:inline">Import</span>
           </button>
 
           {/* Add Patient Button */}
@@ -264,6 +291,21 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
         </div>
       </div>
 
+      {/* Error Alert Banner if any */}
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between text-rose-700 text-sm font-semibold animate-in fade-in duration-200">
+          <div className="flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={refresh}
+            className="px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition-colors"
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
 
       {/* 2. Filter & Controls Toolbar Card */}
       <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-100 shadow-xs space-y-4">
@@ -286,9 +328,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
             />
           </div>
 
-          {/* Right Toolbar Controls: View Switcher */}
+          {/* View Mode Segmented Switch */}
           <div className="flex items-center space-x-3 self-end lg:self-auto">
-            {/* View Mode Segmented Button */}
             <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
               <button
                 onClick={() => setFilters((f) => ({ ...f, viewMode: 'table' }))}
@@ -320,7 +361,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
         {/* Bottom Row: Dropdown Filters & Sorting Selector */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-50">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1">
-            {/* Filter: All Conditions */}
+            {/* Filter: Condition */}
             <div className="relative">
               <select
                 value={filters.condition}
@@ -425,8 +466,36 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
         </div>
       </div>
 
-      {/* 3. Main Data Presentation (Table or Cards View) */}
-      {filters.viewMode === 'table' ? (
+      {/* 3. Main Data Presentation (Loading Skeleton / Table / Cards View / Empty State) */}
+      {isLoading ? (
+        <div className="bg-white rounded-3xl p-12 border border-slate-100 shadow-xs text-center space-y-4">
+          <Loader2 className="w-10 h-10 text-blue-600 animate-spin mx-auto" />
+          <p className="text-sm font-bold text-slate-700">Connecting to Firestore `patient details` collection...</p>
+          <p className="text-xs text-slate-400">Synchronizing patient profiles, history, and medical records.</p>
+        </div>
+      ) : patients.length === 0 ? (
+        /* EMPTY STATE WHEN NO PATIENTS EXIST IN FIRESTORE */
+        <div className="bg-white rounded-3xl p-12 sm:p-16 border border-slate-100 shadow-xs text-center space-y-5 max-w-2xl mx-auto">
+          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mx-auto shadow-2xs">
+            <Database className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-xl font-extrabold text-slate-900">No Patient Records in Firestore</h3>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+              Your Firestore collection (`patient details`) is currently empty. Create a new patient to get started.
+            </p>
+          </div>
+          <div className="flex items-center justify-center space-x-4 pt-2">
+            <button
+              onClick={() => setIsAddPageOpen(true)}
+              className="flex items-center space-x-2 px-5 py-2.5 bg-[#0F4C81] hover:bg-blue-800 text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add New Patient</span>
+            </button>
+          </div>
+        </div>
+      ) : filters.viewMode === 'table' ? (
         /* TABLE VIEW */
         <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
@@ -456,17 +525,13 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                         {/* Patient Info */}
                         <td className="py-4 px-6">
                           <div className="flex items-center space-x-3.5">
-                            <img
-                              src={patient.avatarUrl}
-                              alt={patient.name}
-                              className="w-10 h-10 rounded-full object-cover border border-slate-200/80 flex-shrink-0 group-hover:scale-105 transition-transform"
-                            />
+                            <InitialsAvatar name={patient.name} className="w-10 h-10 text-xs font-bold shrink-0" />
                             <div>
                               <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
                                 {patient.name}
                               </div>
                               <div className="text-xs text-slate-400 font-medium">
-                                {patient.age}, {patient.gender}
+                                {patient.age} yrs, {patient.gender}
                               </div>
                             </div>
                           </div>
@@ -493,11 +558,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                         {/* Assigned Therapist */}
                         <td className="py-4 px-4">
                           <div className="flex items-center space-x-2">
-                            <div
-                              className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] ${patient.therapistAvatarBg}`}
-                            >
-                              {patient.therapistInitials}
-                            </div>
+                            <InitialsAvatar name={patient.therapistName} className="w-6 h-6 text-[10px] font-bold shrink-0" />
                             <span className="text-xs font-bold text-slate-800">
                               {patient.therapistName}
                             </span>
@@ -566,7 +627,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                               </button>
                               <button
                                 onClick={() => {
-                                  alert(`Edit patient record for ${patient.name}`);
+                                  handleSelectPatient(patient);
                                   setActiveMenuId(null);
                                 }}
                                 className="w-full flex items-center space-x-2.5 px-3.5 py-2 hover:bg-slate-50 text-slate-800"
@@ -586,7 +647,12 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                               </button>
                               <div className="my-1 border-t border-slate-100" />
                               <button
-                                onClick={() => handleDeletePatient(patient.id)}
+                                onClick={async () => {
+                                  if (confirm(`Delete patient record for ${patient.name}?`)) {
+                                    await deletePatient(patient.id);
+                                  }
+                                  setActiveMenuId(null);
+                                }}
                                 className="w-full flex items-center space-x-2.5 px-3.5 py-2 hover:bg-rose-50 text-rose-600"
                               >
                                 <Trash2 className="w-4 h-4 text-rose-500" />
@@ -616,8 +682,8 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
           {/* Table Footer Pagination */}
           <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
             <p className="text-xs font-semibold text-slate-500">
-              Showing <span className="text-slate-900 font-bold">1 - {paginatedPatients.length}</span> of{' '}
-              <span className="text-slate-900 font-bold">248</span> patients
+              Showing <span className="text-slate-900 font-bold">{paginatedPatients.length}</span> of{' '}
+              <span className="text-slate-900 font-bold">{filteredPatients.length}</span> patients
             </p>
 
             <div className="flex items-center space-x-1">
@@ -629,47 +695,19 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                 <ChevronLeft className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={() => setCurrentPage(1)}
-                className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center transition-all ${
-                  currentPage === 1
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                1
-              </button>
-
-              <button
-                onClick={() => setCurrentPage(2)}
-                className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center transition-all ${
-                  currentPage === 2
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                2
-              </button>
-
-              <button
-                onClick={() => setCurrentPage(3)}
-                className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center transition-all ${
-                  currentPage === 3
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                3
-              </button>
-
-              <span className="px-1 text-slate-400 text-xs font-bold">...</span>
-
-              <button
-                onClick={() => setCurrentPage(25)}
-                className="w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center text-slate-600 hover:bg-slate-100"
-              >
-                25
-              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center transition-all ${
+                    currentPage === page
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
 
               <button
                 disabled={currentPage === totalPages}
@@ -695,11 +733,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">
-                      <img
-                        src={patient.avatarUrl}
-                        alt={patient.name}
-                        className="w-12 h-12 rounded-2xl object-cover border border-slate-200 group-hover:scale-105 transition-transform"
-                      />
+                      <InitialsAvatar name={patient.name} className="w-12 h-12 text-sm font-bold shrink-0" />
                       <div>
                         <h4 className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">
                           {patient.name}
@@ -765,7 +799,7 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
           {/* Cards View Pagination */}
           <div className="px-6 py-4 bg-white rounded-3xl border border-slate-100 flex items-center justify-between">
             <p className="text-xs font-semibold text-slate-500">
-              Showing <span className="text-slate-900 font-bold">{paginatedPatients.length}</span> of 248 patients
+              Showing <span className="text-slate-900 font-bold">{paginatedPatients.length}</span> of {filteredPatients.length} patients
             </p>
             <div className="flex items-center space-x-2">
               <button
@@ -787,73 +821,70 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
         </div>
       )}
 
-      {/* 4. Bottom Metric Summary Cards (3 Cards) */}
+      {/* 4. Bottom Dynamic Metric Summary Cards (Live computed stats) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
-        {/* Card 1: New Patients this month */}
+        {/* Card 1: Total & Active Patients */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex items-center space-x-4">
           <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 shadow-2xs">
             <UserPlus className="w-7 h-7" />
           </div>
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              New patients this month
+              Total & Active Patients
             </p>
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-              +18.5%
-            </h3>
+            <h4 className="text-2xl font-extrabold text-slate-900 mt-0.5">
+              {stats.totalPatients} Patients
+            </h4>
+            <p className="text-xs text-teal-600 font-bold mt-0.5">
+              {stats.activePatients} Active Treatment
+            </p>
           </div>
         </div>
 
-        {/* Card 2: Average Recovery Score */}
+        {/* Card 2: Upcoming & Completed Sessions */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex items-center space-x-4">
           <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center flex-shrink-0 shadow-2xs">
             <Activity className="w-7 h-7" />
           </div>
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Average Recovery Score
+              Appointments Summary
             </p>
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-              74.2%
-            </h3>
+            <h4 className="text-2xl font-extrabold text-slate-900 mt-0.5">
+              {stats.upcomingAppointments} Upcoming
+            </h4>
+            <p className="text-xs text-slate-500 font-bold mt-0.5">
+              {stats.completedAppointments} Completed Sessions
+            </p>
           </div>
         </div>
 
-        {/* Card 3: Record Updates today */}
+        {/* Card 3: Pending & Collected Revenue */}
         <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex items-center space-x-4">
           <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0 shadow-2xs">
             <RefreshCw className="w-7 h-7" />
           </div>
           <div>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Record Updates today
+              Billing & Revenue Status
             </p>
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">
-              142
-            </h3>
+            <h4 className="text-2xl font-extrabold text-slate-900 mt-0.5">
+              ₹{stats.monthlyRevenue.toLocaleString()} Paid
+            </h4>
+            <p className="text-xs text-amber-600 font-bold mt-0.5">
+              ₹{stats.pendingPayments.toLocaleString()} Pending Balance
+            </p>
           </div>
         </div>
       </div>
 
       {/* Modals */}
-      <AddPatientModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onAddPatient={handleAddPatient}
-      />
-
       <ImportPatientsModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        onImportSuccess={(count) => {
-          alert(`Successfully imported ${count} patient records.`);
-        }}
-      />
-
-      <PatientDetailModal
-        patient={selectedPatient}
-        onClose={() => setSelectedPatient(null)}
       />
     </div>
   );
 };
+
+export default PatientsView;

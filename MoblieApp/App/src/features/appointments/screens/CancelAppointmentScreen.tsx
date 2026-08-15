@@ -20,6 +20,8 @@ import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { DoctorAvatarMap } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+import { cancelAppointmentViaBackend } from '@/api/appointmentApi';
+
 
 export const CancelAppointmentScreen: React.FC = () => {
   const router = useRouter();
@@ -84,7 +86,21 @@ export const CancelAppointmentScreen: React.FC = () => {
     });
   };
 
-  const handleConfirmCancel = () => {
+  const handleConfirmCancel = async () => {
+    try {
+      if (params.bookingId) {
+        await cancelAppointmentViaBackend(
+          params.bookingId,
+          params.doctorId || 'doc_1',
+          params.fullDate || 'Oct 24, 2026',
+          params.timeSlot || '04:30 PM'
+        );
+      }
+    } catch (err) {
+      console.error('Error cancelling appointment via backend:', err);
+    }
+
+
     router.replace({
       pathname: '/appointment-cancelled' as any,
       params: {
@@ -122,15 +138,7 @@ export const CancelAppointmentScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* Header Bar */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-              height: 56 + Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}

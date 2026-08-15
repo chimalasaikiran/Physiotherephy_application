@@ -114,17 +114,7 @@ export const DeleteAccountScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(
-                insets.top,
-                Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 16
-              ) + 8,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.headerIconButton}

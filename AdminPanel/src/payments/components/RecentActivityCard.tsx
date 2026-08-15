@@ -5,9 +5,15 @@ import {
   CalendarDays,
   RotateCcw,
 } from 'lucide-react';
-import { RECENT_ACTIVITY_DATA } from '../mockData';
+import type { RecentActivityItem } from '../types';
 
-export const RecentActivityCard: React.FC = () => {
+interface RecentActivityCardProps {
+  activities?: RecentActivityItem[];
+}
+
+export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({
+  activities = [],
+}) => {
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs flex flex-col justify-between h-full">
       <div>
@@ -24,46 +30,52 @@ export const RecentActivityCard: React.FC = () => {
           {/* Vertical connecting line */}
           <div className="absolute top-3 bottom-3 left-4 w-px bg-slate-100 -z-0" />
 
-          {RECENT_ACTIVITY_DATA.map((item) => (
-            <div key={item.id} className="flex items-start space-x-3.5 relative z-10">
-              {/* Icon Status Badge */}
-              <div className="shrink-0 mt-0.5">
-                {item.type === 'success' && (
-                  <div className="w-8 h-8 rounded-full bg-cyan-50 border border-cyan-100 flex items-center justify-center text-cyan-600">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                )}
-                {item.type === 'failed' && (
-                  <div className="w-8 h-8 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
-                    <AlertCircle className="w-4 h-4" />
-                  </div>
-                )}
-                {item.type === 'scheduled' && (
-                  <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
-                    <CalendarDays className="w-4 h-4" />
-                  </div>
-                )}
-                {item.type === 'refund' && (
-                  <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                    <RotateCcw className="w-4 h-4" />
-                  </div>
-                )}
-              </div>
+          {activities.length === 0 ? (
+            <div className="py-6 text-center text-xs text-slate-400 font-medium">
+              No recent payment activity
+            </div>
+          ) : (
+            activities.map((item) => (
+              <div key={item.id} className="flex items-start space-x-3.5 relative z-10">
+                {/* Icon Status Badge */}
+                <div className="shrink-0 mt-0.5">
+                  {item.type === 'success' && (
+                    <div className="w-8 h-8 rounded-full bg-cyan-50 border border-cyan-100 flex items-center justify-center text-cyan-600">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                  )}
+                  {item.type === 'failed' && (
+                    <div className="w-8 h-8 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-500">
+                      <AlertCircle className="w-4 h-4" />
+                    </div>
+                  )}
+                  {item.type === 'scheduled' && (
+                    <div className="w-8 h-8 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                      <CalendarDays className="w-4 h-4" />
+                    </div>
+                  )}
+                  {item.type === 'refund' && (
+                    <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                      <RotateCcw className="w-4 h-4" />
+                    </div>
+                  )}
+                </div>
 
-              {/* Text content */}
-              <div className="min-w-0 flex-1">
-                <h4 className="text-sm font-bold text-slate-900 leading-tight">
-                  {item.title}
-                </h4>
-                <p className="text-xs text-slate-500 font-medium mt-0.5 leading-relaxed">
-                  {item.description}
-                </p>
-                <div className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mt-1">
-                  {item.timeAgo}
+                {/* Text content */}
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-bold text-slate-900 leading-tight">
+                    {item.title}
+                  </h4>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5 leading-relaxed">
+                    {item.description}
+                  </p>
+                  <div className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mt-1">
+                    {item.timeAgo}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
 
@@ -76,3 +88,4 @@ export const RecentActivityCard: React.FC = () => {
     </div>
   );
 };
+

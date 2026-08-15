@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   Search,
   ChevronLeft,
@@ -8,14 +9,14 @@ import {
   Calendar,
   Activity,
   MessageSquare,
-  FileText,
   Filter,
   CheckCircle2,
-  Clock,
   AlertCircle,
-  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import type { Therapist } from './types';
+import { db } from '@/auth/config/firebase';
+import { collection, onSnapshot } from 'firebase/firestore';
 
 export interface AssignedPatient {
   id: string;
@@ -23,163 +24,21 @@ export interface AssignedPatient {
   name: string;
   avatarUrl?: string;
   condition: string;
-  weekProgress: string; // e.g. "Wk 4 of 12"
-  progressPercent: number; // e.g. 65
-  nextSession: {
-    time: string; // e.g. "Today, 4:30 PM"
-    location: string; // e.g. "Room 204B"
-  };
+  sessionsCount: number;
+  latestAppointmentDate: string;
+  latestAppointmentTime: string;
+  appointmentStatus: string;
+  paymentStatus: 'Paid' | 'Pending';
   status: 'On Track' | 'Recovering' | 'Needs Review';
 }
-
-const MOCK_ASSIGNED_PATIENTS: AssignedPatient[] = [
-  {
-    id: 'p-1',
-    patientId: 'PT-2091',
-    name: 'Sanya Malhotra',
-    avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-    condition: 'Post-Op Hip Rehab',
-    weekProgress: 'Wk 4 of 12',
-    progressPercent: 65,
-    nextSession: {
-      time: 'Today, 4:30 PM',
-      location: 'Room 204B',
-    },
-    status: 'On Track',
-  },
-  {
-    id: 'p-2',
-    patientId: 'PT-1822',
-    name: 'Arjun Kapoor',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    condition: 'ACL Recovery',
-    weekProgress: 'Wk 8 of 16',
-    progressPercent: 42,
-    nextSession: {
-      time: 'Tomorrow, 10:00 AM',
-      location: 'Virtual Consultation',
-    },
-    status: 'Recovering',
-  },
-  {
-    id: 'p-3',
-    patientId: 'PT-3310',
-    name: 'Rohan Mehta',
-    avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-    condition: 'Rotator Cuff Tear',
-    weekProgress: 'Wk 2 of 20',
-    progressPercent: 12,
-    nextSession: {
-      time: '24 Oct, 11:30 AM',
-      location: 'Room 105A',
-    },
-    status: 'Needs Review',
-  },
-  {
-    id: 'p-4',
-    patientId: 'PT-4421',
-    name: 'Priyanshu Singh',
-    avatarUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
-    condition: 'Lumber Disc Bulge',
-    weekProgress: 'Wk 10 of 12',
-    progressPercent: 92,
-    nextSession: {
-      time: '25 Oct, 09:00 AM',
-      location: 'Room 202C',
-    },
-    status: 'On Track',
-  },
-  {
-    id: 'p-5',
-    patientId: 'PT-5102',
-    name: 'Ananya Sharma',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    condition: 'Cervical Spondylosis',
-    weekProgress: 'Wk 3 of 8',
-    progressPercent: 38,
-    nextSession: {
-      time: '26 Oct, 02:15 PM',
-      location: 'Room 108',
-    },
-    status: 'Recovering',
-  },
-  {
-    id: 'p-6',
-    patientId: 'PT-6391',
-    name: 'Vikram Patel',
-    avatarUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80',
-    condition: 'Tennis Elbow Rehab',
-    weekProgress: 'Wk 6 of 6',
-    progressPercent: 98,
-    nextSession: {
-      time: '27 Oct, 11:00 AM',
-      location: 'Room 204B',
-    },
-    status: 'On Track',
-  },
-  {
-    id: 'p-7',
-    patientId: 'PT-7210',
-    name: 'Kavita Joshi',
-    avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
-    condition: 'Ankle Ligament Tear',
-    weekProgress: 'Wk 1 of 10',
-    progressPercent: 15,
-    nextSession: {
-      time: '28 Oct, 03:30 PM',
-      location: 'Virtual Consultation',
-    },
-    status: 'Needs Review',
-  },
-  {
-    id: 'p-8',
-    patientId: 'PT-8834',
-    name: 'Devendra Roy',
-    avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
-    condition: 'Post Knee Replacement',
-    weekProgress: 'Wk 7 of 14',
-    progressPercent: 55,
-    nextSession: {
-      time: '29 Oct, 10:30 AM',
-      location: 'Room 301',
-    },
-    status: 'Recovering',
-  },
-  {
-    id: 'p-9',
-    patientId: 'PT-9125',
-    name: 'Meera Deshmukh',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-    condition: 'Frozen Shoulder Therapy',
-    weekProgress: 'Wk 5 of 12',
-    progressPercent: 78,
-    nextSession: {
-      time: '30 Oct, 04:00 PM',
-      location: 'Room 204B',
-    },
-    status: 'On Track',
-  },
-  {
-    id: 'p-10',
-    patientId: 'PT-1044',
-    name: 'Rajesh Verma',
-    avatarUrl: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80',
-    condition: 'Sciatica Nerve Pain',
-    weekProgress: 'Wk 4 of 8',
-    progressPercent: 48,
-    nextSession: {
-      time: '31 Oct, 09:30 AM',
-      location: 'Room 105A',
-    },
-    status: 'Recovering',
-  },
-];
 
 interface AssignedPatientsTabProps {
   therapist?: Therapist | null;
 }
 
-export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
+export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = ({ therapist }) => {
+  const [assignedPatients, setAssignedPatients] = useState<AssignedPatient[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'On Track' | 'Recovering' | 'Needs Review'>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
@@ -187,16 +46,103 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const itemsPerPage = 10;
-  const totalCount = 42; // Matches Figma "Showing 1-10 of 42 patients"
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3000);
   };
 
+  // Subscribe to real-time Firestore appointments for this therapist
+  useEffect(() => {
+    if (!db) {
+      setIsLoading(false);
+      return;
+    }
+
+    const apptsRef = collection(db, 'appointments');
+    const unsub = onSnapshot(
+      apptsRef,
+      (snapshot) => {
+        const rawAppts: any[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+
+          const matchesTherapist =
+            !therapist ||
+            (therapist.id && (data.doctorId === therapist.id || data.therapistId === therapist.id)) ||
+            (therapist.name && (
+              (data.doctorName && data.doctorName.toLowerCase().includes(therapist.name.toLowerCase())) ||
+              (data.therapistName && data.therapistName.toLowerCase().includes(therapist.name.toLowerCase()))
+            ));
+
+          if (matchesTherapist) {
+            rawAppts.push({ id: docSnap.id, ...data });
+          }
+        });
+
+        const patientMap: Record<string, AssignedPatient> = {};
+
+        rawAppts.forEach((appt) => {
+          const pId = appt.userId || appt.patientId || appt.userName || 'patient_demo';
+          const pName = appt.userName || appt.patientName || 'Patient';
+          const pAvatar =
+            appt.patientAvatar ||
+            appt.userAvatar ||
+            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150';
+          const condition =
+            appt.serviceTitle || appt.patientSubtitle || appt.patientCondition || 'Physiotherapy Session';
+          const apptDate = appt.fullDate || appt.dateLabel || appt.date || 'Scheduled Date';
+          const apptTime = appt.timeSlot || appt.time || '10:00 AM';
+          const apptStatus = appt.status || 'Upcoming';
+          const payStatus: 'Paid' | 'Pending' =
+            appt.paymentStatus || (appt.paymentMode === 'online' ? 'Paid' : 'Pending');
+
+          if (!patientMap[pId]) {
+            patientMap[pId] = {
+              id: pId,
+              patientId: appt.patientId || pId.substring(0, 8),
+              name: pName,
+              avatarUrl: pAvatar,
+              condition,
+              sessionsCount: 1,
+              latestAppointmentDate: apptDate,
+              latestAppointmentTime: apptTime,
+              appointmentStatus: apptStatus,
+              paymentStatus: payStatus,
+              status:
+                apptStatus === 'Cancelled'
+                  ? 'Needs Review'
+                  : apptStatus === 'Completed'
+                  ? 'Recovering'
+                  : 'On Track',
+            };
+          } else {
+            patientMap[pId].sessionsCount += 1;
+            if (apptDate >= patientMap[pId].latestAppointmentDate) {
+              patientMap[pId].latestAppointmentDate = apptDate;
+              patientMap[pId].latestAppointmentTime = apptTime;
+              patientMap[pId].appointmentStatus = apptStatus;
+              patientMap[pId].paymentStatus = payStatus;
+              if (apptStatus === 'Cancelled') patientMap[pId].status = 'Needs Review';
+            }
+          }
+        });
+
+        setAssignedPatients(Object.values(patientMap));
+        setIsLoading(false);
+      },
+      (err) => {
+        console.warn('Real-time assigned patients listener error:', err);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, [therapist?.id, therapist?.name]);
+
   // Filtered List
   const filteredPatients = useMemo(() => {
-    return MOCK_ASSIGNED_PATIENTS.filter((p) => {
+    return assignedPatients.filter((p) => {
       const matchesSearch =
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.patientId.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -206,7 +152,9 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
 
       return matchesSearch && matchesStatus;
     });
-  }, [searchQuery, statusFilter]);
+  }, [assignedPatients, searchQuery, statusFilter]);
+
+  const totalCount = filteredPatients.length;
 
   // Paginated List
   const paginatedPatients = useMemo(() => {
@@ -214,7 +162,7 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
     return filteredPatients.slice(start, start + itemsPerPage);
   }, [filteredPatients, currentPage]);
 
-  const totalPages = Math.ceil(totalCount / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(totalCount / itemsPerPage));
 
   const getStatusBadge = (status: AssignedPatient['status']) => {
     switch (status) {
@@ -244,14 +192,17 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
     }
   };
 
-  const getProgressBarColor = (status: AssignedPatient['status']) => {
+  const getApptStatusBadge = (status: string) => {
     switch (status) {
-      case 'On Track':
-        return 'bg-teal-500';
-      case 'Recovering':
-        return 'bg-blue-600';
-      case 'Needs Review':
-        return 'bg-rose-500';
+      case 'Completed':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'Cancelled':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'Confirmed':
+      case 'Upcoming':
+        return 'bg-sky-50 text-sky-700 border-sky-200';
+      default:
+        return 'bg-amber-50 text-amber-700 border-amber-200';
     }
   };
 
@@ -305,19 +256,29 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
       <div className="bg-white rounded-3xl border border-slate-100 shadow-2xs overflow-hidden">
         {/* Desktop & Tablet Data Table */}
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[768px]">
+          <table className="w-full text-left border-collapse min-w-[850px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
                 <th className="py-4 px-6 font-extrabold">Patient Name</th>
-                <th className="py-4 px-6 font-extrabold">Condition</th>
-                <th className="py-4 px-6 font-extrabold">Recovery Progress</th>
-                <th className="py-4 px-6 font-extrabold">Next Session</th>
-                <th className="py-4 px-6 font-extrabold">Status</th>
+                <th className="py-4 px-6 font-extrabold">Session Details</th>
+                <th className="py-4 px-6 font-extrabold text-center">Sessions</th>
+                <th className="py-4 px-6 font-extrabold">Payment</th>
+                <th className="py-4 px-6 font-extrabold">Appointment Status</th>
+                <th className="py-4 px-6 font-extrabold">Recovery Status</th>
                 <th className="py-4 px-6 text-right font-extrabold">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm font-medium text-slate-700">
-              {paginatedPatients.length > 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      <span className="text-sm font-bold text-slate-600">Loading assigned patients from Firestore...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedPatients.length > 0 ? (
                 paginatedPatients.map((patient) => (
                   <tr
                     key={patient.id}
@@ -326,17 +287,7 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
                     {/* Patient Name + ID + Avatar */}
                     <td className="py-4 px-6">
                       <div className="flex items-center space-x-3.5">
-                        {patient.avatarUrl ? (
-                          <img
-                            src={patient.avatarUrl}
-                            alt={patient.name}
-                            className="w-10 h-10 rounded-full object-cover border border-slate-100 flex-shrink-0 shadow-2xs"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs flex-shrink-0">
-                            {patient.name.charAt(0)}
-                          </div>
-                        )}
+                        <InitialsAvatar name={patient.name} className="w-10 h-10 text-xs font-bold shrink-0" />
                         <div>
                           <h4 className="font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">
                             {patient.name}
@@ -348,46 +299,48 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
                       </div>
                     </td>
 
-                    {/* Condition + Week */}
+                    {/* Session Details + Date & Time */}
                     <td className="py-4 px-6">
                       <div>
                         <p className="font-bold text-slate-900">{patient.condition}</p>
-                        <span className="text-xs font-extrabold text-blue-600/90 block mt-0.5">
-                          {patient.weekProgress}
+                        <span className="text-xs font-semibold text-slate-500 block mt-0.5">
+                          {patient.latestAppointmentDate} • {patient.latestAppointmentTime}
                         </span>
                       </div>
                     </td>
 
-                    {/* Recovery Progress Bar + Percentage */}
-                    <td className="py-4 px-6 min-w-[170px]">
-                      <div className="flex items-center space-x-3">
-                        <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${getProgressBarColor(
-                              patient.status
-                            )}`}
-                            style={{ width: `${patient.progressPercent}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-extrabold text-teal-600 flex-shrink-0 w-8 text-right">
-                          {patient.progressPercent}%
-                        </span>
-                      </div>
+                    {/* Sessions Count */}
+                    <td className="py-4 px-6 text-center">
+                      <span className="inline-flex items-center px-2.5 py-1 bg-slate-100 text-slate-800 rounded-xl text-xs font-extrabold">
+                        {patient.sessionsCount} {patient.sessionsCount === 1 ? 'Session' : 'Sessions'}
+                      </span>
                     </td>
 
-                    {/* Next Session + Location */}
+                    {/* Payment Status */}
                     <td className="py-4 px-6">
-                      <div>
-                        <p className="font-extrabold text-slate-900">
-                          {patient.nextSession.time}
-                        </p>
-                        <span className="text-xs font-medium text-slate-400 block mt-0.5">
-                          {patient.nextSession.location}
-                        </span>
-                      </div>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${
+                          patient.paymentStatus === 'Paid'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}
+                      >
+                        {patient.paymentStatus}
+                      </span>
                     </td>
 
-                    {/* Status Pill Badge */}
+                    {/* Appointment Status */}
+                    <td className="py-4 px-6">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${getApptStatusBadge(
+                          patient.appointmentStatus
+                        )}`}
+                      >
+                        {patient.appointmentStatus}
+                      </span>
+                    </td>
+
+                    {/* Recovery Status */}
                     <td className="py-4 px-6">{getStatusBadge(patient.status)}</td>
 
                     {/* Actions Menu */}
@@ -414,12 +367,12 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
                             <button
                               onClick={() => {
                                 setActiveMenuId(null);
-                                triggerToast(`Opening profile for ${patient.name}`);
+                                triggerToast(`Viewing details for ${patient.name}`);
                               }}
                               className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
                             >
                               <User className="w-3.5 h-3.5 text-blue-600" />
-                              <span>View Profile</span>
+                              <span>View Patient</span>
                             </button>
                             <button
                               onClick={() => {
@@ -459,12 +412,12 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <div className="space-y-2">
                       <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
                       <p className="text-sm font-bold text-slate-600">No assigned patients found</p>
                       <p className="text-xs text-slate-400">
-                        Try adjusting your search query or filter options.
+                        Patients who book appointments with {therapist?.name || 'this therapist'} will automatically appear here.
                       </p>
                     </div>
                   </td>
@@ -477,7 +430,7 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = () => {
         {/* Footer Pagination Bar */}
         <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white">
           <p className="text-xs font-semibold text-slate-500">
-            Showing <span className="font-bold text-slate-800">1-10</span> of{' '}
+            Showing <span className="font-bold text-slate-800">{totalCount > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}-{Math.min(currentPage * itemsPerPage, totalCount)}</span> of{' '}
             <span className="font-bold text-slate-800">{totalCount}</span> patients
           </p>
 

@@ -18,15 +18,23 @@ import {
   Video,
   Activity,
 } from 'lucide-react';
+import type { Patient } from './types';
+import type { ProgramAssignment } from '@/programs/types';
 
 interface ProgramsTabProps {
   patientName?: string;
   therapistName?: string;
+  patient?: Patient;
+  assignedPrograms?: ProgramAssignment[];
+  onAssignProgram?: (programId: string, programTitle: string, totalWeeks?: number) => Promise<any>;
 }
 
 export const ProgramsTab: React.FC<ProgramsTabProps> = ({
   patientName = 'Sanya Malhotra',
   therapistName = 'Dr. Ananya Iyer',
+  patient,
+  assignedPrograms = [],
+  onAssignProgram,
 }) => {
   // Toast notification feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
   Filter,
@@ -22,6 +22,15 @@ import { PopularTemplatesWidget } from './components/PopularTemplatesWidget';
 import { CreateProgramModal } from './components/CreateProgramModal';
 import { ProgramDetailsModal } from './components/ProgramDetailsModal';
 import { ProgramDetailsPage } from './ProgramDetailsPage';
+import {
+  subscribeToPrograms,
+  createProgram as createProgramInFirestore,
+  deleteProgram as deleteProgramInFirestore,
+  toggleProgramStatus as toggleProgramStatusInFirestore,
+  duplicateProgram as duplicateProgramInFirestore,
+  archiveProgram as archiveProgramInFirestore,
+  calculateProgramDashboardStats,
+} from '@/services/programService';
 
 interface ProgramsPageProps {
   onNavigateToCreateProgram?: () => void;
@@ -32,7 +41,8 @@ export const ProgramsPage: React.FC<ProgramsPageProps> = ({
   onNavigateToCreateProgram,
   onNavigateToProgramDetails,
 }) => {
-  const [programs, setPrograms] = useState<Program[]>(INITIAL_PROGRAMS);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -44,6 +54,22 @@ export const ProgramsPage: React.FC<ProgramsPageProps> = ({
   const [selectedProgram, setSelectedProgram] = useState<Program | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [showDetailedPage, setShowDetailedPage] = useState(false);
+
+  // Real-time Firestore Listener
+  useEffect(() => {
+    const unsub = subscribeToPrograms(
+      (data) => {
+        setPrograms(data);
+        setLoading(false);
+      },
+      (err) => {
+        console.warn('Firestore real-time subscription error:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, []);
 
   const handleOpenProgramDetails = (p: Program) => {
     setSelectedProgram(p);
@@ -62,11 +88,11 @@ export const ProgramsPage: React.FC<ProgramsPageProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Metric Stats Calculation
-  const totalTemplates = programs.length + 42; // Base offset to mirror Figma ~48
-  const publishedCount = programs.filter((p) => p.status === 'published').length + 23;
-  const draftCount = programs.filter((p) => p.status === 'draft').length + 10;
-  const totalPatientsAssigned = '1,248';
+  // Metric Stats Calculation directly from Firestore data
+  const { totalTemplates, publishedCount, draftCount, totalPatientsAssigned } = useMemo(
+    () => calculateProgramDashboardStats(programs),
+    [programs]
+  );
 
   // Filtered Programs
   const filteredPrograms = useMemo(() => {
@@ -99,78 +125,69 @@ export const ProgramsPage: React.FC<ProgramsPageProps> = ({
     });
   }, [programs, searchQuery, statusFilter, typeFilter, bodyAreaFilter]);
 
-  // Handlers
-  const handleCreateProgram = (newProg: Omit<Program, 'id'>) => {
-    const created: Program = {
-      ...newProg,
-      id: `prog-${Date.now()}`,
-    };
-    setPrograms([created, ...programs]);
-    showToast(`Program "${created.title}" successfully created!`);
-  };
-
-  const handleQuickAction = (action: string, program?: Program) => {
-    const targetTitle = program ? `"${program.title}"` : 'selected program';
-    switch (action) {
-      case 'duplicate':
-        if (program) {
-          const duplicated: Program = {
-            ...program,
-            id: `prog-${Date.now()}`,
-            title: `${program.title} (Copy)`,
-            status: 'draft',
-            activePatients: '--',
-            completionRate: 'N/A',
-          };
-          setPrograms([duplicated, ...programs]);
-          showToast(`Duplicated ${targetTitle}`);
-        } else {
-          showToast('Duplicated first program in list');
-        }
-        break;
-      case 'share':
-        showToast(`Share link for ${targetTitle} copied to clipboard!`);
-        break;
-      case 'archive':
-        if (program) {
-          setPrograms(
-            programs.map((p) => (p.id === program.id ? { ...p, status: 'archived' } : p))
-          );
-          showToast(`Archived ${targetTitle}`);
-        } else {
-          showToast(`Archived selected program`);
-        }
-        break;
-      case 'delete':
-        if (program) {
-          setPrograms(programs.filter((p) => p.id !== program.id));
-          showToast(`Deleted ${targetTitle}`);
-        } else {
-          showToast(`Deleted selected program`);
-        }
-        break;
-      default:
-        break;
+  // Handlers connected to Firestore
+  const handleCreateProgram = async (newProg: Omit<Program, 'id'>) => {
+    try {
+      await createProgramInFirestore(newProg);
+      showToast(`Program "${newProg.title}" successfully created!`);
+    } catch (err: any) {
+      console.error('Error creating program:', err);
+      showToast(`Error creating program: ${err.message || 'Unknown error'}`);
     }
   };
 
-  const handleToggleStatus = (programId: string) => {
-    setPrograms((prev) =>
-      prev.map((p) => {
-        if (p.id === programId) {
-          const nextStatus = p.status === 'published' ? 'draft' : 'published';
-          showToast(`Updated status of "${p.title}" to ${nextStatus}`);
-          return { ...p, status: nextStatus };
-        }
-        return p;
-      })
-    );
-    if (selectedProgram && selectedProgram.id === programId) {
-      setSelectedProgram((prev) =>
-        prev ? { ...prev, status: prev.status === 'published' ? 'draft' : 'published' } : null
-      );
+  const handleQuickAction = async (action: string, program?: Program) => {
+    const targetProgram = program || (filteredPrograms.length > 0 ? filteredPrograms[0] : null);
+    const targetTitle = targetProgram ? `"${targetProgram.title}"` : 'selected program';
+
+    try {
+      switch (action) {
+        case 'duplicate':
+          if (targetProgram) {
+            await duplicateProgramInFirestore(targetProgram);
+            showToast(`Duplicated ${targetTitle}`);
+          }
+          break;
+        case 'share':
+          showToast(`Share link for ${targetTitle} copied to clipboard!`);
+          break;
+        case 'archive':
+          if (targetProgram) {
+            await archiveProgramInFirestore(targetProgram.id);
+            showToast(`Archived ${targetTitle}`);
+          }
+          break;
+        case 'delete':
+          if (targetProgram) {
+            await deleteProgramInFirestore(targetProgram.id);
+            showToast(`Deleted ${targetTitle}`);
+          }
+          break;
+        default:
+          break;
+      }
+    } catch (err: any) {
+      console.error(`Error performing action ${action}:`, err);
+      showToast(`Action failed: ${err.message || 'Unknown error'}`);
     }
   };
+
+  const handleToggleStatus = async (programId: string) => {
+    const target = programs.find((p) => p.id === programId);
+    if (!target) return;
+    try {
+      await toggleProgramStatusInFirestore(programId, target.status);
+      const nextStatus = target.status === 'published' ? 'draft' : 'published';
+      showToast(`Updated status of "${target.title}" to ${nextStatus}`);
+      if (selectedProgram && selectedProgram.id === programId) {
+        setSelectedProgram((prev) => (prev ? { ...prev, status: nextStatus } : null));
+      }
+    } catch (err: any) {
+      console.error('Error toggling program status:', err);
+      showToast(`Failed to update status`);
+    }
+  };
+
 
   if (showDetailedPage) {
     return (

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,9 +10,11 @@ import {
   TextInput,
   Alert,
   Platform,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
@@ -21,11 +23,14 @@ import { Strings } from '@/constants';
 import {
   BookingItem,
   BookingStatus,
-  InitialBookingsData,
 } from '@/constants';
 import { BookingCard } from '@/features/appointments';
 import { BookingDetailsModal } from '@/features/appointments';
+import { fetchUserAppointmentsViaBackend } from '@/api/appointmentApi';
+import { mobileRealtimeSync } from '@/api/syncApi';
+import { auth } from '@/config/firebase';
 import { BottomNavBar, TabKey } from '@/components';
+
 
 type FilterTab = 'All' | 'Upcoming' | 'Completed' | 'Cancelled';
 
@@ -39,12 +44,122 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({ hideBottomNa
   const params = useLocalSearchParams<{ bookingId?: string }>();
   const insets = useSafeAreaInsets();
 
-  const [bookings, setBookings] = useState<BookingItem[]>(InitialBookingsData);
+  const [bookings, setBookings] = useState<BookingItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('bookings');
+
+  const mapAppointments = useCallback((rawList: any[]): BookingItem[] => {
+    return rawList.map((b: any) => {
+      const parseStatus = (statusStr?: string): BookingStatus => {
+        if (!statusStr) return 'Upcoming';
+        const s = statusStr.trim().toLowerCase();
+        if (s === 'completed' || s === 'finished' || s === 'done') return 'Completed';
+        if (s === 'cancelled' || s === 'canceled' || s === 'rejected') return 'Cancelled';
+        return 'Upcoming';
+      };
+
+      const finalStatus = parseStatus(b.status);
+
+      const parsePaymentStatus = (): 'Paid Online' | 'Pending (Pay at Clinic)' | 'Refunded' => {
+        if (finalStatus === 'Cancelled' || b.paymentStatus === 'Refunded' || b.paymentStatus === 'REFUNDED') {
+          return 'Refunded';
+        }
+        if (
+          b.paymentMode === 'clinic' ||
+          b.paymentOption === 'Pay at Clinic' ||
+          b.paymentStatus === 'Pending' ||
+          b.paymentStatus === 'PENDING' ||
+          b.paymentStatus === 'Pending / Pay at Clinic'
+        ) {
+          return 'Pending (Pay at Clinic)';
+        }
+        return 'Paid Online';
+      };
+
+      return {
+        id: b.id,
+        doctorId: b.doctorId || 'doc_1',
+        doctorName: b.doctorName || b.therapistName || 'Dr. Priya Sharma',
+        doctorSpecialty: b.doctorSpecialty || b.specialty || 'Senior Physiotherapist',
+        serviceTitle: b.serviceTitle || b.service || 'Physiotherapy Consultation',
+        dateStr: b.dateStr || b.fullDate || 'Oct 24, 2026',
+        fullDate: b.fullDate || b.dateStr || 'Oct 24, 2026',
+        timeSlot: b.timeSlot || '04:30 PM',
+        status: finalStatus,
+        location: b.location || b.clinicAddress || 'Indiranagar, Bengaluru',
+        placeTitle: b.placeTitle || b.clinicName || 'Clinic Visit',
+        placeType: b.placeType || 'clinic',
+        avatarImageName: (b.avatarImageName as any) || 'doctor_ananya',
+        avatarBg: b.avatarBg || '#EFF6FF',
+        feeStr: b.feeStr || (b.numericFee ? `₹${b.numericFee}` : '₹800'),
+        numericFee: typeof b.numericFee === 'number' ? b.numericFee : 800,
+        paymentMode: b.paymentMode || 'online',
+        paymentStatus: parsePaymentStatus(),
+        paymentMethodName: b.paymentMethodName || b.paymentMethod || 'Online Payment',
+        transactionId: b.transactionId || b.id,
+      };
+    });
+  }, []);
+
+  // Fetch User Appointments via Backend API & Firestore Real-Time Listener on Focus
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      const currentUser = auth.currentUser;
+      const userId = currentUser?.uid || 'user_demo_123';
+
+      // 1. Initial backend fetch
+      fetchUserAppointmentsViaBackend(userId)
+        .then((apiBookings) => {
+          if (isMounted && apiBookings && apiBookings.length > 0) {
+            setBookings(mapAppointments(apiBookings));
+          }
+        })
+        .finally(() => {
+          if (isMounted) setLoading(false);
+        });
+
+      // 2. Real-Time Firestore Listener filtered by User UID
+      const unsub = mobileRealtimeSync.subscribeUserCollection<any[]>('appointments', userId, (fsAppointments) => {
+        if (isMounted) {
+          if (Array.isArray(fsAppointments)) {
+            setBookings(mapAppointments(fsAppointments));
+          }
+          setLoading(false);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        unsub();
+      };
+    }, [mapAppointments])
+  );
+
+  // Handle pull-to-refresh
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    const currentUser = auth.currentUser;
+    const userId = currentUser?.uid || 'user_demo_123';
+
+    try {
+      const apiBookings = await fetchUserAppointmentsViaBackend(userId);
+      if (apiBookings && apiBookings.length > 0) {
+        setBookings(mapAppointments(apiBookings));
+      }
+    } catch (err) {
+      console.warn('Error refreshing bookings:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [mapAppointments]);
+
+
 
   // Filtered List based on active tab and search query
   const filteredBookings = useMemo(() => {
@@ -161,15 +276,7 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({ hideBottomNa
 
       <View style={styles.container}>
         {/* Header Bar */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-              height: 56 + Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -244,12 +351,27 @@ export const MyBookingsScreen: React.FC<MyBookingsScreenProps> = ({ hideBottomNa
         {/* Main List & Empty State Content */}
         <ScrollView
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[Colors.primary]}
+              tintColor={Colors.primary}
+            />
+          }
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: 100 + Math.max(insets.bottom, 12) },
           ]}
         >
-          {filteredBookings.length > 0 ? (
+          {loading && bookings.length === 0 ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+              <Text style={{ marginTop: 12, color: Colors.textSecondary, fontSize: 14 }}>
+                Loading your appointments...
+              </Text>
+            </View>
+          ) : filteredBookings.length > 0 ? (
             <View style={styles.listContainer}>
               {filteredBookings.map((item) => (
                 <BookingCard

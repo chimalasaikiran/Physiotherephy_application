@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   Calendar,
   Clock,
@@ -19,7 +20,10 @@ import {
   Share2,
 } from 'lucide-react';
 
+import { updateScheduleStatusRecord } from '@/services/scheduleService';
+
 interface AppointmentDetailsPageProps {
+  appointment?: any;
   onBack?: () => void;
   onNavigateToPatient?: () => void;
   onNavigateToTherapist?: () => void;
@@ -27,6 +31,7 @@ interface AppointmentDetailsPageProps {
 }
 
 export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
+  appointment,
   onBack,
   onNavigateToPatient,
   onNavigateToTherapist,
@@ -34,15 +39,24 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
 }) => {
 
   // Local states for interactivity
-  const [sessionStatus, setSessionStatus] = useState<'Confirmed' | 'In Progress' | 'Completed' | 'Cancelled'>('Confirmed');
+  const [sessionStatus, setSessionStatus] = useState<'Confirmed' | 'In Progress' | 'Completed' | 'Cancelled'>(
+    appointment?.status || 'Confirmed'
+  );
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Form states for reschedule
-  const [newDate, setNewDate] = useState('2024-10-24');
+  const [newDate, setNewDate] = useState('2026-08-20');
   const [newTime, setNewTime] = useState('02:00 PM');
+
+  // Sync sessionStatus with appointment prop changes
+  useEffect(() => {
+    if (appointment?.status) {
+      setSessionStatus(appointment.status);
+    }
+  }, [appointment]);
 
   // Trigger toast helper
   const triggerToast = (msg: string) => {
@@ -52,13 +66,19 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
     }, 3500);
   };
 
-  const handleStartSession = () => {
+  const handleStartSession = async () => {
+    let newSt: 'In Progress' | 'Completed' = 'In Progress';
     if (sessionStatus === 'Confirmed') {
+      newSt = 'In Progress';
       setSessionStatus('In Progress');
       triggerToast('Session started successfully! Timer is now active.');
     } else if (sessionStatus === 'In Progress') {
+      newSt = 'Completed';
       setSessionStatus('Completed');
       triggerToast('Session completed and recorded into patient history.');
+    }
+    if (appointment?.id) {
+      await updateScheduleStatusRecord(appointment.id, newSt);
     }
   };
 
@@ -68,10 +88,19 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
     triggerToast(`Appointment rescheduled to ${newDate} at ${newTime}`);
   };
 
-  const handleCancelConfirm = () => {
+  const handleCancelConfirm = async () => {
     setSessionStatus('Cancelled');
     setShowCancelModal(false);
     triggerToast('Appointment has been cancelled.');
+    if (appointment?.id) {
+      await updateScheduleStatusRecord(
+        appointment.id,
+        'Cancelled',
+        appointment.therapistId || appointment.doctorId,
+        appointment.fullDate,
+        appointment.timeSlot || appointment.time
+      );
+    }
   };
 
   const handleDownloadPdf = () => {
@@ -79,7 +108,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
   };
 
   const handleSendReminder = () => {
-    triggerToast('SMS and Email reminder sent to Sanya Malhotra (+919876543210)');
+    triggerToast(`SMS and Email reminder sent to ${appointment?.patientName || 'Patient'}`);
   };
 
   return (
@@ -203,7 +232,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                   ID
                 </span>
                 <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  #APT-1024
+                  {appointment ? `#APT-${appointment.id.slice(0, 6)}` : '#APT-1024'}
                 </span>
               </div>
               <div>
@@ -211,7 +240,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                   SESSION TYPE
                 </span>
                 <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  Clinic Visit
+                  {appointment?.type || 'Clinic Visit'}
                 </span>
               </div>
               <div>
@@ -219,7 +248,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                   DATE
                 </span>
                 <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  Wednesday, Oct 23, 2024
+                  {appointment?.date || 'Wednesday, Oct 23, 2024'}
                 </span>
               </div>
               <div>
@@ -227,7 +256,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                   TIME
                 </span>
                 <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  01:45 PM
+                  {appointment?.time || '01:45 PM'}
                 </span>
               </div>
               <div>
@@ -235,7 +264,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                   DURATION
                 </span>
                 <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  45 mins
+                  {appointment?.sessionDuration || '45 mins'}
                 </span>
               </div>
               <div>
@@ -264,10 +293,9 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300"
-                alt="Sanya Malhotra"
-                className="w-20 h-20 rounded-2xl object-cover shadow-sm shrink-0 border border-slate-100"
+              <InitialsAvatar
+                name={appointment?.patientName || 'Sanya Malhotra'}
+                className="w-20 h-20 text-xl font-bold shrink-0 shadow-sm border border-slate-100"
               />
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-4 gap-x-6 flex-1 w-full">
@@ -276,7 +304,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                     NAME
                   </span>
                   <span className="text-base font-extrabold text-slate-900 block leading-tight">
-                    Sanya Malhotra
+                    {appointment?.patientName || 'Sanya Malhotra'}
                   </span>
                 </div>
 
@@ -285,7 +313,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                     CONDITION
                   </span>
                   <span className="text-sm font-bold text-slate-900 block leading-tight">
-                    ACL Recovery
+                    {appointment?.patientSubtitle || 'ACL Recovery'}
                   </span>
                 </div>
 
@@ -336,17 +364,16 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                 </div>
 
                 <div className="flex items-center gap-4 mb-6">
-                  <img
-                    src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=300"
-                    alt="Dr. Arjun Mehta"
-                    className="w-14 h-14 rounded-full object-cover border border-slate-100 shadow-2xs shrink-0"
+                  <InitialsAvatar
+                    name={appointment?.therapistName || 'Dr. Arjun Mehta'}
+                    className="w-14 h-14 text-base font-bold shrink-0 border border-slate-100 shadow-2xs"
                   />
                   <div>
                     <h3 className="text-base font-extrabold text-slate-900">
-                      Dr. Arjun Mehta
+                      {appointment?.therapistName || 'Dr. Arjun Mehta'}
                     </h3>
                     <p className="text-xs font-medium text-slate-500">
-                      Orthopedic Physiotherapy
+                      {appointment?.therapistSubtitle || 'Orthopedic Physiotherapy'}
                     </p>
                   </div>
                 </div>

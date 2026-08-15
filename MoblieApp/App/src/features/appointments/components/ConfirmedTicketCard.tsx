@@ -6,6 +6,8 @@ import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { AppointmentConfirmedData, PaymentTransactionData } from '@/constants';
 
+import { TherapistAvatar } from '@/components';
+
 interface ConfirmedTicketCardProps {
   transactionData: PaymentTransactionData;
 }
@@ -15,18 +17,6 @@ export const ConfirmedTicketCard: React.FC<ConfirmedTicketCardProps> = ({
 }) => {
   const { doctor, serviceTitle, fullDate, timeSlot, placeTitle, placeAddress, paymentMode, feeStr, bookingId } =
     transactionData;
-
-  const getImageSource = (name: string) => {
-    switch (name) {
-      case 'doctor_ananya':
-        return require('../../../assets/images/doctor_ananya.png');
-      case 'care_team_doctor':
-        return require('../../../assets/images/care_team_doctor.png');
-      case 'doctor_arjun':
-      default:
-        return require('../../../assets/images/doctor_arjun.png');
-    }
-  };
 
   return (
     <View style={styles.card}>
@@ -55,10 +45,11 @@ export const ConfirmedTicketCard: React.FC<ConfirmedTicketCardProps> = ({
 
       {/* Doctor & Service Overview */}
       <View style={styles.doctorRow}>
-        <Image
-          source={getImageSource(doctor.imageName)}
-          style={styles.doctorAvatar}
-          resizeMode="cover"
+        <TherapistAvatar
+          name={doctor.name}
+          avatarUrl={(doctor as any).avatarUrl}
+          imageName={doctor.imageName}
+          size={54}
         />
 
         <View style={styles.doctorTextGroup}>

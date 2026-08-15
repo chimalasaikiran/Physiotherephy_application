@@ -32,6 +32,7 @@ import { InviteUserModal } from './components/InviteUserModal';
 import { IntegrationsTab } from './components/IntegrationsTab';
 import { SecurityTab } from './components/SecurityTab';
 import { AuditLogsTab } from './components/AuditLogsTab';
+import { RolesAccessTab } from './components/RolesAccessTab';
 
 interface SettingsPageProps {
   initialSubTab?:
@@ -626,45 +627,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ initialSubTab = 'Sec
 
       {/* Users & Roles Sub Tab Content */}
       {activeSubTab === 'Users & Roles' && (
-        <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-xs space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xl font-bold text-slate-900">Users & Roles</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Manage therapist accounts, admin privileges, and staff access roles.
-              </p>
-            </div>
-            <button
-              onClick={() => setIsInviteUserOpen(true)}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-all cursor-pointer"
-            >
-              + Invite New Member
-            </button>
-          </div>
-
-          <div className="divide-y divide-slate-100 pt-2">
-            {[
-              { name: 'Dr. Sarah Chen', role: 'Clinic Administrator', email: 'dr.chen@onemedical.com', status: 'Active' },
-              { name: 'Marcus Holloway', role: 'Senior Therapist', email: 'm.holloway@onemedical.com', status: 'Active' },
-              { name: 'Jane Doe', role: 'Physiotherapist', email: 'jane.doe@onemedical.com', status: 'Pending' },
-            ].map((usr, i) => (
-              <div key={i} className="py-4 flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-extrabold text-xs flex items-center justify-center">
-                    {usr.name.split(' ').map(n=>n[0]).join('')}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">{usr.name}</h4>
-                    <p className="text-xs text-slate-500">{usr.email} • <span className="font-semibold text-slate-700">{usr.role}</span></p>
-                  </div>
-                </div>
-                <span className={`px-3 py-1 text-xs font-bold rounded-full ${usr.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60' : 'bg-amber-50 text-amber-600 border border-amber-200/60'}`}>
-                  {usr.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <RolesAccessTab onShowToast={showToast} />
       )}
 
       {/* Notifications Sub Tab Content */}

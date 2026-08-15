@@ -1,12 +1,13 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useAuth } from '../context/AuthContext';
 import type { LoginFormValues, LoginFormErrors } from '../types/auth';
-import { AUTH_CONFIG } from '../config/authConfig';
 
 export const useLoginForm = (onSuccess?: (values: LoginFormValues) => void) => {
+  const { login, loginWithGoogle } = useAuth();
   const [values, setValues] = useState<LoginFormValues>({
-    email: AUTH_CONFIG.emailPlaceholder,
-    password: '••••••••',
-    rememberMe: false,
+    email: '',
+    password: '',
+    rememberMe: true,
   });
 
   const [errors, setErrors] = useState<LoginFormErrors>({});
@@ -40,8 +41,6 @@ export const useLoginForm = (onSuccess?: (values: LoginFormValues) => void) => {
 
     if (!values.password) {
       newErrors.password = 'Password is required';
-    } else if (values.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
     }
 
     setErrors(newErrors);
@@ -54,20 +53,31 @@ export const useLoginForm = (onSuccess?: (values: LoginFormValues) => void) => {
 
     setIsSubmitting(true);
     try {
-      // Simulate API sign-in delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await login(values.email, values.password);
       if (onSuccess) {
         onSuccess(values);
       }
-    } catch {
-      setErrors({ general: 'Authentication failed. Please check your credentials.' });
+    } catch (err: any) {
+      console.error('Sign-in error:', err);
+      setErrors({ general: err.message || 'Authentication failed. Please verify credentials.' });
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleGoogleSignIn = () => {
-    console.log('Initiated Google OAuth Sign-in');
+  const handleGoogleSignIn = async () => {
+    setIsSubmitting(true);
+    try {
+      await loginWithGoogle();
+      if (onSuccess) {
+        onSuccess(values);
+      }
+    } catch (err: any) {
+      console.error('Google Sign-in Error:', err);
+      setErrors({ general: err.message || 'Google sign-in failed.' });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return {

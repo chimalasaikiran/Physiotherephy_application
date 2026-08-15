@@ -194,15 +194,7 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ hideBo
 
       <View style={styles.container}>
         {/* Header Bar */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-              height: 56 + Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 4,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}

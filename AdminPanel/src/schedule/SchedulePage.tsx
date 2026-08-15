@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ScheduleHeader } from './components/ScheduleHeader';
 import { ScheduleMetrics } from './components/ScheduleMetrics';
 import { ScheduleFilters } from './components/ScheduleFilters';
@@ -6,81 +6,13 @@ import { AppointmentsTable, type AppointmentItem } from './components/Appointmen
 import { TodaysTimeline } from './components/TodaysTimeline';
 import { PendingConfirmations } from './components/PendingConfirmations';
 import { QuickActions } from './components/QuickActions';
+import { subscribeToSchedules, updateScheduleStatusRecord } from '@/services/scheduleService';
 
 interface SchedulePageProps {
   onOpenNewAppointment?: () => void;
   onOpenSessionDetails?: (appointment?: AppointmentItem) => void;
-  onOpenReschedule?: () => void;
+  onOpenReschedule?: (appointment?: AppointmentItem) => void;
 }
-
-const MOCK_APPOINTMENTS: AppointmentItem[] = [
-
-  {
-    id: 'apt-1',
-    patientName: 'Arjun Reddy',
-    patientSubtitle: 'Post-Op Recovery',
-    patientAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
-    therapistName: 'Dr. PriyaSharma',
-    therapistSubtitle: 'Physiotherapist',
-    therapistAvatar: 'https://images.unsplash.com/photo-1594824813566-88855ce78c00?auto=format&fit=crop&q=80&w=150',
-    type: 'Clinic Visit',
-    date: 'Oct 24, 2023',
-    time: '10:30 AM',
-    status: 'Confirmed',
-  },
-  {
-    id: 'apt-2',
-    patientName: 'Sanya Malhotra',
-    patientSubtitle: 'Anxiety Therapy',
-    patientAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=150',
-    therapistName: 'Dr. Rohan Gupta',
-    therapistSubtitle: 'Psychologist',
-    therapistAvatar: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=150',
-    type: 'Online',
-    date: 'Oct 24, 2023',
-    time: '12:00 PM',
-    status: 'Scheduled',
-  },
-  {
-    id: 'apt-3',
-    patientName: 'Kabir Singh',
-    patientSubtitle: 'Sports injury',
-    patientAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150',
-    therapistName: 'Dr. Ananya Roy',
-    therapistSubtitle: 'Sports Med',
-    therapistAvatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=150',
-    type: 'Home Visit',
-    date: 'Oct 23, 2023',
-    time: '04:45 PM',
-    status: 'Completed',
-  },
-  {
-    id: 'apt-4',
-    patientName: 'Ishaan Kapoor',
-    patientSubtitle: 'Knee Rehab',
-    patientAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=150',
-    therapistName: 'Dr. PriyaSharma',
-    therapistSubtitle: 'Physiotherapist',
-    therapistAvatar: 'https://images.unsplash.com/photo-1594824813566-88855ce78c00?auto=format&fit=crop&q=80&w=150',
-    type: 'Clinic Visit',
-    date: 'Oct 24, 2023',
-    time: '02:30 PM',
-    status: 'Confirmed',
-  },
-  {
-    id: 'apt-5',
-    patientName: 'Ananya Verma',
-    patientSubtitle: 'Post-Op Knee',
-    patientAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=150',
-    therapistName: 'Dr. Ananya Roy',
-    therapistSubtitle: 'Sports Med',
-    therapistAvatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=150',
-    type: 'Clinic Visit',
-    date: 'Oct 25, 2023',
-    time: '11:15 AM',
-    status: 'Scheduled',
-  },
-];
 
 export const SchedulePage: React.FC<SchedulePageProps> = ({
   onOpenNewAppointment,
@@ -93,26 +25,66 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
   const [selectedType, setSelectedType] = useState('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [currentPage, setCurrentPage] = useState(1);
+  const [appointmentsList, setAppointmentsList] = useState<AppointmentItem[]>([]);
+  const [rawDocsList, setRawDocsList] = useState<any[]>([]);
+
+  // Subscribe to real-time Firestore schedules
+  useEffect(() => {
+    const unsub = subscribeToSchedules((appts, rawDocs) => {
+      setAppointmentsList(appts);
+      setRawDocsList(rawDocs);
+    });
+    return () => unsub();
+  }, []);
 
   // Filtering appointments based on search & filter dropdowns
   const filteredAppointments = useMemo(() => {
-    return MOCK_APPOINTMENTS.filter((item) => {
+    return appointmentsList.filter((item) => {
       const matchesSearch =
         item.patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.patientSubtitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
         item.therapistName.toLowerCase().includes(searchTerm.toLowerCase());
 
       const matchesTherapist =
-        selectedTherapist === 'All' || item.therapistName === selectedTherapist;
+        selectedTherapist === 'All' || item.therapistName.toLowerCase().includes(selectedTherapist.toLowerCase());
 
       const matchesType = selectedType === 'All' || item.type === selectedType;
 
       return matchesSearch && matchesTherapist && matchesType;
     });
-  }, [searchTerm, selectedTherapist, selectedType]);
+  }, [appointmentsList, searchTerm, selectedTherapist, selectedType]);
+
+  const handleStatusChange = async (item: AppointmentItem, newStatus: AppointmentItem['status']) => {
+    try {
+      const raw = rawDocsList.find((r) => r.id === item.id);
+      await updateScheduleStatusRecord(
+        item.id,
+        newStatus,
+        raw?.therapistId || raw?.doctorId,
+        raw?.fullDate,
+        raw?.timeSlot || raw?.time
+      );
+    } catch (e) {
+      console.error('Failed to update status in Firestore:', e);
+    }
+  };
 
   const handleExportSchedule = () => {
-    alert('Exporting schedule data as CSV / Excel sheet...');
+    if (filteredAppointments.length === 0) {
+      alert('No schedules to export.');
+      return;
+    }
+    const headers = 'ID,Patient,Therapist,Type,Date,Time,Status\n';
+    const rows = filteredAppointments
+      .map((a) => `"${a.id}","${a.patientName}","${a.therapistName}","${a.type}","${a.date}","${a.time}","${a.status}"`)
+      .join('\n');
+    const blob = new Blob([headers + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `schedule_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -124,7 +96,7 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
       />
 
       {/* Metric Cards Row */}
-      <ScheduleMetrics />
+      <ScheduleMetrics appointments={appointmentsList} />
 
       {/* Main Section Grid: Left Main Area + Right Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
@@ -148,27 +120,34 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
           <AppointmentsTable
             appointments={filteredAppointments}
             currentPage={currentPage}
-            totalPages={1}
-            totalResults={36}
+            totalPages={Math.ceil(filteredAppointments.length / 10) || 1}
+            totalResults={filteredAppointments.length}
             onPageChange={setCurrentPage}
             viewMode={viewMode}
             onSelectSession={(item) => onOpenSessionDetails?.(item)}
+            onStatusChange={handleStatusChange}
           />
         </div>
 
         {/* Right Sidebar Column (1 Span on Desktop) */}
         <div className="space-y-6">
           {/* Today's Timeline */}
-          <TodaysTimeline />
+          <TodaysTimeline
+            appointments={appointmentsList}
+            onSelectSession={(item) => onOpenSessionDetails?.(item)}
+          />
 
           {/* Pending Confirmations */}
-          <PendingConfirmations />
+          <PendingConfirmations
+            appointments={appointmentsList}
+            onConfirm={(item) => handleStatusChange(item, 'Confirmed')}
+          />
 
           {/* Quick Actions Grid */}
           <QuickActions
             onSendReminder={() => alert('Sending appointment reminders to pending patients...')}
-            onReschedule={() => onOpenReschedule ? onOpenReschedule() : alert('Opening reschedule manager...')}
-            onPrintLedger={() => alert('Printing schedule ledger...')}
+            onReschedule={() => onOpenReschedule ? onOpenReschedule(filteredAppointments[0]) : alert('Opening reschedule manager...')}
+            onPrintLedger={() => handleExportSchedule()}
             onBulkNotes={() => alert('Opening bulk clinical notes...')}
           />
         </div>
@@ -178,3 +157,4 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
 };
 
 export default SchedulePage;
+

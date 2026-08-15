@@ -1,4 +1,5 @@
 import React from 'react';
+import type { AppointmentItem } from './AppointmentsTable';
 
 interface MetricItem {
   id: string;
@@ -9,39 +10,48 @@ interface MetricItem {
   description: string;
 }
 
-export const ScheduleMetrics: React.FC = () => {
+interface ScheduleMetricsProps {
+  appointments?: AppointmentItem[];
+}
+
+export const ScheduleMetrics: React.FC<ScheduleMetricsProps> = ({ appointments = [] }) => {
+  const activeCount = appointments.filter((a) => a.status !== 'Cancelled').length;
+  const pendingCount = appointments.filter((a) => a.status === 'Scheduled').length;
+  const completedCount = appointments.filter((a) => a.status === 'Completed').length;
+  const cancelledCount = appointments.filter((a) => a.status === 'Cancelled').length;
+
   const metrics: MetricItem[] = [
     {
       id: 'today',
-      label: "TODAY'S APPOINTMENTS",
-      badgeText: '+12%',
+      label: "ACTIVE APPOINTMENTS",
+      badgeText: `${activeCount > 0 ? '+' : ''}${activeCount}`,
       badgeType: 'positive',
-      value: 36,
-      description: 'Scheduled for next 24 hours',
+      value: activeCount,
+      description: 'Active scheduled sessions',
     },
     {
       id: 'pending',
       label: 'PENDING CONFIRMATIONS',
-      badgeText: '-4%',
-      badgeType: 'negative',
-      value: 12,
+      badgeText: String(pendingCount),
+      badgeType: pendingCount > 0 ? 'negative' : 'neutral',
+      value: pendingCount,
       description: 'Requires immediate action',
     },
     {
       id: 'completed',
       label: 'COMPLETED SESSIONS',
-      badgeText: '+24%',
+      badgeText: String(completedCount),
       badgeType: 'positive',
-      value: 842,
-      description: 'Month to date performance',
+      value: completedCount,
+      description: 'Successfully finished sessions',
     },
     {
       id: 'cancelled',
       label: 'CANCELLED SESSIONS',
-      badgeText: 'Stable',
+      badgeText: String(cancelledCount),
       badgeType: 'neutral',
-      value: 18,
-      description: 'Last 7 days average',
+      value: cancelledCount,
+      description: 'Cancelled appointments',
     },
   ];
 
@@ -82,3 +92,4 @@ export const ScheduleMetrics: React.FC = () => {
     </div>
   );
 };
+

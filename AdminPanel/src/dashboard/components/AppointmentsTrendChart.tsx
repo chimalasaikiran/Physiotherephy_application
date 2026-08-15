@@ -1,16 +1,27 @@
 import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import type { AppointmentTrendPoint } from '../useDashboardData';
 
-export const AppointmentsTrendChart: React.FC = () => {
+interface AppointmentsTrendChartProps {
+  getAppointmentsTrend?: (timeframe: string) => AppointmentTrendPoint[];
+}
+
+export const AppointmentsTrendChart: React.FC<AppointmentsTrendChartProps> = ({
+  getAppointmentsTrend,
+}) => {
   const [timeframe, setTimeframe] = useState('Last 30 Days');
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
-  const data = [
-    { label: 'WK 1', value: 7, count: 70 },
-    { label: 'WK 2', value: 14, count: 140 },
-    { label: 'WK 3', value: 28, count: 280 },
-    { label: 'WK 4', value: 31, count: 310 },
-  ];
+  const rawData = getAppointmentsTrend ? getAppointmentsTrend(timeframe) : [];
+
+  const data = rawData.length > 0
+    ? rawData
+    : [
+        { label: 'WK 1', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
+        { label: 'WK 2', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
+        { label: 'WK 3', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
+        { label: 'WK 4', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
+      ];
 
   // SVG dimensions
   const viewBoxWidth = 400;
@@ -23,12 +34,14 @@ export const AppointmentsTrendChart: React.FC = () => {
   const chartWidth = viewBoxWidth - paddingLeft - paddingRight;
   const chartHeight = viewBoxHeight - paddingTop - paddingBottom;
 
-  const yMax = 40;
+  const maxCount = Math.max(5, ...data.map((d) => d.count));
+  const yMax = Math.ceil(maxCount * 1.25);
 
   // Calculate points for SVG path
   const points = data.map((d, index) => {
-    const x = paddingLeft + (index / (data.length - 1)) * chartWidth;
-    const y = paddingTop + chartHeight - (d.value / yMax) * chartHeight;
+    const denominator = data.length > 1 ? data.length - 1 : 1;
+    const x = paddingLeft + (index / denominator) * chartWidth;
+    const y = paddingTop + chartHeight - (d.count / yMax) * chartHeight;
     return { x, y, ...d };
   });
 
@@ -43,8 +56,13 @@ export const AppointmentsTrendChart: React.FC = () => {
     return `${acc} C ${cp1x},${cp1y} ${cp2x},${cp2y} ${point.x},${point.y}`;
   }, '');
 
-  // Area path (close line to bottom edge for gradient fill)
-  const areaPath = `${dPath} L ${points[points.length - 1].x},${paddingTop + chartHeight} L ${points[0].x},${paddingTop + chartHeight} Z`;
+  // Area path
+  const areaPath = points.length > 0
+    ? `${dPath} L ${points[points.length - 1].x},${paddingTop + chartHeight} L ${points[0].x},${paddingTop + chartHeight} Z`
+    : '';
+
+  const yStep = Math.ceil(yMax / 4);
+  const yAxisValues = [0, yStep, yStep * 2, yStep * 3, yStep * 4];
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex flex-col justify-between h-full">
@@ -83,8 +101,8 @@ export const AppointmentsTrendChart: React.FC = () => {
           </defs>
 
           {/* Y Axis Grid Lines */}
-          {[0, 10, 20, 30, 40].map((val) => {
-            const y = paddingTop + chartHeight - (val / yMax) * chartHeight;
+          {yAxisValues.map((val) => {
+            const y = paddingTop + chartHeight - (val / (yStep * 4 || 1)) * chartHeight;
             return (
               <g key={val}>
                 <line
@@ -109,16 +127,18 @@ export const AppointmentsTrendChart: React.FC = () => {
           })}
 
           {/* Area Gradient Fill */}
-          <path d={areaPath} fill="url(#blueGradient)" />
+          {areaPath && <path d={areaPath} fill="url(#blueGradient)" />}
 
           {/* Trend Line */}
-          <path
-            d={dPath}
-            fill="none"
-            stroke="#1D4ED8"
-            strokeWidth="3"
-            strokeLinecap="round"
-          />
+          {dPath && (
+            <path
+              d={dPath}
+              fill="none"
+              stroke="#1D4ED8"
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+          )}
 
           {/* Data Points */}
           {points.map((pt, idx) => (
@@ -148,16 +168,21 @@ export const AppointmentsTrendChart: React.FC = () => {
         </svg>
 
         {/* Hover Tooltip Overlay */}
-        {hoveredPoint !== null && (
+        {hoveredPoint !== null && points[hoveredPoint] && (
           <div
-            className="absolute bg-slate-900 text-white text-xs px-2.5 py-1 rounded-md shadow-lg pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-150"
+            className="absolute bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-150 whitespace-nowrap z-20"
             style={{
               left: `${(points[hoveredPoint].x / viewBoxWidth) * 100}%`,
               top: `${(points[hoveredPoint].y / viewBoxHeight) * 100 - 10}%`,
             }}
           >
-            <span className="font-semibold">{points[hoveredPoint].label}:</span>{' '}
-            {points[hoveredPoint].count} Appointments
+            <div className="font-bold border-b border-slate-700 pb-1 mb-1">{points[hoveredPoint].label}</div>
+            <div>Total: {points[hoveredPoint].count}</div>
+            <div className="text-[10px] text-emerald-300">Completed: {points[hoveredPoint].completed}</div>
+            <div className="text-[10px] text-blue-300">Scheduled: {points[hoveredPoint].scheduled}</div>
+            {points[hoveredPoint].cancelled > 0 && (
+              <div className="text-[10px] text-rose-300">Cancelled: {points[hoveredPoint].cancelled}</div>
+            )}
           </div>
         )}
       </div>

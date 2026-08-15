@@ -127,17 +127,7 @@ export const SavedSpecialistsScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(
-                insets.top,
-                Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 16
-              ) + 8,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.headerIconButton}
@@ -318,7 +308,15 @@ export const SavedSpecialistsScreen: React.FC = () => {
                         onPress={() =>
                           router.push({
                             pathname: '/therapist-details' as any,
-                            params: { doctorId: item.doctorId },
+                            params: {
+                              doctorId: item.doctorId,
+                              doctorName: item.name,
+                              doctorSpecialty: item.specialty,
+                              doctorClinic: item.clinic,
+                              doctorExperience: item.experience,
+                              doctorRating: String(item.rating),
+                              doctorImageName: item.imageName,
+                            },
                           })
                         }
                       >
@@ -331,7 +329,15 @@ export const SavedSpecialistsScreen: React.FC = () => {
                         onPress={() =>
                           router.push({
                             pathname: '/select-date-time' as any,
-                            params: { doctorId: item.doctorId },
+                            params: {
+                              doctorId: item.doctorId,
+                              doctorName: item.name,
+                              doctorSpecialty: item.specialty,
+                              doctorClinic: item.clinic,
+                              doctorExperience: item.experience,
+                              doctorRating: String(item.rating),
+                              doctorImageName: item.imageName,
+                            },
                           })
                         }
                       >

@@ -19,8 +19,11 @@ export interface MedicalService {
   id: string;
   title: string;
   description: string;
-  imageKey: string;
+  imageKey?: string;
   category?: string;
+  iconName?: string;
+  startingFee?: string;
+  numericFee?: number;
 }
 
 export interface ServiceCardProps {
@@ -45,26 +48,35 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
     }).start();
   }, [isSelected, scaleAnim]);
 
-  const getImageSource = (key: string) => {
-    switch (key) {
+  const getImageSource = (key?: string, id?: string) => {
+    const targetKey = key || id || '';
+    switch (targetKey) {
       case 'service_back_pain':
+      case 'back_pain':
         return require('../../../assets/images/service_back_pain.png');
       case 'service_neck_pain':
+      case 'neck_pain':
         return require('../../../assets/images/service_neck_pain.png');
       case 'service_sports_injury':
+      case 'sports_injury':
         return require('../../../assets/images/service_sports_injury.png');
       case 'service_post_surgery':
+      case 'post_surgery':
         return require('../../../assets/images/service_post_surgery.png');
       case 'service_knee_pain':
+      case 'knee_pain':
         return require('../../../assets/images/service_knee_pain.png');
       case 'service_home_visit':
+      case 'home_visit':
         return require('../../../assets/images/service_home_visit.png');
       case 'service_online_consult':
+      case 'online_consult':
         return require('../../../assets/images/service_online_consult.png');
       default:
         return require('../../../assets/images/service_back_pain.png');
     }
   };
+
 
   return (
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
@@ -89,7 +101,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
         {/* Image Container */}
         <View style={styles.imageContainer}>
           <Image
-            source={getImageSource(service.imageKey)}
+            source={getImageSource(service.imageKey, service.id)}
             style={styles.serviceImage}
             resizeMode="cover"
           />

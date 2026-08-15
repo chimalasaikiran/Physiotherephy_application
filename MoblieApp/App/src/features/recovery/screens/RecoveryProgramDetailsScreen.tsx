@@ -11,19 +11,92 @@ import {
   Alert,
   Platform,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
 
+import {
+  subscribeToAssignment,
+  subscribeToPatientAssignments,
+  MobileProgram,
+  MobileProgramAssignment,
+  MobileProgramWeek,
+  MobileExercise,
+  getDefaultWeeksForProgram,
+} from '@/api/programService';
+import { useAuth } from '@/context/AuthContext';
+
 export const RecoveryProgramDetailsScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ assignmentId?: string }>();
+  const assignmentId = params.assignmentId;
+  const { user } = useAuth();
+
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('recovery');
+  const [assignment, setAssignment] = useState<MobileProgramAssignment | null>(null);
+  const [assignmentLoading, setAssignmentLoading] = useState(true);
+  const [expandedWeekNum, setExpandedWeekNum] = useState<number>(1);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    let unsub = () => {};
+
+    if (assignmentId) {
+      unsub = subscribeToAssignment(
+        assignmentId,
+        (data) => {
+          if (isMounted) {
+            setAssignment(data);
+            if (data?.currentWeek) setExpandedWeekNum(data.currentWeek);
+            setAssignmentLoading(false);
+          }
+        },
+        (err) => {
+          console.warn('[RecoveryProgramDetails] assignment subscription error:', err);
+          if (isMounted) setAssignmentLoading(false);
+        }
+      );
+    } else if (user?.uid) {
+      unsub = subscribeToPatientAssignments(user.uid, (assignments) => {
+        if (isMounted) {
+          if (assignments.length > 0) {
+            setAssignment(assignments[0]);
+            if (assignments[0]?.currentWeek) setExpandedWeekNum(assignments[0].currentWeek);
+          }
+          setAssignmentLoading(false);
+        }
+      });
+    } else {
+      setAssignmentLoading(false);
+    }
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, [assignmentId, user?.uid]);
+
+  const programDetails = assignment?.programDetails;
+  const programTitle = assignment?.programTitle || programDetails?.title || 'Assigned Recovery Program';
+  const doctorName = programDetails?.doctorName || 'Dr. Ananya Sharma';
+  const description = programDetails?.description || `Personalized rehabilitation protocol assigned for ${assignment?.patientCondition || 'recovery'}.`;
+  const currentWeek = assignment?.currentWeek || 1;
+  const totalWeeks = assignment?.totalWeeks || programDetails?.weeks?.length || 8;
+  const progressPercent = assignment?.progressPercent || 0;
+  const completedSessions = assignment?.completedSessions || 0;
+  const totalSessions = assignment?.totalSessions || 16;
+  const completedExercises = assignment?.completedExercises || [];
+
+  const weeksList: MobileProgramWeek[] = programDetails?.weeks && programDetails.weeks.length > 0
+    ? programDetails.weeks
+    : getDefaultWeeksForProgram(programTitle, `${totalWeeks} Weeks`);
 
   const data = Strings.recoveryProgramDetails;
 
@@ -45,11 +118,15 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: 'Check out my Lower Back Rehabilitation program on ONE MEDICAL!',
+        message: `Check out my ${programTitle} on ONE MEDICAL!`,
       });
     } catch (error) {
-      Alert.alert('Share', 'Sharing Lower Back Rehabilitation Program details');
+      Alert.alert('Share', `Sharing ${programTitle} details`);
     }
+  };
+
+  const toggleWeekExpand = (weekNum: number) => {
+    setExpandedWeekNum((prev) => (prev === weekNum ? 0 : weekNum));
   };
 
   return (
@@ -58,18 +135,7 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop:
-                Math.max(
-                  insets.top,
-                  Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 16
-                ) + 4,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -79,7 +145,9 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={22} color="#051A3E" />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>{data.headerTitle}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {programTitle}
+          </Text>
 
           <TouchableOpacity
             activeOpacity={0.7}
@@ -99,312 +167,275 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
             { paddingBottom: 110 + Math.max(insets.bottom, 12) },
           ]}
         >
-          {/* CARD 1: CURRENT PROGRAM HERO CARD */}
-          <View style={styles.cardContainer}>
-            {/* Anatomical Graphic Box */}
-            <View style={styles.anatomicalBox}>
-              <Text style={styles.anatomicalTopHeader}>
-                {data.anatomical.header}
-              </Text>
-              
-              {/* Image Graphic */}
-              <View style={styles.imageWrapper}>
-                <Image
-                  source={require('../../../assets/images/spine_anatomy_focus.png')}
-                  style={styles.spineAnatomyImage}
-                  resizeMode="contain"
-                />
-
-                {/* Annotation Badges overlay */}
-                <View style={[styles.annotationBadge, { top: 35, left: 8 }]}>
-                  <Text style={styles.annotationText}>Lumbar Vertebrae (L3)</Text>
-                </View>
-                <View style={[styles.annotationBadge, { top: 35, right: 8 }]}>
-                  <Text style={styles.annotationText}>Erector Spinae Muscles</Text>
-                </View>
-                <View style={[styles.annotationBadge, { top: 80, left: 12 }]}>
-                  <Text style={styles.annotationText}>Intervertebral Disc</Text>
-                </View>
-                <View style={[styles.annotationBadge, { top: 85, right: 16 }]}>
-                  <Text style={styles.annotationText}>Sacrum</Text>
-                </View>
-                <View style={[styles.annotationBadge, { top: 125, right: 12 }]}>
-                  <Text style={styles.annotationText}>Quadratus Lumborum</Text>
-                </View>
-              </View>
-
-              {/* Anatomical Text Box */}
-              <View style={styles.anatomicalContent}>
-                <Text style={styles.anatomicalTitle}>
-                  {data.anatomical.title}
-                </Text>
-                <Text style={styles.anatomicalFocus}>
-                  {data.anatomical.anatomicalFocus}
-                </Text>
-                <Text style={styles.anatomicalDescription}>
-                  {data.anatomical.focusDescription}
-                </Text>
-
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() =>
-                    Alert.alert(
-                      'Spine & Lower Back Exercises',
-                      '1. Cat-Cow Stretch\n2. Pelvic Tilts\n3. Bird-Dog Movement\n4. Glute Bridges\n5. Lumbar Rotation'
-                    )
-                  }
-                  style={styles.viewExercisesBtn}
-                >
-                  <Text style={styles.viewExercisesText}>
-                    {data.anatomical.viewExercises}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          {assignmentLoading ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="large" color="#003D9B" />
+              <Text style={styles.loadingText}>Loading configured program details...</Text>
             </View>
-
-            {/* Current Program Tag */}
-            <Text style={styles.currentProgramBadge}>
-              {data.currentProgramBadge}
-            </Text>
-
-            {/* Program Title */}
-            <Text style={styles.programTitle}>
-              Lower Back{'\n'}Rehabilitation
-            </Text>
-
-            {/* Doctor Info */}
-            <View style={styles.doctorRow}>
-              <View style={styles.doctorAvatarCircle}>
-                <Ionicons name="person" size={16} color="#0284C7" />
-              </View>
-              <Text style={styles.doctorName}>{data.doctorName}</Text>
-            </View>
-
-            {/* Session Header Row */}
-            <View style={styles.sessionHeaderRow}>
-              <Text style={styles.weekProgressText}>{data.weekProgress}</Text>
-              <Text style={styles.sessionsProgressText}>
-                {data.sessionsProgress}
-              </Text>
-            </View>
-
-            {/* Progress Bar */}
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: '75%' }]} />
-            </View>
-          </View>
-
-          {/* CARD 2: PROGRAM OVERVIEW CARD */}
-          <View style={styles.cardContainer}>
-            {/* Header with info icon */}
-            <View style={styles.overviewHeaderRow}>
-              <View style={styles.infoIconCircle}>
-                <Ionicons name="information-outline" size={20} color="#003D9B" />
-              </View>
-              <Text style={styles.overviewTitle}>{data.overview.title}</Text>
-            </View>
-
-            <Text style={styles.overviewGoal}>{data.overview.goal}</Text>
-
-            {/* 2x2 Details Grid */}
-            <View style={styles.gridContainer}>
-              {/* Box 1 */}
-              <View style={styles.gridBox}>
-                <Text style={styles.gridLabel}>
-                  {data.overview.completionLabel}
-                </Text>
-                <Text style={styles.gridValue}>
-                  {data.overview.completionValue}
-                </Text>
-              </View>
-
-              {/* Box 2 */}
-              <View style={styles.gridBox}>
-                <Text style={styles.gridLabel}>
-                  {data.overview.difficultyLabel}
-                </Text>
-                <Text style={[styles.gridValue, { color: '#0D9488' }]}>
-                  {data.overview.difficultyValue}
-                </Text>
-              </View>
-
-              {/* Box 3 */}
-              <View style={styles.gridBox}>
-                <Text style={styles.gridLabel}>
-                  {data.overview.frequencyLabel}
-                </Text>
-                <Text style={styles.gridValue}>
-                  {data.overview.frequencyValue}
-                </Text>
-              </View>
-
-              {/* Box 4 */}
-              <View style={styles.gridBox}>
-                <Text style={styles.gridLabel}>
-                  {data.overview.intensityLabel}
-                </Text>
-                <Text style={styles.gridValue}>
-                  {data.overview.intensityValue}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* CARD 3: TODAY'S SESSION CARD */}
-          <View style={styles.todaySessionCard}>
-            <View style={styles.todaySessionHeader}>
-              <Text style={styles.todaySessionTitle}>
-                {data.todaysSession.title}
-              </Text>
-              <View style={styles.activeBadgeTag}>
-                <Text style={styles.activeBadgeText}>
-                  {data.todaysSession.activeBadge}
-                </Text>
-              </View>
-            </View>
-
-            {/* Details with icons */}
-            <View style={styles.todayMetaRow}>
-              <View style={styles.todayMetaItem}>
-                <Ionicons name="barbell-outline" size={16} color="#FFFFFF" />
-                <Text style={styles.todayMetaText}>
-                  {data.todaysSession.exercisesCount}
-                </Text>
-              </View>
-
-              <View style={styles.todayMetaItem}>
-                <Ionicons name="time-outline" size={16} color="#FFFFFF" />
-                <Text style={styles.todayMetaText}>
-                  {data.todaysSession.duration}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.todayMetaRow}>
-              <View style={styles.todayMetaItem}>
-                <Ionicons name="flash-outline" size={16} color="#FFFFFF" />
-                <Text style={styles.todayMetaText}>
-                  {data.todaysSession.intensity}
-                </Text>
-              </View>
-            </View>
-
-            {/* Button */}
-            <TouchableOpacity
-              activeOpacity={0.88}
-              style={styles.startTodayBtn}
-              onPress={() => router.push('/today-session' as any)}
-            >
-              <Text style={styles.startTodayBtnText}>
-                {data.todaysSession.startButton}
-              </Text>
-              <Ionicons
-                name="play"
-                size={14}
-                color="#003D9B"
-                style={{ marginLeft: 6 }}
-              />
-            </TouchableOpacity>
-          </View>
-
-          {/* SECTION: RECOVERY ROADMAP */}
-          <View style={styles.roadmapSection}>
-            <Text style={styles.sectionHeaderTitle}>{data.roadmap.title}</Text>
-
-            <View style={styles.roadmapTimeline}>
-              {/* Item 1: Week 1: Fundamentals (Completed) */}
-              <View style={styles.roadmapRow}>
-                <View style={styles.timelineLeftColumn}>
-                  <View style={styles.completedCircle}>
-                    <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+          ) : (
+            <>
+              {/* CARD 1: ASSIGNED PROGRAM HERO CARD */}
+              <View style={styles.cardContainer}>
+                {/* Status Badge */}
+                <View style={styles.heroStatusRow}>
+                  <View style={styles.statusBadgePill}>
+                    <Ionicons name="checkmark-circle" size={14} color="#003D9B" style={{ marginRight: 4 }} />
+                    <Text style={styles.statusBadgeText}>
+                      {(assignment?.status || 'active').toUpperCase()}
+                    </Text>
                   </View>
-                  <View style={styles.verticalLine} />
+                  <Text style={styles.difficultyBadge}>
+                    {programDetails?.difficulty || 'Beginner'} Protocol
+                  </Text>
                 </View>
-                <View style={styles.timelineRightContent}>
-                  <Text style={styles.roadmapItemTitle}>
-                    Week 1: Fundamentals
+
+                {/* Program Title & Doctor */}
+                <Text style={styles.programTitle}>{programTitle}</Text>
+                <Text style={styles.programDescriptionText}>{description}</Text>
+
+                <View style={styles.doctorRow}>
+                  <Image
+                    source={require('../../../assets/images/doctor_ananya.png')}
+                    style={styles.doctorAvatarImage}
+                    resizeMode="cover"
+                  />
+                  <View>
+                    <Text style={styles.doctorName}>{doctorName}</Text>
+                    <Text style={styles.doctorSubtext}>Prescribing Physiotherapist</Text>
+                  </View>
+                </View>
+
+                {/* Progress Header Row */}
+                <View style={styles.sessionHeaderRow}>
+                  <Text style={styles.weekProgressText}>
+                    Week {currentWeek} of {totalWeeks}
                   </Text>
-                  <Text style={styles.roadmapItemDesc}>
-                    Core activation and basic flexibility work.
+                  <Text style={styles.sessionsProgressText}>
+                    {progressPercent}% Complete ({completedSessions}/{totalSessions} Sessions)
                   </Text>
+                </View>
+
+                {/* Progress Track */}
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${Math.max(progressPercent, 2)}%` },
+                    ]}
+                  />
                 </View>
               </View>
 
-              {/* Item 2: Week 2: Mobility Focus (Active In Progress) */}
-              <View style={styles.roadmapRow}>
-                <View style={styles.timelineLeftColumn}>
-                  <View style={styles.activeCircle}>
-                    <Ionicons name="hourglass-outline" size={16} color="#FFFFFF" />
+              {/* CARD 2: PROGRAM OVERVIEW & GOALS */}
+              <View style={styles.cardContainer}>
+                <View style={styles.overviewHeaderRow}>
+                  <View style={styles.infoIconCircle}>
+                    <Ionicons name="information-outline" size={20} color="#003D9B" />
                   </View>
-                  <View style={styles.verticalLine} />
+                  <Text style={styles.overviewTitle}>Program Overview</Text>
                 </View>
 
-                {/* Highlighted container for active week */}
-                <View style={[styles.timelineRightContent, styles.activeWeekCard]}>
-                  <Text style={styles.activeWeekTitle}>
-                    Week 2: Mobility Focus
-                  </Text>
-                  <Text style={styles.activeWeekDesc}>
-                    Improving range of motion in the lumbar spine.
-                  </Text>
-                  <View style={styles.inProgressBadge}>
-                    <Text style={styles.inProgressBadgeText}>IN PROGRESS</Text>
+                <Text style={styles.overviewGoal}>
+                  {programDetails?.targetCondition ? `Target Condition: ${programDetails.targetCondition}. ` : ''}
+                  Designed to restore range of motion, build core stability, and enable safe return to daily activities.
+                </Text>
+
+                {/* 2x2 Details Grid */}
+                <View style={styles.gridContainer}>
+                  <View style={styles.gridBox}>
+                    <Text style={styles.gridLabel}>Duration</Text>
+                    <Text style={styles.gridValue}>{programDetails?.duration || `${totalWeeks} Weeks`}</Text>
+                  </View>
+                  <View style={styles.gridBox}>
+                    <Text style={styles.gridLabel}>Difficulty</Text>
+                    <Text style={[styles.gridValue, { color: '#0D9488' }]}>
+                      {programDetails?.difficulty || 'Beginner'}
+                    </Text>
+                  </View>
+                  <View style={styles.gridBox}>
+                    <Text style={styles.gridLabel}>Target Area</Text>
+                    <Text style={styles.gridValue}>{programDetails?.bodyAreaTag || 'General Rehab'}</Text>
+                  </View>
+                  <View style={styles.gridBox}>
+                    <Text style={styles.gridLabel}>Total Exercises</Text>
+                    <Text style={styles.gridValue}>
+                      {weeksList.reduce((acc, w) => acc + (w.exercises?.length || 0), 0)} Prescribed
+                    </Text>
                   </View>
                 </View>
               </View>
 
-              {/* Item 3: Weeks 3-5: Strengthening (Locked) */}
-              <View style={styles.roadmapRow}>
-                <View style={styles.timelineLeftColumn}>
-                  <View style={styles.lockedCircle}>
-                    <Ionicons name="lock-closed-outline" size={16} color="#64748B" />
-                  </View>
-                  <View style={styles.verticalLine} />
-                </View>
-                <View style={styles.timelineRightContent}>
-                  <Text style={styles.roadmapItemTitle}>
-                    Weeks 3-5: Strengthening
-                  </Text>
-                  <Text style={styles.roadmapItemDesc}>
-                    Advanced core stability and functional loading.
-                  </Text>
+              {/* CARD 3: CONFIGURED WEEKS & EXERCISES */}
+              <View style={styles.weeksSectionContainer}>
+                <Text style={styles.sectionHeaderTitle}>Program Weeks & Prescribed Exercises</Text>
+                <Text style={styles.sectionSubtext}>
+                  Configured by {doctorName} in the Admin Panel
+                </Text>
+
+                <View style={styles.weeksList}>
+                  {weeksList.map((week) => {
+                    const isCurrentWeek = week.weekNumber === currentWeek;
+                    const isExpanded = expandedWeekNum === week.weekNumber;
+
+                    return (
+                      <View
+                        key={week.weekNumber}
+                        style={[
+                          styles.weekCard,
+                          isCurrentWeek && styles.activeWeekCardBorder,
+                        ]}
+                      >
+                        {/* Week Header Accordion */}
+                        <TouchableOpacity
+                          activeOpacity={0.88}
+                          onPress={() => toggleWeekExpand(week.weekNumber)}
+                          style={styles.weekCardHeader}
+                        >
+                          <View style={styles.weekBadgeAndTitle}>
+                            <View
+                              style={[
+                                styles.weekNumberCircle,
+                                isCurrentWeek && styles.activeWeekNumberCircle,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.weekNumberText,
+                                  isCurrentWeek && styles.activeWeekNumberText,
+                                ]}
+                              >
+                                {week.weekNumber}
+                              </Text>
+                            </View>
+
+                            <View style={styles.weekTitleGroup}>
+                              <View style={styles.weekTitleRow}>
+                                <Text style={styles.weekTitle}>Week {week.weekNumber}: {week.title}</Text>
+                                {isCurrentWeek && (
+                                  <View style={styles.currentWeekTag}>
+                                    <Text style={styles.currentWeekTagText}>CURRENT</Text>
+                                  </View>
+                                )}
+                              </View>
+                              <Text style={styles.weekFocusText}>Focus: {week.clinicalFocus || 'Rehabilitation'}</Text>
+                            </View>
+                          </View>
+
+                          <Ionicons
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={20}
+                            color="#64748B"
+                          />
+                        </TouchableOpacity>
+
+                        {/* Week Exercises (Expanded) */}
+                        {isExpanded && (
+                          <View style={styles.weekExpandedBody}>
+                            {week.description && (
+                              <Text style={styles.weekDescriptionText}>{week.description}</Text>
+                            )}
+
+                            <Text style={styles.exercisesSubtitle}>
+                              PRESCRIBED EXERCISES ({week.exercises?.length || 0})
+                            </Text>
+
+                            <View style={styles.exercisesStack}>
+                              {week.exercises?.map((ex, exIdx) => {
+                                const isDone = completedExercises.includes(ex.id) || completedExercises.includes(ex.name);
+
+                                return (
+                                  <View key={ex.id || exIdx} style={styles.exerciseItemCard}>
+                                    {/* Thumbnail Image */}
+                                    <Image
+                                      source={
+                                        ex.image
+                                          ? { uri: ex.image }
+                                          : require('../../../assets/images/exercise_pelvic_tilt.png')
+                                      }
+                                      style={styles.exerciseImage}
+                                      resizeMode="cover"
+                                    />
+
+                                    {/* Info Content */}
+                                    <View style={styles.exerciseInfoContent}>
+                                      <View style={styles.exerciseHeaderLine}>
+                                        <Text style={styles.exerciseNameText}>{ex.name}</Text>
+                                        {isDone && (
+                                          <View style={styles.completedBadge}>
+                                            <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
+                                            <Text style={styles.completedBadgeText}>DONE</Text>
+                                          </View>
+                                        )}
+                                      </View>
+
+                                      {/* Sets, Reps, Rest */}
+                                      <View style={styles.dosageRow}>
+                                        <Text style={styles.dosageTag}>
+                                          {ex.sets ? `${ex.sets} Sets` : ''} {ex.reps ? `× ${ex.reps}` : ''} {ex.duration ? `• ${ex.duration}` : ''}
+                                        </Text>
+                                        {ex.restTime && (
+                                          <Text style={styles.restTag}>Rest: {ex.restTime}</Text>
+                                        )}
+                                      </View>
+
+                                      {/* Instructions */}
+                                      {ex.instructions && (
+                                        <Text style={styles.instructionsText} numberOfLines={2}>
+                                          {ex.instructions}
+                                        </Text>
+                                      )}
+                                    </View>
+                                  </View>
+                                );
+                              })}
+                            </View>
+
+                            {/* Start Session CTA for Week */}
+                            {isCurrentWeek && (
+                              <TouchableOpacity
+                                activeOpacity={0.88}
+                                style={styles.startWeekSessionBtn}
+                                onPress={() =>
+                                  router.push({
+                                    pathname: '/active-session' as any,
+                                    params: {
+                                      exerciseIndex: '0',
+                                      assignmentId: assignment?.id,
+                                    },
+                                  })
+                                }
+                              >
+                                <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                                <Text style={styles.startWeekSessionBtnText}>Start Week {week.weekNumber} Session</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
                 </View>
               </View>
 
-              {/* Item 4: Week 6: Graduation (Trophy) */}
-              <View style={styles.roadmapRow}>
-                <View style={styles.timelineLeftColumn}>
-                  <View style={styles.trophyCircle}>
-                    <Ionicons name="trophy-outline" size={16} color="#FFFFFF" />
-                  </View>
+              {/* CARD 4: CLINICAL NOTES FROM DOCTOR */}
+              <View style={styles.doctorNoteCard}>
+                <View style={styles.noteHeaderRow}>
+                  <Image
+                    source={require('../../../assets/images/doctor_ananya.png')}
+                    style={styles.noteDoctorAvatar}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.noteTitle}>Note from {doctorName}</Text>
                 </View>
-                <View style={styles.timelineRightContent}>
-                  <Text style={[styles.roadmapItemTitle, { color: '#6D28D9' }]}>
-                    Week 6: Graduation
-                  </Text>
-                  <Text style={styles.roadmapItemDesc}>
-                    Final assessment and maintenance planning.
-                  </Text>
-                </View>
+
+                <Text style={styles.noteQuote}>
+                  &ldquo;Consistency and steady form are key to full recovery. If you experience discomfort sharp score &gt; 4/10 during any drill, pause and rest immediately.&rdquo;
+                </Text>
+
+                <Text style={styles.noteFooter}>Configured for Patient Care Plan</Text>
               </View>
-            </View>
-          </View>
-
-          {/* SECTION: NOTE FROM DR. IYER */}
-          <View style={styles.doctorNoteCard}>
-            <View style={styles.noteHeaderRow}>
-              <Image
-                source={require('../../../assets/images/doctor_ananya.png')}
-                style={styles.noteDoctorAvatar}
-                resizeMode="cover"
-              />
-              <Text style={styles.noteTitle}>{data.doctorNote.title}</Text>
-            </View>
-
-            <Text style={styles.noteQuote}>{data.doctorNote.quote}</Text>
-
-            <Text style={styles.noteFooter}>{data.doctorNote.postedTime}</Text>
-          </View>
+            </>
+          )}
         </ScrollView>
 
         {/* BOTTOM NAV BAR */}
@@ -446,10 +477,11 @@ const styles = StyleSheet.create({
     borderColor: '#EEF2F6',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: Typography.fontWeight.bold,
     color: '#003D9B',
     textAlign: 'center',
+    flex: 1,
   },
 
   scrollContent: {
@@ -472,117 +504,66 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
 
-  /* ANATOMICAL BOX */
-  anatomicalBox: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  anatomicalTopHeader: {
-    fontSize: 11,
-    color: '#94A3B8',
-    textAlign: 'center',
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-  imageWrapper: {
-    height: 230,
-    width: '100%',
-    position: 'relative',
-    justifyContent: 'center',
+  /* HERO STATUS & CONTENT */
+  heroStatusRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  spineAnatomyImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 14,
-  },
-  annotationBadge: {
-    position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    borderWidth: 0.5,
-    borderColor: '#CBD5E1',
-  },
-  annotationText: {
-    fontSize: 9,
-    color: '#475569',
-    fontWeight: Typography.fontWeight.medium,
-  },
-  anatomicalContent: {
+  statusBadgePill: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  anatomicalTitle: {
-    fontSize: 20,
-    fontWeight: Typography.fontWeight.bold,
-    color: '#051A3E',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  anatomicalFocus: {
-    fontSize: 12,
-    color: '#475569',
-    textAlign: 'center',
-    marginBottom: 6,
-  },
-  anatomicalDescription: {
-    fontSize: 12,
-    color: '#64748B',
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 10,
-    paddingHorizontal: 8,
-  },
-  viewExercisesBtn: {
-    paddingVertical: 4,
+    backgroundColor: '#E0F2FE',
     paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 9999,
   },
-  viewExercisesText: {
+  statusBadgeText: {
+    fontSize: 11,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#0284C7',
+    letterSpacing: 0.6,
+  },
+  difficultyBadge: {
     fontSize: 12,
     fontWeight: Typography.fontWeight.bold,
-    color: '#003D9B',
-    textDecorationLine: 'underline',
-  },
-
-  /* CURRENT PROGRAM CARD DETAILS */
-  currentProgramBadge: {
-    fontSize: 12,
-    fontWeight: Typography.fontWeight.bold,
-    color: '#003D9B',
-    letterSpacing: 1,
-    marginBottom: 8,
+    color: '#0D9488',
   },
   programTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: Typography.fontWeight.bold,
     color: '#051A3E',
-    lineHeight: 34,
-    marginBottom: 14,
+    lineHeight: 30,
+    marginBottom: 8,
+  },
+  programDescriptionText: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 22,
+    marginBottom: 16,
   },
   doctorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 18,
   },
-  doctorAvatarCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E0F2FE',
-    justifyContent: 'center',
-    alignItems: 'center',
+  doctorAvatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   doctorName: {
-    fontSize: 14,
-    fontWeight: Typography.fontWeight.medium,
-    color: '#475569',
+    fontSize: 15,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#051A3E',
+  },
+  doctorSubtext: {
+    fontSize: 12,
+    color: '#64748B',
   },
   sessionHeaderRow: {
     flexDirection: 'row',
@@ -596,7 +577,7 @@ const styles = StyleSheet.create({
     color: '#051A3E',
   },
   sessionsProgressText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: Typography.fontWeight.bold,
     color: '#003D9B',
   },
@@ -628,7 +609,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   overviewTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: Typography.fontWeight.bold,
     color: '#051A3E',
   },
@@ -636,8 +617,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#475569',
     lineHeight: 22,
-    marginBottom: 20,
+    marginBottom: 18,
   },
+
+  /* 2x2 GRID */
   gridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -654,8 +637,8 @@ const styles = StyleSheet.create({
   gridLabel: {
     fontSize: 12,
     color: '#64748B',
-    marginBottom: 4,
     fontWeight: Typography.fontWeight.medium,
+    marginBottom: 4,
   },
   gridValue: {
     fontSize: 15,
@@ -663,190 +646,203 @@ const styles = StyleSheet.create({
     color: '#051A3E',
   },
 
-  /* TODAY'S SESSION CARD */
-  todaySessionCard: {
-    backgroundColor: '#003D9B',
-    borderRadius: 28,
-    padding: 24,
-    marginBottom: Spacing.xl,
-    shadowColor: '#003D9B',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  todaySessionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  todaySessionTitle: {
-    fontSize: 22,
-    fontWeight: Typography.fontWeight.bold,
-    color: '#FFFFFF',
-  },
-  activeBadgeTag: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  activeBadgeText: {
-    fontSize: 11,
-    fontWeight: Typography.fontWeight.bold,
-    color: '#FFFFFF',
-    letterSpacing: 0.8,
-  },
-  todayMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 10,
-  },
-  todayMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  todayMetaText: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: Typography.fontWeight.medium,
-  },
-  startTodayBtn: {
-    height: 50,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 9999,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 14,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  startTodayBtnText: {
-    fontSize: 15,
-    fontWeight: Typography.fontWeight.bold,
-    color: '#003D9B',
-  },
-
-  /* RECOVERY ROADMAP */
-  roadmapSection: {
+  /* WEEKS & EXERCISES SECTION */
+  weeksSectionContainer: {
     marginBottom: Spacing.xl,
   },
   sectionHeaderTitle: {
-    fontSize: 22,
-    fontWeight: Typography.fontWeight.bold,
-    color: '#051A3E',
-    marginBottom: 18,
-  },
-  roadmapTimeline: {
-    paddingLeft: 4,
-  },
-  roadmapRow: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  timelineLeftColumn: {
-    width: 44,
-    alignItems: 'center',
-  },
-  completedCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#0D9488',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  activeCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#003D9B',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  lockedCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E2E8F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  trophyCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#6D28D9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-  },
-  verticalLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: '#CBD5E1',
-    marginTop: -4,
-    marginBottom: -4,
-  },
-  timelineRightContent: {
-    flex: 1,
-    paddingLeft: 12,
-    justifyContent: 'center',
-  },
-  roadmapItemTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: Typography.fontWeight.bold,
     color: '#051A3E',
     marginBottom: 4,
   },
-  roadmapItemDesc: {
+  sectionSubtext: {
     fontSize: 13,
     color: '#64748B',
-    lineHeight: 18,
+    marginBottom: 16,
   },
-  activeWeekCard: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 20,
-    padding: 16,
+  weeksList: {
+    gap: 14,
+  },
+  weekCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#E2E8F0',
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  activeWeekTitle: {
+  activeWeekCardBorder: {
+    borderColor: '#003D9B',
+    borderWidth: 1.5,
+  },
+  weekCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  weekBadgeAndTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+  },
+  weekNumberCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  activeWeekNumberCircle: {
+    backgroundColor: '#003D9B',
+  },
+  weekNumberText: {
+    fontSize: 15,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#334155',
+  },
+  activeWeekNumberText: {
+    color: '#FFFFFF',
+  },
+  weekTitleGroup: {
+    flex: 1,
+  },
+  weekTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  weekTitle: {
     fontSize: 16,
     fontWeight: Typography.fontWeight.bold,
-    color: '#003D9B',
-    marginBottom: 4,
+    color: '#051A3E',
   },
-  activeWeekDesc: {
-    fontSize: 13,
-    color: '#1E40AF',
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  inProgressBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#C7D2FE',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  currentWeekTag: {
+    backgroundColor: '#CCFBF1',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 6,
   },
-  inProgressBadgeText: {
+  currentWeekTagText: {
     fontSize: 10,
     fontWeight: Typography.fontWeight.bold,
-    color: '#1E40AF',
-    letterSpacing: 0.6,
+    color: '#0D9488',
+    letterSpacing: 0.5,
+  },
+  weekFocusText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  weekExpandedBody: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    paddingTop: 14,
+  },
+  weekDescriptionText: {
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 20,
+    marginBottom: 14,
+  },
+  exercisesSubtitle: {
+    fontSize: 11,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#94A3B8',
+    letterSpacing: 0.8,
+    marginBottom: 12,
+  },
+  exercisesStack: {
+    gap: 12,
+  },
+  exerciseItemCard: {
+    flexDirection: 'row',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  exerciseImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+  },
+  exerciseInfoContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  exerciseHeaderLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  exerciseNameText: {
+    fontSize: 15,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#051A3E',
+    flex: 1,
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  completedBadgeText: {
+    fontSize: 10,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#16A34A',
+  },
+  dosageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 4,
+  },
+  dosageTag: {
+    fontSize: 13,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#0284C7',
+  },
+  restTag: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  instructionsText: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 17,
+  },
+  startWeekSessionBtn: {
+    height: 48,
+    borderRadius: 9999,
+    backgroundColor: '#003D9B',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  startWeekSessionBtnText: {
+    fontSize: 14,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#FFFFFF',
   },
 
   /* DOCTOR NOTE */
@@ -887,6 +883,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: Typography.fontWeight.bold,
     color: '#0F766E',
+  },
+
+  /* LOADING */
+  loadingBox: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    fontSize: 14,
+    fontWeight: Typography.fontWeight.medium,
+    color: '#64748B',
+    marginTop: 12,
   },
 });
 

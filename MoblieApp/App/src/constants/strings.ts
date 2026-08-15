@@ -184,8 +184,8 @@ export const Strings = {
     viewProgressBtn: 'View Recovery Progress',
   },
   explore: {
-    greeting: 'Good Morning, Sagar 👋',
-    userNameDefault: 'Sagar',
+    greeting: 'Good Morning 👋',
+    userNameDefault: 'User',
     subtitle: "Let's continue your recovery journey.",
     searchPlaceholder: 'Search therapists, clinics or treatments',
     appointment: {
@@ -859,7 +859,7 @@ export const Strings = {
     backToHomeBtn: 'Back to Home',
   },
   recoveryDashboard: {
-    greeting: 'Good Morning, Sagar 👋',
+    greeting: 'Good Morning 👋',
     subtitle: "Let's continue today's recovery.",
     banner: {
       improvementBadge: '+8% improvement this week',

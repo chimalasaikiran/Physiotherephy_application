@@ -1,5 +1,35 @@
 export type ProgramStatus = 'published' | 'draft' | 'archived';
 export type ProgramDifficulty = 'Beginner' | 'Intermediate' | 'Advanced';
+export type AssignmentStatus = 'On Track' | 'Review Needed' | 'Ahead';
+export type AssignmentProgramStatus = 'active' | 'paused' | 'completed';
+
+export interface ProgramAssignment {
+  id: string;
+  programId: string;
+  patientId: string;
+  patientName: string;
+  patientAvatar: string;
+  patientCondition: string;
+  assignedAt: string;
+  assignedBy: string;
+  status: AssignmentProgramStatus;
+  assignmentStatus: AssignmentStatus;
+  currentWeek: number;
+  totalWeeks: number;
+  progressPercent: number;
+  adherence: number;
+  completedExercises: string[];
+  pendingExercises: string[];
+  completedSessions: number;
+  totalSessions: number;
+  lastActivityAt: string;
+  startDate: string;
+  programTitle: string;
+  isArchived?: boolean;
+  email?: string;
+  phone?: string;
+  lastCompletedExercise?: string;
+}
 
 export interface Program {
   id: string;
@@ -15,6 +45,12 @@ export interface Program {
   updatedAt: string;
   type: string; // e.g. "Rehabilitation", "Core Stability", "Mobility"
   exercisesCount?: number;
+  phasesCount?: number;
+  totalExercises?: number;
+  thumbnailUrl?: string;
+  authorName?: string;
+  authorAvatar?: string;
+  lastUpdated?: string;
 }
 
 export interface MetricCardData {

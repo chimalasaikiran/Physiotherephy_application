@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,6 +11,7 @@ import {
   Alert,
   Platform,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,11 @@ import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+import { useAuth } from '@/context/AuthContext';
+import {
+  fetchOwnPatientRecord,
+  syncMedicalInfoToPatientDetails,
+} from '@/api/patientSyncApi';
 
 interface MedicationItem {
   id: string;
@@ -35,17 +41,131 @@ export const MedicalInfoScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef<ScrollView>(null);
+  const { user, userProfile } = useAuth();
 
+  // Keep Strings reference for static UI labels
   const m = Strings.medicalInfoDetails;
 
-  // Dynamic state for interactive items
+  // ─── Live Firestore State ───────────────────────────────────────────────────
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Vitals (from medicalHistory.vitals in patient details)
+  const [bloodGroup, setBloodGroup] = useState<string>('');
+  const [height, setHeight] = useState<string>('');
+  const [weight, setWeight] = useState<string>('');
+
+  // Emergency contact (from emergencyContact in patient details)
+  const [emergencyName, setEmergencyName] = useState<string>('');
+  const [emergencyRelation, setEmergencyRelation] = useState<string>('');
+  const [emergencyPhone, setEmergencyPhone] = useState<string>('');
+
+  // Allergies, conditions, medications (from medicalHistory)
   const [allergies, setAllergies] = useState<string[]>([]);
-  const [medicalConditions, setMedicalConditions] = useState<ConditionItem[]>([
-    ...m.medicalConditions.items,
-  ]);
-  const [medications, setMedications] = useState<MedicationItem[]>([
-    ...m.currentMedications.items,
-  ]);
+  const [medicalConditions, setMedicalConditions] = useState<ConditionItem[]>([]);
+  const [medications, setMedications] = useState<MedicationItem[]>([]);
+
+  // Primary diagnosis
+  const [primaryDiagnosis, setPrimaryDiagnosis] = useState<string>('');
+  const [surgeries, setSurgeries] = useState<string[]>([]);
+
+  // ─── Load from Firestore on mount ──────────────────────────────────────────
+  const loadMedicalData = useCallback(async () => {
+    const uid = user?.uid;
+    if (!uid) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const record = await fetchOwnPatientRecord(uid);
+
+      if (record) {
+        const mh = record.medicalHistory || {};
+        const vitals = mh.vitals || {};
+        const ec = record.emergencyContact;
+
+        // Vitals
+        setBloodGroup(record.bloodGroup || '');
+        setHeight(vitals.height?.replace(' cm', '') || (userProfile?.height ? String(userProfile.height) : ''));
+        setWeight(vitals.weight?.replace(' kg', '') || (userProfile?.weight ? String(userProfile.weight) : ''));
+
+        // Emergency contact
+        setEmergencyName(ec?.name || '');
+        setEmergencyRelation(ec?.relation || '');
+        setEmergencyPhone(ec?.phone || '');
+
+        // Medical history arrays
+        setAllergies(Array.isArray(mh.allergies) ? mh.allergies : []);
+        setMedicalConditions(
+          Array.isArray(mh.chronicConditions)
+            ? mh.chronicConditions.map((c: string, i: number) => ({ id: String(i), name: c }))
+            : []
+        );
+        setMedications(
+          // medications may be stored in a separate field or not yet — handle gracefully
+          Array.isArray((record as any).medications)
+            ? (record as any).medications
+            : []
+        );
+        setPrimaryDiagnosis(mh.primaryDiagnosis || '');
+        setSurgeries(Array.isArray(mh.surgeries) ? mh.surgeries.filter((s: string) => s && s !== 'None') : []);
+      } else {
+        // Prefill from userProfile (height/weight set during onboarding)
+        setHeight(userProfile?.height ? String(userProfile.height) : '');
+        setWeight(userProfile?.weight ? String(userProfile.weight) : '');
+      }
+    } catch (err) {
+      console.warn('[MedicalInfoScreen] Failed to load patient record:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.uid, userProfile]);
+
+  useEffect(() => {
+    loadMedicalData();
+  }, [loadMedicalData]);
+
+  // ─── Save Medical Info ────────────────────────────────────────────────────
+  const handleSaveMedicalInfo = async () => {
+    const uid = user?.uid;
+    if (!uid) {
+      Alert.alert('Error', 'You must be logged in to save medical information.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const idToken = await user?.getIdToken?.();
+      const medicalData = {
+        primaryDiagnosis,
+        allergies,
+        chronicConditions: medicalConditions.map((c) => c.name),
+        surgeries,
+        vitals: {
+          height: height ? `${height} cm` : undefined,
+          weight: weight ? `${weight} kg` : undefined,
+          bmi:
+            height && weight
+              ? (parseFloat(weight) / Math.pow(parseFloat(height) / 100, 2)).toFixed(1)
+              : undefined,
+        },
+      };
+
+      const success = await syncMedicalInfoToPatientDetails(uid, medicalData, idToken);
+      if (success) {
+        Alert.alert('Saved', 'Medical information updated successfully!');
+      } else {
+        Alert.alert('Error', 'Failed to save medical information. Please try again.');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
   const handleShare = async () => {
     try {
@@ -197,10 +317,15 @@ export const MedicalInfoScreen: React.FC = () => {
   };
 
   const handleCallEmergencyContact = () => {
-    const phoneNumber = m.emergencyContact.phone;
+    const phoneNumber = emergencyPhone;
+    const contactName = emergencyName;
+    if (!phoneNumber) {
+      Alert.alert('No Contact', 'No emergency contact phone number saved.');
+      return;
+    }
     Alert.alert(
       'Emergency Contact',
-      `Call ${m.emergencyContact.name} (${phoneNumber})?`,
+      `Call ${contactName || 'Emergency Contact'} (${phoneNumber})?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -225,17 +350,7 @@ export const MedicalInfoScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(
-                insets.top,
-                Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16
-              ) + 8,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.headerIconButton}
@@ -260,6 +375,14 @@ export const MedicalInfoScreen: React.FC = () => {
         </View>
 
         {/* SCROLLABLE MAIN CONTENT */}
+        {isLoading ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator size="large" color="#003D9B" />
+            <Text style={{ marginTop: 12, fontSize: 13, color: '#64748B', fontWeight: '500' }}>
+              Loading medical information...
+            </Text>
+          </View>
+        ) : (
         <ScrollView
           ref={scrollViewRef}
           showsVerticalScrollIndicator={false}
@@ -285,7 +408,9 @@ export const MedicalInfoScreen: React.FC = () => {
                 {/* Blood Group */}
                 <View style={styles.vitalColumn}>
                   <Text style={styles.vitalLabel}>{m.vitalsOverview.bloodGroupLabel}</Text>
-                  <Text style={styles.vitalValuePrimary}>{m.vitalsOverview.bloodGroupValue}</Text>
+                  <Text style={styles.vitalValuePrimary}>
+                    {bloodGroup || '--'}
+                  </Text>
                 </View>
 
                 <View style={styles.columnDivider} />
@@ -294,8 +419,8 @@ export const MedicalInfoScreen: React.FC = () => {
                 <View style={styles.vitalColumn}>
                   <Text style={styles.vitalLabel}>{m.vitalsOverview.heightLabel}</Text>
                   <View style={styles.valueWithUnitRow}>
-                    <Text style={styles.vitalValuePrimary}>{m.vitalsOverview.heightValue}</Text>
-                    <Text style={styles.vitalUnitText}>{m.vitalsOverview.heightUnit}</Text>
+                    <Text style={styles.vitalValuePrimary}>{height || '--'}</Text>
+                    {!!height && <Text style={styles.vitalUnitText}>{m.vitalsOverview.heightUnit}</Text>}
                   </View>
                 </View>
 
@@ -305,8 +430,8 @@ export const MedicalInfoScreen: React.FC = () => {
                 <View style={styles.vitalColumn}>
                   <Text style={styles.vitalLabel}>{m.vitalsOverview.weightLabel}</Text>
                   <View style={styles.valueWithUnitRow}>
-                    <Text style={styles.vitalValuePrimary}>{m.vitalsOverview.weightValue}</Text>
-                    <Text style={styles.vitalUnitText}>{m.vitalsOverview.weightUnit}</Text>
+                    <Text style={styles.vitalValuePrimary}>{weight || '--'}</Text>
+                    {!!weight && <Text style={styles.vitalUnitText}>{m.vitalsOverview.weightUnit}</Text>}
                   </View>
                 </View>
               </View>
@@ -478,37 +603,85 @@ export const MedicalInfoScreen: React.FC = () => {
             <View style={styles.emergencyCard}>
               <Text style={styles.emergencyCardHeaderTitle}>{m.emergencyContact.sectionTitle}</Text>
 
-              <View style={styles.emergencyCardMainRow}>
-                {/* INITIALS AVATAR */}
-                <View style={styles.avatarInitialsCircle}>
-                  <Text style={styles.avatarInitialsText}>{m.emergencyContact.initials}</Text>
+              {emergencyName ? (
+                <>
+                  <View style={styles.emergencyCardMainRow}>
+                    {/* INITIALS AVATAR */}
+                    <View style={styles.avatarInitialsCircle}>
+                      <Text style={styles.avatarInitialsText}>
+                        {emergencyName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase()}
+                      </Text>
+                    </View>
+
+                    {/* CONTACT DETAILS */}
+                    <View style={styles.emergencyInfoColumn}>
+                      <Text style={styles.emergencyName}>{emergencyName}</Text>
+                      <Text style={styles.emergencyRelationship}>{emergencyRelation || 'Emergency Contact'}</Text>
+                    </View>
+
+                    {/* CALL BUTTON */}
+                    {!!emergencyPhone && (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        style={styles.callCircleButton}
+                        onPress={handleCallEmergencyContact}
+                        accessibilityRole="button"
+                        accessibilityLabel="Call emergency contact"
+                      >
+                        <Ionicons name="call" size={20} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* PHONE NUMBER TEXT */}
+                  {!!emergencyPhone && (
+                    <TouchableOpacity activeOpacity={0.7} onPress={handleCallEmergencyContact}>
+                      <Text style={styles.emergencyPhoneText}>{emergencyPhone}</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              ) : (
+                <View style={{ paddingVertical: 12, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, color: '#94A3B8', fontWeight: '500' }}>
+                    No emergency contact added. Update your profile to add one.
+                  </Text>
                 </View>
-
-                {/* CONTACT DETAILS */}
-                <View style={styles.emergencyInfoColumn}>
-                  <Text style={styles.emergencyName}>{m.emergencyContact.name}</Text>
-                  <Text style={styles.emergencyRelationship}>{m.emergencyContact.relationship}</Text>
-                </View>
-
-                {/* CALL BUTTON */}
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={styles.callCircleButton}
-                  onPress={handleCallEmergencyContact}
-                  accessibilityRole="button"
-                  accessibilityLabel="Call emergency contact"
-                >
-                  <Ionicons name="call" size={20} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-
-              {/* PHONE NUMBER TEXT */}
-              <TouchableOpacity activeOpacity={0.7} onPress={handleCallEmergencyContact}>
-                <Text style={styles.emergencyPhoneText}>{m.emergencyContact.phone}</Text>
-              </TouchableOpacity>
+              )}
             </View>
           </View>
+
+          {/* SAVE MEDICAL INFO BUTTON */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={{
+              height: 52,
+              borderRadius: 26,
+              backgroundColor: '#003D9B',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginHorizontal: 0,
+              marginBottom: 16,
+              shadowColor: '#003D9B',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2,
+              shadowRadius: 6,
+              elevation: 3,
+            }}
+            onPress={handleSaveMedicalInfo}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#FFFFFF' }}>
+                Save Medical Information
+              </Text>
+            )}
+          </TouchableOpacity>
+
         </ScrollView>
+        )}
+
 
         {/* BOTTOM NAVIGATION BAR */}
         <BottomNavBar activeTab="profile" onTabPress={handleTabPress} />

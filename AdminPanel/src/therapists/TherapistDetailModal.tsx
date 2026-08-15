@@ -1,4 +1,5 @@
 import React from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   X,
   Star,
@@ -71,17 +72,10 @@ export const TherapistDetailModal: React.FC<TherapistDetailModalProps> = ({
           </button>
 
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
-            {therapist.avatarUrl ? (
-              <img
-                src={therapist.avatarUrl}
-                alt={therapist.name}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-white/20 shadow-lg"
-              />
-            ) : (
-              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white/10 border-2 border-white/20 flex items-center justify-center text-2xl font-black text-white shadow-lg">
-                {therapist.initials || 'DR'}
-              </div>
-            )}
+            <InitialsAvatar
+              name={therapist.name}
+              className="w-20 h-20 sm:w-24 sm:h-24 text-2xl font-bold border-2 border-white/20 shadow-lg shrink-0"
+            />
 
             <div className="text-center sm:text-left space-y-1.5 flex-1">
               <div className="flex items-center justify-center sm:justify-start space-x-2">

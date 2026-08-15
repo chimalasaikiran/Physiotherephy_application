@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -20,6 +20,10 @@ import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+import { useAuth } from '@/context/AuthContext';
+import { auth } from '@/config/firebase';
+import { subscribeToPatientAssignments, MobileProgramAssignment } from '@/api/programService';
+import { promptAndPickImage } from '../../../utils/imagePickerHelper';
 
 interface ProfileScreenProps {
   hideBottomNavBar?: boolean;
@@ -29,6 +33,48 @@ interface ProfileScreenProps {
 export const ProfileScreen: React.FC<ProfileScreenProps> = ({ hideBottomNavBar = false, onTabPress }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { userProfile, user, signOutUser, updateAvatar } = useAuth();
+  const [assignedPrograms, setAssignedPrograms] = useState<MobileProgramAssignment[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const uid = auth.currentUser?.uid || user?.uid;
+    if (!uid) return;
+
+    const unsub = subscribeToPatientAssignments(uid, (assignments) => {
+      if (isMounted) {
+        setAssignedPrograms(assignments);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, [user?.uid]);
+
+  const activeAssignment = assignedPrograms.length > 0 ? assignedPrograms[0] : null;
+
+  const currentProgramTitle = activeAssignment?.programTitle || 'No Active Program';
+  const currentWeekNum = activeAssignment?.currentWeek || 1;
+  const totalWeeksNum = activeAssignment?.totalWeeks || 8;
+  const progressPercent = activeAssignment ? activeAssignment.progressPercent : 0;
+  const completedExercisesCount = activeAssignment?.completedExercises?.length || 0;
+  const totalExercisesCount = activeAssignment
+    ? (activeAssignment.programDetails?.weeks && activeAssignment.programDetails.weeks.length > 0
+        ? activeAssignment.programDetails.weeks.reduce((acc, w) => acc + (w.exercises?.length || 0), 0)
+        : Number(activeAssignment.programDetails?.exercisesCount || activeAssignment.programDetails?.totalExercises || 10))
+    : 0;
+  const recoveryStatusText = activeAssignment
+    ? `${activeAssignment.status.toUpperCase()} • ${activeAssignment.assignmentStatus}`
+    : 'No Program Assigned';
+
+  const handleAvatarChange = async () => {
+    const selectedUri = await promptAndPickImage();
+    if (selectedUri) {
+      await updateAvatar(selectedUri);
+    }
+  };
 
   const handleShare = async () => {
     try {
@@ -67,13 +113,21 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ hideBottomNavBar =
         {
           text: 'Log Out',
           style: 'destructive',
-          onPress: () => router.replace('/login' as any),
+          onPress: async () => {
+            await signOutUser();
+            router.replace('/login' as any);
+          },
         },
       ]
     );
   };
 
   const p = Strings.profileDetails;
+  const displayName = userProfile?.fullName || 'User Profile';
+  const displayPhone = userProfile?.phone || user?.phoneNumber || p.userMeta;
+  const programName = userProfile?.primaryConcernId
+    ? userProfile.primaryConcernId.replace('_', ' ').toUpperCase()
+    : p.programName;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -81,17 +135,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ hideBottomNavBar =
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop: Math.max(
-                insets.top,
-                Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16
-              ) + 8,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.headerIconButton}
@@ -125,26 +169,39 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ hideBottomNavBar =
         >
           {/* USER INFO TOP SECTION */}
           <View style={styles.userInfoSection}>
-            {/* AVATAR WITH VERIFIED CHECK BADGE */}
-            <View style={styles.avatarWrapper}>
+            {/* AVATAR WITH CAMERA BADGE & VERIFIED CHECK BADGE */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.avatarWrapper}
+              onPress={handleAvatarChange}
+              accessibilityRole="button"
+              accessibilityLabel="Change profile photo"
+            >
               <Image
-                source={require('../../../assets/images/sanya_avatar.png')}
+                source={
+                  userProfile?.avatarUri
+                    ? { uri: userProfile.avatarUri }
+                    : require('../../../assets/images/sanya_avatar.png')
+                }
                 style={styles.avatarImage}
                 resizeMode="cover"
               />
-              <View style={styles.verifiedBadge}>
-                <Ionicons name="checkmark-sharp" size={12} color="#FFFFFF" />
+              <View style={styles.cameraBadgeButton}>
+                <Ionicons name="camera-outline" size={14} color="#FFFFFF" />
               </View>
-            </View>
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="checkmark-sharp" size={10} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
 
             {/* NAME & SUBTITLE */}
-            <Text style={styles.userName}>{p.userName}</Text>
-            <Text style={styles.userMeta}>{p.userMeta}</Text>
+            <Text style={styles.userName}>{displayName}</Text>
+            <Text style={styles.userMeta}>{displayPhone}</Text>
 
             {/* PROGRAM TAG PILL */}
             <View style={styles.programBadge}>
               <Ionicons name="medical" size={14} color="#0D9488" style={{ marginRight: 6 }} />
-              <Text style={styles.programBadgeText}>{p.programName}</Text>
+              <Text style={styles.programBadgeText}>{programName}</Text>
             </View>
 
             {/* EDIT PROFILE BUTTON */}
@@ -157,6 +214,46 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ hideBottomNavBar =
             </TouchableOpacity>
           </View>
 
+          {/* COMPLETED PROFILE DETAILS SUMMARY CARD */}
+          {(userProfile?.height || userProfile?.weight || userProfile?.gender || userProfile?.dob) && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>MY HEALTH PROFILE DETAILS</Text>
+              <View style={styles.detailsCard}>
+                <View style={styles.detailsGrid}>
+                  {userProfile?.gender && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>GENDER</Text>
+                      <Text style={styles.detailValue}>
+                        {userProfile.gender.charAt(0).toUpperCase() + userProfile.gender.slice(1)}
+                      </Text>
+                    </View>
+                  )}
+
+                  {userProfile?.dob && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>DOB / AGE</Text>
+                      <Text style={styles.detailValue}>{userProfile.dob}</Text>
+                    </View>
+                  )}
+
+                  {userProfile?.height && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>HEIGHT</Text>
+                      <Text style={styles.detailValue}>{userProfile.height} cm</Text>
+                    </View>
+                  )}
+
+                  {userProfile?.weight && (
+                    <View style={styles.detailItem}>
+                      <Text style={styles.detailLabel}>WEIGHT</Text>
+                      <Text style={styles.detailValue}>{userProfile.weight} kg</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* 1. RECOVERY SNAPSHOT SECTION */}
           <View style={styles.sectionContainer}>
             <Text style={styles.sectionTitle}>{p.recoverySnapshot.sectionTitle}</Text>
@@ -165,32 +262,38 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ hideBottomNavBar =
               {/* TOP ROW: SCORE & ACTIVE PILLS */}
               <View style={styles.snapshotTopRow}>
                 <View>
-                  <Text style={styles.scoreLabel}>{p.recoverySnapshot.scoreLabel}</Text>
-                  <Text style={styles.scoreValue}>{p.recoverySnapshot.scoreValue}</Text>
+                  <Text style={styles.scoreLabel}>OVERALL RECOVERY PROGRESS</Text>
+                  <Text style={styles.scoreValue}>{progressPercent}%</Text>
                 </View>
 
                 <View style={styles.activePillsContainer}>
                   <View style={styles.iconCircleDumbbell}>
                     <Ionicons name="barbell-outline" size={14} color="#003D9B" />
                   </View>
-                  <View style={styles.iconCircleLightning}>
-                    <Ionicons name="flash-outline" size={14} color="#0284C7" />
-                  </View>
-                  <Text style={styles.activeStatusText}>{p.recoverySnapshot.activeStatus}</Text>
+                  <Text style={styles.activeStatusText}>{recoveryStatusText}</Text>
                 </View>
               </View>
 
-              {/* MIDDLE ROW: NEXT SESSION & STREAK */}
+              {/* MIDDLE ROW: PROGRAM METRICS */}
               <View style={styles.snapshotMetricsRow}>
-                <View style={styles.metricColumn}>
-                  <Text style={styles.metricLabel}>{p.recoverySnapshot.nextSessionLabel}</Text>
-                  <Text style={styles.metricMainText}>{p.recoverySnapshot.nextSessionValue}</Text>
-                  <Text style={styles.metricSubText}>{p.recoverySnapshot.nextSessionTime}</Text>
+                <View style={[styles.metricColumn, { flex: 1.4 }]}>
+                  <Text style={styles.metricLabel}>CURRENT PROGRAM</Text>
+                  <Text style={styles.metricMainText} numberOfLines={1}>
+                    {currentProgramTitle}
+                  </Text>
+                  <Text style={styles.metricSubText}>
+                    Week {currentWeekNum} of {totalWeeksNum}
+                  </Text>
                 </View>
 
                 <View style={styles.metricColumn}>
-                  <Text style={styles.metricLabel}>{p.recoverySnapshot.streakLabel}</Text>
-                  <Text style={styles.metricMainText}>{p.recoverySnapshot.streakValue}</Text>
+                  <Text style={styles.metricLabel}>EXERCISES COMPLETED</Text>
+                  <Text style={styles.metricMainText}>
+                    {completedExercisesCount} / {totalExercisesCount}
+                  </Text>
+                  <Text style={styles.metricSubText}>
+                    {totalExercisesCount > 0 ? `${Math.round((completedExercisesCount / totalExercisesCount) * 100)}%` : '0%'}
+                  </Text>
                 </View>
               </View>
 
@@ -198,9 +301,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ hideBottomNavBar =
               <TouchableOpacity
                 activeOpacity={0.7}
                 style={styles.viewProgressRow}
-                onPress={() => router.push('/recovery-progress' as any)}
+                onPress={() => {
+                  if (activeAssignment?.id) {
+                    router.push({
+                      pathname: '/recovery-program-details' as any,
+                      params: { assignmentId: activeAssignment.id },
+                    });
+                  } else {
+                    router.push('/recovery' as any);
+                  }
+                }}
               >
-                <Text style={styles.viewProgressText}>{p.recoverySnapshot.viewProgressLink}</Text>
+                <Text style={styles.viewProgressText}>View Full Recovery Program</Text>
                 <Ionicons name="chevron-forward" size={16} color="#003D9B" />
               </TouchableOpacity>
             </View>
@@ -351,14 +463,28 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#E2E8F0',
   },
-  verifiedBadge: {
+  cameraBadgeButton: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#003D9B',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  verifiedBadge: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: '#FFFFFF',
     justifyContent: 'center',
@@ -621,6 +747,38 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     marginBottom: 12,
+  },
+  detailsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#003D9B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  detailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 14,
+  },
+  detailItem: {
+    width: '50%',
+  },
+  detailLabel: {
+    fontSize: 10,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  detailValue: {
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#0F172A',
   },
 });
 

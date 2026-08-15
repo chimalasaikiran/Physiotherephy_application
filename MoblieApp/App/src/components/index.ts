@@ -11,3 +11,4 @@ export * from './MeasurementInput';
 export * from './ProfileAvatarPicker';
 export * from './EmptyStateView';
 export * from './SkeletonLoader';
+export * from './TherapistAvatar';

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -25,6 +25,9 @@ import { BookingSuccessModal } from '@/features/appointments';
 import { BottomNavBar, TabKey } from '@/components';
 import { EmptyStateView } from '@/components';
 import { SkeletonLoader } from '@/components';
+import { fetchTherapistsFromApi } from '@/api/appointmentApi';
+import { subscribeToTherapists, Therapist } from '@/api/therapistService';
+
 
 export const BookAppointmentScreen: React.FC = () => {
   const router = useRouter();
@@ -34,13 +37,13 @@ export const BookAppointmentScreen: React.FC = () => {
   const selectedServiceTitle = params.serviceTitle || '';
   const selectedServiceId = params.serviceId || '';
 
-  const doctorsList = Strings.booking.doctors;
+  const [doctorsList, setDoctorsList] = useState<Doctor[]>([...Strings.booking.doctors as unknown as Doctor[]]);
 
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilterId, setActiveFilterId] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<TabKey>('schedule');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Booking Flow Modals state
   const [selectedDoctorForBooking, setSelectedDoctorForBooking] = useState<Doctor | null>(null);
@@ -54,10 +57,76 @@ export const BookAppointmentScreen: React.FC = () => {
   } | null>(null);
   const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
 
+  useEffect(() => {
+    setIsLoading(true);
+    const unsub = subscribeToTherapists(
+      (firestoreTherapists: Therapist[]) => {
+        if (firestoreTherapists && firestoreTherapists.length > 0) {
+          const mapped: Doctor[] = firestoreTherapists.map((t) => {
+            const numericFee = t.consultationFee || 800;
+            return {
+              id: t.id,
+              name: t.name,
+              specialty: t.specializations && t.specializations.length > 0 ? t.specializations.join(', ') : 'Physiotherapist',
+              degree: t.degree,
+              experienceYears: parseInt(t.experience) || 5,
+              experienceStr: t.experience || '5+ Years Exp',
+              rating: t.rating || 4.9,
+              reviewsCount: 18 + (t.patientsCount || 0),
+              clinicName: t.location || 'Spine & Wellness Center',
+              clinicAddress: 'Indiranagar, Bengaluru',
+              fee: `₹${numericFee}`,
+              numericFee: numericFee,
+              imageName: undefined,
+              avatarUrl: t.avatarUrl || undefined,
+              isTopRated: (t.rating || 0) >= 4.8,
+              isNearby: true,
+              availableToday: t.availability === 'Available Today',
+              supportsOnline: true,
+              languages: ['English', 'Hindi'],
+              bio: t.bio,
+            };
+          });
+          setDoctorsList(mapped);
+        }
+        setIsLoading(false);
+      },
+      (err) => {
+        console.warn('Realtime therapists subscription error, falling back to API:', err);
+        fetchTherapistsFromApi(selectedServiceId).then((apiDoctors) => {
+          if (apiDoctors && apiDoctors.length > 0) {
+            const mapped: Doctor[] = apiDoctors.map((d) => ({
+              id: d.id,
+              name: d.name,
+              specialty: d.specialty,
+              experienceYears: d.experienceYears,
+              experienceStr: d.experienceStr,
+              rating: d.rating,
+              reviewsCount: d.reviewsCount,
+              clinicName: d.clinicName,
+              clinicAddress: d.clinicAddress,
+              fee: d.fee,
+              numericFee: d.numericFee,
+              imageName: d.imageName as any,
+              isTopRated: d.isTopRated,
+              isNearby: d.isNearby,
+              availableToday: d.availableToday,
+              supportsOnline: d.supportsOnline,
+              languages: d.languages || [],
+            }));
+            setDoctorsList(mapped);
+          }
+          setIsLoading(false);
+        });
+      }
+    );
+
+    return () => unsub();
+  }, [selectedServiceId]);
+
   // Filter & Search Logic
   const filteredDoctors = useMemo(() => {
     return doctorsList.filter((doc) => {
-      // 1. Filter Chip match
       let matchesFilter = true;
       if (activeFilterId === 'nearby') {
         matchesFilter = doc.isNearby;
@@ -71,15 +140,14 @@ export const BookAppointmentScreen: React.FC = () => {
         matchesFilter = doc.experienceYears >= 10;
       }
 
-      // 2. Search Query match
       const q = searchQuery.toLowerCase().trim();
       let matchesSearch = true;
       if (q) {
         matchesSearch =
-          doc.name.toLowerCase().includes(q) ||
-          doc.specialty.toLowerCase().includes(q) ||
-          doc.clinicName.toLowerCase().includes(q) ||
-          doc.languages.some((l) => l.toLowerCase().includes(q));
+          (doc.name || '').toLowerCase().includes(q) ||
+          (doc.specialty || '').toLowerCase().includes(q) ||
+          (doc.clinicName || '').toLowerCase().includes(q) ||
+          (doc.languages || []).some((l) => l.toLowerCase().includes(q));
       }
 
       return matchesFilter && matchesSearch;
@@ -89,7 +157,7 @@ export const BookAppointmentScreen: React.FC = () => {
   const handleFilterSelect = (id: string) => {
     setActiveFilterId(id);
     setIsLoading(true);
-    setTimeout(() => setIsLoading(false), 250);
+    setTimeout(() => setIsLoading(false), 200);
   };
 
   const handleBack = () => {
@@ -100,11 +168,25 @@ export const BookAppointmentScreen: React.FC = () => {
     }
   };
 
-  // Tap "View Details" on Doctor Card -> Navigate to Therapist Details Screen
-  const handleViewDetails = (doctor: Doctor) => {
+  // Select Physiotherapist -> Navigate to Select Date & Time Screen
+  const handleSelectDoctor = (doctor: Doctor) => {
     router.push({
-      pathname: '/therapist-details' as any,
-      params: { doctorId: doctor.id, serviceTitle: selectedServiceTitle },
+      pathname: '/select-date-time' as any,
+      params: {
+        doctorId: doctor.id,
+        serviceTitle: selectedServiceTitle,
+        doctorName: doctor.name,
+        doctorSpecialty: doctor.specialty,
+        doctorDegree: doctor.degree || '',
+        doctorFee: doctor.fee,
+        doctorNumericFee: doctor.numericFee ? String(doctor.numericFee) : '',
+        doctorClinic: doctor.clinicName,
+        doctorAvatarUrl: doctor.avatarUrl || '',
+        doctorImageName: doctor.imageName || '',
+        doctorRating: doctor.rating ? String(doctor.rating) : '',
+        doctorExperience: doctor.experienceStr || '',
+        doctorBio: doctor.bio || '',
+      },
     });
   };
 
@@ -262,9 +344,9 @@ export const BookAppointmentScreen: React.FC = () => {
               <DoctorBookingCard
                 key={doc.id}
                 doctor={doc}
-                buttonLabel="View Details"
-                onBookPress={handleViewDetails}
-                onCardPress={handleViewDetails}
+                buttonLabel="Continue"
+                onBookPress={handleSelectDoctor}
+                onCardPress={handleSelectDoctor}
               />
             ))
           )}

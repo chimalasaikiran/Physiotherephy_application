@@ -1,5 +1,6 @@
 export * from './types';
 export * from './mockData';
+export * from './usePatients';
 export * from './PatientsView';
 export * from './AddPatientModal';
 export * from './ImportPatientsModal';
@@ -13,7 +14,3 @@ export * from './ReportsTab';
 export * from './PaymentsTab';
 export * from './NotesTab';
 export * from './HistoryTab';
-
-
-
-

@@ -1,67 +1,98 @@
 import React from 'react';
+import { Clock, Calendar, Loader2 } from 'lucide-react';
 
-interface ScheduleItem {
+export interface TodaysScheduleItem {
   id: string;
+  patientName: string;
+  patientSubtitle: string;
+  therapistName: string;
   time: string;
-  title: string;
-  subtitle: string;
-  accentBg: string;
-  leftBorder: string;
+  date: string;
+  type: string;
+  status: string;
+  fullDate: string;
 }
 
-export const TodaysSchedule: React.FC = () => {
-  const scheduleItems: ScheduleItem[] = [
-    {
-      id: 'sch-1',
-      time: '09:00',
-      title: 'Staff Stand-up',
-      subtitle: 'Room 302 • 15 mins',
-      accentBg: 'bg-blue-50/70 hover:bg-blue-50',
-      leftBorder: 'border-l-4 border-blue-500',
-    },
-    {
-      id: 'sch-2',
-      time: '11:30',
-      title: 'VIP Patient Arrival',
-      subtitle: 'Arjun Reddy • Consultation',
-      accentBg: 'bg-indigo-50/70 hover:bg-indigo-50',
-      leftBorder: 'border-l-4 border-indigo-500',
-    },
-    {
-      id: 'sch-3',
-      time: '14:00',
-      title: 'Monthly Billing Review',
-      subtitle: 'Accounts Dept.',
-      accentBg: 'bg-purple-50/70 hover:bg-purple-50',
-      leftBorder: 'border-l-4 border-purple-500',
-    },
-  ];
+interface TodaysScheduleProps {
+  todaysSchedule?: TodaysScheduleItem[];
+  isLoading?: boolean;
+  onSelectAppointment?: (item: TodaysScheduleItem) => void;
+  onNavigateToSchedule?: () => void;
+}
 
+export const TodaysSchedule: React.FC<TodaysScheduleProps> = ({
+  todaysSchedule = [],
+  isLoading = false,
+  onSelectAppointment,
+  onNavigateToSchedule,
+}) => {
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs">
-      <h4 className="text-xs font-bold tracking-wider text-slate-400 uppercase mb-4">
-        Today's Schedule
-      </h4>
-
-      <div className="space-y-3">
-        {scheduleItems.map((item) => (
-          <div key={item.id} className="flex items-start space-x-3 group">
-            <span className="text-xs font-bold text-slate-900 mt-2 min-w-[40px]">
-              {item.time}
-            </span>
-            <div
-              className={`flex-1 p-3.5 rounded-2xl ${item.accentBg} ${item.leftBorder} transition-all duration-200 cursor-pointer`}
-            >
-              <h5 className="font-bold text-slate-900 text-sm leading-tight">
-                {item.title}
-              </h5>
-              <p className="text-xs text-slate-500 font-medium mt-1">
-                {item.subtitle}
-              </p>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-xs font-bold tracking-wider text-slate-400 uppercase">
+          Today's Schedule
+        </h4>
+        {onNavigateToSchedule && (
+          <button
+            onClick={onNavigateToSchedule}
+            className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+          >
+            View Schedule
+          </button>
+        )}
       </div>
+
+      {isLoading ? (
+        <div className="py-6 text-center text-xs text-slate-400 font-medium flex items-center justify-center space-x-2">
+          <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+          <span>Loading today's schedule...</span>
+        </div>
+      ) : todaysSchedule.length > 0 ? (
+        <div className="space-y-3">
+          {todaysSchedule.map((item, idx) => {
+            const isCompleted = item.status === 'Completed';
+            const accentBg = isCompleted
+              ? 'bg-emerald-50/70 border-l-4 border-l-emerald-500'
+              : idx % 2 === 0
+              ? 'bg-blue-50/70 border-l-4 border-l-blue-600'
+              : 'bg-indigo-50/70 border-l-4 border-l-indigo-600';
+
+            return (
+              <div
+                key={item.id || idx}
+                onClick={() => onSelectAppointment && onSelectAppointment(item)}
+                className="flex items-start space-x-3 group cursor-pointer"
+              >
+                <span className="text-xs font-bold text-slate-900 mt-2 min-w-[55px] text-right whitespace-nowrap">
+                  {item.time}
+                </span>
+                <div
+                  className={`flex-1 p-3 rounded-2xl ${accentBg} transition-all duration-200 group-hover:shadow-xs`}
+                >
+                  <div className="flex items-center justify-between">
+                    <h5 className="font-bold text-slate-900 text-sm leading-tight group-hover:text-blue-600 transition-colors">
+                      {item.patientName}
+                    </h5>
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                      isCompleted ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 font-medium mt-1">
+                    With {item.therapistName} • {item.patientSubtitle}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="py-8 text-center text-xs text-slate-400 font-medium space-y-2">
+          <Calendar className="w-6 h-6 text-slate-300 mx-auto" />
+          <p>No appointments scheduled for today</p>
+        </div>
+      )}
     </div>
   );
 };

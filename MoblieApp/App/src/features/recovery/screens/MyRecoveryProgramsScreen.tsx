@@ -12,6 +12,7 @@ import {
   Alert,
   Platform,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +23,8 @@ import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+import { useAuth } from '@/context/AuthContext';
+import { subscribeToPatientAssignments, MobileProgramAssignment } from '@/api/programService';
 
 type FilterTab = 'Active' | 'Completed' | 'Paused';
 
@@ -39,12 +42,59 @@ interface PastProgramItem {
 export const MyRecoveryProgramsScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
 
   const [activeFilter, setActiveFilter] = useState<FilterTab>('Active');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('recovery');
+  const [assignments, setAssignments] = useState<MobileProgramAssignment[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+
+  React.useEffect(() => {
+    const uid = user?.uid;
+    if (!uid) {
+      setAssignmentsLoading(false);
+      return;
+    }
+    const unsub = subscribeToPatientAssignments(
+      uid,
+      (data) => {
+        setAssignments(data);
+        setAssignmentsLoading(false);
+      },
+      (err) => {
+        console.warn('[MyRecoveryPrograms] assignment subscription error:', err);
+        setAssignmentsLoading(false);
+      }
+    );
+    return () => unsub();
+  }, [user?.uid]);
 
   const data = Strings.myRecoveryPrograms;
+
+  // Filter assignments by active filter tab
+  const filteredAssignments = useMemo(() => {
+    return assignments.filter((a) => {
+      const statusMatch =
+        activeFilter === 'Active'
+          ? a.status === 'active'
+          : activeFilter === 'Completed'
+          ? a.status === 'completed'
+          : a.status === 'paused';
+
+      if (!statusMatch) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          a.programTitle.toLowerCase().includes(q) ||
+          (a.programDetails?.doctorName || '').toLowerCase().includes(q) ||
+          a.patientCondition.toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [assignments, activeFilter, searchQuery]);
 
   const handleNavTabPress = (tab: TabKey) => {
     setActiveNavTab(tab);
@@ -61,67 +111,13 @@ export const MyRecoveryProgramsScreen: React.FC = () => {
     }
   };
 
-  const pastPrograms: PastProgramItem[] = useMemo(() => {
-    const list: PastProgramItem[] = [
-      {
-        id: 'past_1',
-        title: 'Shoulder Mobility',
-        dateText: 'Completed Jan 2024',
-        status: 'Completed',
-        iconName: 'barbell-outline',
-        iconBg: '#F3E8FF',
-        iconColor: '#9333EA',
-        actionText: 'View Summary',
-      },
-      {
-        id: 'past_2',
-        title: 'Ankle Stability',
-        dateText: 'Completed Nov 2023',
-        status: 'Completed',
-        iconName: 'walk-outline',
-        iconBg: '#E0F2FE',
-        iconColor: '#0284C7',
-        actionText: 'View Summary',
-      },
-    ];
-
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(
-      (item) =>
-        item.title.toLowerCase().includes(q) ||
-        item.dateText.toLowerCase().includes(q)
-    );
-  }, [searchQuery]);
-
-  const showActiveCard = useMemo(() => {
-    if (activeFilter === 'Completed' || activeFilter === 'Paused') return false;
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      data.activeProgram.title.toLowerCase().includes(q) ||
-      data.activeProgram.doctorName.toLowerCase().includes(q)
-    );
-  }, [activeFilter, searchQuery, data.activeProgram]);
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View
-          style={[
-            styles.header,
-            {
-              paddingTop:
-                Math.max(
-                  insets.top,
-                  Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 16
-                ) + 4,
-            },
-          ]}
-        >
+        <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -133,7 +129,9 @@ export const MyRecoveryProgramsScreen: React.FC = () => {
 
           <View style={styles.headerTitleGroup}>
             <Text style={styles.headerTitle}>{data.headerTitle}</Text>
-            <Text style={styles.headerSubtitle}>{data.headerSubtitle}</Text>
+            <Text style={styles.headerSubtitle}>
+              {assignments.length} program{assignments.length !== 1 ? 's' : ''} assigned
+            </Text>
           </View>
         </View>
 
@@ -196,165 +194,163 @@ export const MyRecoveryProgramsScreen: React.FC = () => {
             })}
           </View>
 
-          {/* ACTIVE PROGRAM CARD */}
-          {showActiveCard ? (
-            <TouchableOpacity
-              activeOpacity={0.95}
-              style={styles.activeCard}
-              onPress={() => router.push('/recovery-program-details' as any)}
-            >
-              {/* Active Badge Tag */}
-              <View style={styles.activeBadge}>
-                <Text style={styles.activeBadgeText}>
-                  {data.activeProgram.statusBadge}
-                </Text>
+          {/* LOADING STATE */}
+          {assignmentsLoading ? (
+            <View style={styles.noResultsBox}>
+              <ActivityIndicator size="large" color="#003D9B" />
+              <Text style={[styles.noResultsText, { marginTop: 12 }]}>Loading your programs...</Text>
+            </View>
+          ) : filteredAssignments.length === 0 ? (
+            /* NO PROGRAMS EMPTY STATE */
+            <View style={styles.emptyStateBox}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="medical-outline" size={32} color="#94A3B8" />
               </View>
-
-              {/* Title & Doctor */}
-              <Text style={styles.activeTitle}>{data.activeProgram.title}</Text>
-              <View style={styles.doctorRow}>
-                <Ionicons name="briefcase-outline" size={16} color="#64748B" />
-                <Text style={styles.doctorText}>
-                  {data.activeProgram.doctorName}
-                </Text>
-              </View>
-
-              {/* Middle Progress Section */}
-              <View style={styles.progressMiddleRow}>
-                {/* Circular Gauge */}
-                <View style={styles.gaugeContainer}>
-                  <View style={styles.gaugeOuterCircle}>
-                    <Text style={styles.gaugePercentText}>
-                      {data.activeProgram.progressPercent}
+              <Text style={styles.emptyTitle}>
+                {assignments.length === 0
+                  ? 'No recovery programs assigned yet.'
+                  : activeFilter === 'Active'
+                  ? 'No Active Programs'
+                  : activeFilter === 'Completed'
+                  ? 'No Completed Programs'
+                  : 'No Paused Programs'}
+              </Text>
+              <Text style={styles.emptySubtitle}>
+                {assignments.length === 0 || activeFilter === 'Active'
+                  ? 'Your physiotherapist will assign a recovery program for you soon.'
+                  : 'Programs will appear here once available.'}
+              </Text>
+            </View>
+          ) : (
+            /* ASSIGNED PROGRAM CARDS */
+            <View style={styles.cardsContainer}>
+              {filteredAssignments.map((assignment) => (
+                <TouchableOpacity
+                  key={assignment.id}
+                  activeOpacity={0.95}
+                  style={styles.activeCard}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/recovery-program-details' as any,
+                      params: { assignmentId: assignment.id },
+                    })
+                  }
+                >
+                  {/* Status Badge */}
+                  <View
+                    style={[
+                      styles.activeBadge,
+                      assignment.status === 'completed'
+                        ? { backgroundColor: '#DCFCE7' }
+                        : assignment.status === 'paused'
+                        ? { backgroundColor: '#FEF9C3' }
+                        : { backgroundColor: '#CCFBF1' },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.activeBadgeText,
+                        assignment.status === 'completed'
+                          ? { color: '#16A34A' }
+                          : assignment.status === 'paused'
+                          ? { color: '#CA8A04' }
+                          : { color: '#0D9488' },
+                      ]}
+                    >
+                      {assignment.status === 'active'
+                        ? 'ACTIVE'
+                        : assignment.status === 'completed'
+                        ? 'COMPLETED'
+                        : 'PAUSED'}
                     </Text>
                   </View>
-                </View>
 
-                {/* Sessions Info */}
-                <View style={styles.sessionsInfoGroup}>
-                  <Text style={styles.sessionsCountText}>
-                    {data.activeProgram.sessionsCompletedText}
+                  {/* Title */}
+                  <Text style={styles.activeTitle} numberOfLines={2}>
+                    {assignment.programTitle}
                   </Text>
-                  <Text style={styles.sessionsLabelText}>
-                    {data.activeProgram.sessionsLabel}
-                  </Text>
-                </View>
 
-                {/* Spine Graphic Graphic Container */}
-                <View style={styles.spineGraphicWrapper}>
-                  <Image
-                    source={require('../../../assets/images/service_back_pain.png')}
-                    style={styles.spineImage}
-                    resizeMode="contain"
-                  />
-                </View>
-              </View>
-
-              {/* Recovery Score Bar */}
-              <View style={styles.scoreSection}>
-                <View style={styles.scoreHeaderRow}>
-                  <Text style={styles.scoreLabel}>
-                    {data.activeProgram.recoveryScoreLabel}
-                  </Text>
-                  <Text style={styles.scoreValue}>
-                    {data.activeProgram.recoveryScoreVal}
-                  </Text>
-                </View>
-
-                <View style={styles.scoreTrack}>
-                  <LinearGradient
-                    colors={['#0284C7', '#06B6D4']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={[styles.scoreFill, { width: '72%' }]}
-                  />
-                </View>
-
-                <Text style={styles.improvementNote}>
-                  {data.activeProgram.improvementNote}
-                </Text>
-              </View>
-
-              {/* Buttons */}
-              <View style={styles.cardButtonsGroup}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  style={styles.continueBtn}
-                  onPress={() => router.push('/today-session' as any)}
-                >
-                  <View style={styles.playIconCircle}>
-                    <Ionicons name="play" size={14} color="#003D9B" />
+                  {/* Doctor / Assigned By */}
+                  <View style={styles.doctorRow}>
+                    <Ionicons name="briefcase-outline" size={16} color="#64748B" />
+                    <Text style={styles.doctorText}>
+                      {assignment.programDetails?.doctorName || 'Dr. Ananya Sharma'}
+                    </Text>
                   </View>
-                  <Text style={styles.continueBtnText}>
-                    {data.activeProgram.continueBtn}
-                  </Text>
-                </TouchableOpacity>
 
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  style={styles.viewDetailsBtn}
-                  onPress={() => router.push('/recovery-program-details' as any)}
-                >
-                  <Text style={styles.viewDetailsBtnText}>
-                    {data.activeProgram.viewDetailsBtn}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ) : activeFilter === 'Active' && searchQuery.trim() !== '' ? (
-            <View style={styles.noResultsBox}>
-              <Text style={styles.noResultsText}>No active programs match your search.</Text>
-            </View>
-          ) : null}
+                  {/* Progress Middle Row */}
+                  <View style={styles.progressMiddleRow}>
+                    <View style={styles.gaugeContainer}>
+                      <View style={styles.gaugeOuterCircle}>
+                        <Text style={styles.gaugePercentText}>
+                          {assignment.progressPercent}%
+                        </Text>
+                      </View>
+                    </View>
 
-          {/* PAST PROGRAMS SECTION */}
-          {activeFilter !== 'Paused' && (
-            <View style={styles.pastSection}>
-              <Text style={styles.pastSectionTitle}>{data.pastProgramsTitle}</Text>
+                    <View style={styles.sessionsInfoGroup}>
+                      <Text style={styles.sessionsCountText}>
+                        {assignment.completedSessions}/{assignment.totalSessions}
+                      </Text>
+                      <Text style={styles.sessionsLabelText}>Sessions Completed</Text>
+                      <Text style={[styles.sessionsLabelText, { marginTop: 4 }]}>
+                        Week {assignment.currentWeek} of {assignment.totalWeeks}
+                      </Text>
+                    </View>
 
-              {pastPrograms.length > 0 ? (
-                <View style={styles.pastListContainer}>
-                  {pastPrograms.map((item) => (
-                    <View key={item.id} style={styles.pastCard}>
-                      <View
-                        style={[
-                          styles.pastIconCircle,
-                          { backgroundColor: item.iconBg },
-                        ]}
+                    <View style={styles.adherenceBadge}>
+                      <Text style={styles.adherenceValue}>{assignment.adherence}%</Text>
+                      <Text style={styles.adherenceLabel}>Adherence</Text>
+                    </View>
+                  </View>
+
+                  {/* Progress Bar */}
+                  <View style={styles.scoreSection}>
+                    <View style={styles.scoreHeaderRow}>
+                      <Text style={styles.scoreLabel}>PROGRAM PROGRESS</Text>
+                      <Text style={styles.scoreValue}>{assignment.progressPercent}%</Text>
+                    </View>
+                    <View style={styles.scoreTrack}>
+                      <LinearGradient
+                        colors={['#0284C7', '#06B6D4']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={[styles.scoreFill, { width: `${Math.max(assignment.progressPercent, 2)}%` as any }]}
+                      />
+                    </View>
+                    <Text style={styles.improvementNote}>Started {assignment.startDate}</Text>
+                  </View>
+
+                  {/* Buttons (only for active programs) */}
+                  {assignment.status === 'active' && (
+                    <View style={styles.cardButtonsGroup}>
+                      <TouchableOpacity
+                        activeOpacity={0.85}
+                        style={styles.continueBtn}
+                        onPress={() => router.push('/today-session' as any)}
                       >
-                        <Ionicons
-                          name={item.iconName}
-                          size={22}
-                          color={item.iconColor}
-                        />
-                      </View>
-
-                      <View style={styles.pastTextGroup}>
-                        <Text style={styles.pastTitle}>{item.title}</Text>
-                        <Text style={styles.pastDate}>{item.dateText}</Text>
-                      </View>
+                        <View style={styles.playIconCircle}>
+                          <Ionicons name="play" size={14} color="#003D9B" />
+                        </View>
+                        <Text style={styles.continueBtnText}>Continue Session</Text>
+                      </TouchableOpacity>
 
                       <TouchableOpacity
-                        activeOpacity={0.7}
+                        activeOpacity={0.8}
+                        style={styles.viewDetailsBtn}
                         onPress={() =>
-                          Alert.alert(
-                            item.title,
-                            `${item.title} completed successfully in ${item.dateText.replace('Completed ', '')}.`
-                          )
+                          router.push({
+                            pathname: '/recovery-program-details' as any,
+                            params: { assignmentId: assignment.id },
+                          })
                         }
                       >
-                        <Text style={styles.viewSummaryText}>
-                          {item.actionText}
-                        </Text>
+                        <Text style={styles.viewDetailsBtnText}>View Details</Text>
                       </TouchableOpacity>
                     </View>
-                  ))}
-                </View>
-              ) : (
-                <View style={styles.noResultsBox}>
-                  <Text style={styles.noResultsText}>No past programs found.</Text>
-                </View>
-              )}
+                  )}
+                </TouchableOpacity>
+              ))}
             </View>
           )}
 
@@ -370,18 +366,14 @@ export const MyRecoveryProgramsScreen: React.FC = () => {
             </View>
 
             <Text style={styles.bannerTitle}>{data.consultBanner.title}</Text>
-            <Text style={styles.bannerSubtitle}>
-              {data.consultBanner.subtitle}
-            </Text>
+            <Text style={styles.bannerSubtitle}>{data.consultBanner.subtitle}</Text>
 
             <TouchableOpacity
               activeOpacity={0.88}
               style={styles.bookConsultBtn}
               onPress={() => router.push('/service-selection' as any)}
             >
-              <Text style={styles.bookConsultBtnText}>
-                {data.consultBanner.buttonText}
-              </Text>
+              <Text style={styles.bookConsultBtnText}>{data.consultBanner.buttonText}</Text>
             </TouchableOpacity>
           </LinearGradient>
         </ScrollView>
@@ -808,6 +800,66 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#64748B',
   },
+
+  /* REAL DATA CARDS */
+  cardsContainer: {
+    gap: 16,
+    marginBottom: Spacing.xl,
+  },
+
+  /* EMPTY STATE */
+  emptyStateBox: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+    marginBottom: Spacing.xl,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#051A3E',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 20,
+    fontWeight: Typography.fontWeight.medium,
+  },
+
+  /* ADHERENCE BADGE */
+  adherenceBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EBF5FF',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    minWidth: 64,
+  },
+  adherenceValue: {
+    fontSize: 18,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#003D9B',
+  },
+  adherenceLabel: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: Typography.fontWeight.medium,
+    marginTop: 2,
+  },
 });
 
 export default MyRecoveryProgramsScreen;
+

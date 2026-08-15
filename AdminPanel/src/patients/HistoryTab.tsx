@@ -19,10 +19,12 @@ import {
   Activity,
   ArrowRight,
 } from 'lucide-react';
+import type { Patient } from './types';
 
 interface HistoryTabProps {
   patientName?: string;
   therapistName?: string;
+  patient?: Patient;
 }
 
 export interface ActivityLogItem {

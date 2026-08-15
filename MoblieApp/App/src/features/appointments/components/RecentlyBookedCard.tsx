@@ -11,12 +11,15 @@ import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 
+import { TherapistAvatar } from '@/components';
+
 export interface RecentlyBookedDoctor {
   id: string;
   doctorName: string;
   specialty: string;
   timeAgo: string;
-  imageName: 'doctor_arjun' | 'doctor_ananya';
+  imageName?: string;
+  avatarUrl?: string;
 }
 
 export interface RecentlyBookedCardProps {
@@ -30,13 +33,6 @@ export const RecentlyBookedCard: React.FC<RecentlyBookedCardProps> = ({
   onPress,
   onRebookPress,
 }) => {
-  const getImageSource = (name: string) => {
-    if (name === 'doctor_ananya') {
-      return require('../../../assets/images/doctor_ananya.png');
-    }
-    return require('../../../assets/images/doctor_arjun.png');
-  };
-
   return (
     <TouchableOpacity
       activeOpacity={0.85}
@@ -46,10 +42,11 @@ export const RecentlyBookedCard: React.FC<RecentlyBookedCardProps> = ({
       accessibilityLabel={`Rebook ${doctor.doctorName}`}
     >
       <View style={styles.avatarWrapper}>
-        <Image
-          source={getImageSource(doctor.imageName)}
-          style={styles.avatarImage}
-          resizeMode="cover"
+        <TherapistAvatar
+          name={doctor.doctorName}
+          avatarUrl={doctor.avatarUrl}
+          imageName={doctor.imageName}
+          size={48}
         />
       </View>
 

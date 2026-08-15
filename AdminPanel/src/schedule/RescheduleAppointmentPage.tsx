@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -13,7 +14,10 @@ import {
   AlertCircle
 } from 'lucide-react';
 
+import { rescheduleScheduleRecord } from '@/services/scheduleService';
+
 interface RescheduleAppointmentPageProps {
+  appointment?: any;
   onBack?: () => void;
   onSuccess?: () => void;
 }
@@ -35,50 +39,64 @@ const TIME_SLOTS: TimeSlot[] = [
 ];
 
 interface DayConfig {
-  dateStr: string; // e.g. "2024-10-27"
+  dateStr: string; // e.g. "2026-08-20"
   dayName: string; // "MON"
-  dayNum: string;  // "27"
-  fullLabel: string; // "Monday, Oct 27, 2024"
+  dayNum: string;  // "20"
+  fullLabel: string; // "Monday, Aug 20, 2026"
   isOnLeave?: boolean;
 }
 
-const DAYS: DayConfig[] = [
-  { dateStr: '2024-10-27', dayName: 'MON', dayNum: '27', fullLabel: 'Monday, Oct 27, 2024' },
-  { dateStr: '2024-10-28', dayName: 'TUE', dayNum: '28', fullLabel: 'Tuesday, Oct 28, 2024' },
-  { dateStr: '2024-10-29', dayName: 'WED', dayNum: '29', fullLabel: 'Wednesday, Oct 29, 2024', isOnLeave: true },
-  { dateStr: '2024-10-30', dayName: 'THU', dayNum: '30', fullLabel: 'Thursday, Oct 30, 2024', isOnLeave: true },
-  { dateStr: '2024-10-31', dayName: 'FRI', dayNum: '31', fullLabel: 'Friday, Oct 31, 2024' },
-  { dateStr: '2024-11-01', dayName: 'SAT', dayNum: '01', fullLabel: 'Saturday, Nov 01, 2024' },
-  { dateStr: '2024-11-02', dayName: 'SUN', dayNum: '02', fullLabel: 'Sunday, Nov 02, 2024' },
-];
+const generateDaysForOffset = (offset: number = 0): DayConfig[] => {
+  const today = new Date();
+  const currentDayIndex = today.getDay();
+  const diffToMon = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex) + offset * 7;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMon);
+
+  const days: DayConfig[] = [];
+  const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  const fullDayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const dayName = dayNames[d.getDay()];
+    const fullLabel = `${fullDayNames[d.getDay()]}, ${monthNames[d.getMonth()]} ${d.getDate()}, ${yyyy}`;
+    days.push({
+      dateStr,
+      dayName,
+      dayNum: String(d.getDate()).padStart(2, '0'),
+      fullLabel,
+    });
+  }
+  return days;
+};
 
 // Booked slots mock data (dateStr + time)
-const BOOKED_SLOTS = new Set([
-  '2024-10-27-09:00',
-  '2024-10-27-11:00',
-  '2024-10-28-10:00',
-  '2024-10-28-12:00',
-  '2024-10-28-13:00',
-  '2024-10-31-09:00',
-  '2024-10-31-12:00',
-  '2024-11-01-14:00',
-  '2024-11-02-10:00',
-]);
+const BOOKED_SLOTS = new Set<string>();
 
 export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps> = ({
+  appointment,
   onBack,
   onSuccess,
 }) => {
+  const [weekOffset, setWeekOffset] = useState<number>(0);
+  const daysList = generateDaysForOffset(weekOffset);
+
   // Currently selected date & time slot
-  const [selectedDate, setSelectedDate] = useState<string>('2024-10-27');
+  const [selectedDate, setSelectedDate] = useState<string>(daysList[0]?.dateStr || '2026-08-20');
   const [selectedTime, setSelectedTime] = useState<string>('14:00');
   const [rescheduleReason, setRescheduleReason] = useState<string>('Patient Request');
   const [internalNotes, setInternalNotes] = useState<string>('');
-  const [weekOffset, setWeekOffset] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Helper for current selected day label
-  const currentDayConfig = DAYS.find((d) => d.dateStr === selectedDate) || DAYS[0];
+  const currentDayConfig = daysList.find((d) => d.dateStr === selectedDate) || daysList[0];
   const currentSlotConfig = TIME_SLOTS.find((t) => t.time === selectedTime) || TIME_SLOTS[5];
 
   // Helper to format slot end time (+1 hour)
@@ -99,13 +117,33 @@ export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps>
     setSelectedTime(timeStr);
   };
 
-  const handleConfirmReschedule = () => {
-    setToastMessage(
-      `Appointment rescheduled to ${currentDayConfig.fullLabel} at ${currentSlotConfig.displayTime}!`
-    );
-    setTimeout(() => {
-      onSuccess ? onSuccess() : onBack ? onBack() : null;
-    }, 1800);
+  const handleConfirmReschedule = async () => {
+    try {
+      if (appointment?.id) {
+        await rescheduleScheduleRecord(
+          appointment.id,
+          appointment.therapistId || appointment.doctorId || 'doc_1',
+          appointment.fullDate || '2026-08-15',
+          appointment.timeSlot || appointment.time || '10:00 AM',
+          selectedDate,
+          currentSlotConfig.displayTime,
+          currentDayConfig.fullLabel
+        );
+      }
+      setToastMessage(
+        `Appointment rescheduled to ${currentDayConfig.fullLabel} at ${currentSlotConfig.displayTime}!`
+      );
+      setTimeout(() => {
+        onSuccess ? onSuccess() : onBack ? onBack() : null;
+      }, 1800);
+    } catch (err: any) {
+      console.error('Reschedule error:', err);
+      if (err.message === 'SLOT_ALREADY_BOOKED') {
+        setToastMessage('Target time slot is already booked. Please choose another slot.');
+      } else {
+        setToastMessage(err.message || 'Failed to reschedule appointment.');
+      }
+    }
   };
 
   return (
@@ -159,8 +197,10 @@ export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps>
                 PATIENT
               </span>
               <div className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-1.5 flex-wrap">
-                <span>Sanya Malhotra</span>
-                <span className="text-xs font-semibold text-slate-400">#OM-90210</span>
+                <span>{appointment?.patientName || 'Sanya Malhotra'}</span>
+                <span className="text-xs font-semibold text-slate-400">
+                  {appointment ? `#OM-${appointment.id.slice(0, 4)}` : '#OM-90210'}
+                </span>
               </div>
             </div>
           </div>
@@ -175,7 +215,7 @@ export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps>
                 THERAPIST
               </span>
               <div className="text-sm sm:text-base font-extrabold text-slate-900">
-                Dr. Arjun Mehta
+                {appointment?.therapistName || 'Dr. Arjun Mehta'}
               </div>
             </div>
           </div>
@@ -190,7 +230,7 @@ export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps>
                 CURRENT SCHEDULE
               </span>
               <div className="text-sm sm:text-base font-extrabold text-slate-900">
-                Oct 23, 2024 • 01:45 PM
+                {appointment ? `${appointment.date} • ${appointment.time}` : 'Oct 23, 2024 • 01:45 PM'}
               </div>
             </div>
           </div>
@@ -249,7 +289,7 @@ export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps>
                   <div className="text-[11px] font-bold text-slate-400 uppercase self-end text-left pl-1">
                     Time
                   </div>
-                  {DAYS.map((day) => (
+                  {daysList.map((day) => (
                     <div
                       key={day.dateStr}
                       className={`p-2 rounded-xl text-center ${
@@ -295,7 +335,7 @@ export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps>
                         </div>
 
                         {/* Day Slot Cells */}
-                        {DAYS.map((day) => {
+                        {daysList.map((day) => {
                           const isBlockedLeave = day.isOnLeave;
                           const slotKey = `${day.dateStr}-${slot.time}`;
                           const isBooked = BOOKED_SLOTS.has(slotKey);
@@ -381,10 +421,9 @@ export const RescheduleAppointmentPage: React.FC<RescheduleAppointmentPageProps>
 
             {/* Selected Therapist Header Card */}
             <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex items-center gap-3.5">
-              <img
-                src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=200"
-                alt="Dr. Arjun Mehta"
-                className="w-12 h-12 rounded-full object-cover border border-white shadow-2xs shrink-0"
+              <InitialsAvatar
+                name={appointment?.therapistName || 'Dr. Arjun Mehta'}
+                className="w-12 h-12 text-sm font-bold shrink-0"
               />
               <div>
                 <h4 className="text-base font-extrabold text-slate-900 leading-tight">

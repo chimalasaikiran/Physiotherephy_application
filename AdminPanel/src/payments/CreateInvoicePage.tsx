@@ -49,70 +49,40 @@ interface PatientData {
   category: 'recent' | 'today' | 'outstanding' | 'active';
 }
 
+const defaultPatient: PatientData = {
+  id: 'p1',
+  name: 'Sanya Malhotra',
+  patientCode: 'P-98214',
+  initials: 'SM',
+  program: 'ACL Recovery Program',
+  balance: 8450,
+  phone: '+91 98765 43210',
+  email: 'sanya.m@example.com',
+  ageGender: '28 Yrs / Female',
+  doctor: 'Dr. Arjun Mehta',
+  lastInvoice: 'INV-2026-00089',
+  totalInvoices: 4,
+  activeProgramTag: 'Active',
+  category: 'recent',
+};
+
 const mockPatients: PatientData[] = [
-  {
-    id: 'p1',
-    name: 'Sanya Malhotra',
-    patientCode: '#OM-90210',
-    initials: 'SM',
-    program: 'Post-Op ACL Rehab',
-    balance: 8450,
-    phone: '+91 98765 43210',
-    email: 'sanya.m@example.com',
-    ageGender: '26, Female',
-    doctor: 'Dr. Ananya Iyer',
-    lastInvoice: '24 Oct 2024',
-    totalInvoices: 4,
-    activeProgramTag: 'ACL Recovery',
-    category: 'active',
-  },
+  defaultPatient,
   {
     id: 'p2',
-    name: 'Arjun Sharma',
-    patientCode: '#OM-99281',
-    initials: 'AS',
-    program: 'Post-Op ACL Rehab',
-    balance: 0,
-    phone: '+91 98765 43210',
-    email: 'arjun.s@example.com',
-    ageGender: '28, Male',
-    doctor: 'Dr. Sarah Chen',
-    lastInvoice: '12 May 2024',
-    totalInvoices: 12,
-    activeProgramTag: 'Post-Op Rehab',
-    category: 'recent',
-  },
-  {
-    id: 'p3',
-    name: 'Meera Reddy',
-    patientCode: '#OM-99342',
-    initials: 'MR',
-    program: 'Cervical Spondylosis',
-    balance: 0,
-    phone: '+91 98002 11223',
-    email: 'meera.r@example.com',
-    ageGender: '64, Female',
-    doctor: 'Dr. Vikram Seth',
-    lastInvoice: '28 Apr 2024',
-    totalInvoices: 8,
-    activeProgramTag: 'Spine Care',
-    category: 'today',
-  },
-  {
-    id: 'p4',
     name: 'Rahul Sharma',
-    patientCode: '#OM-99015',
+    patientCode: 'P-98215',
     initials: 'RS',
-    program: 'Tennis Elbow Rehab',
-    balance: 1200,
-    phone: '+91 91234 56789',
+    program: 'Spine Rehab Standard',
+    balance: 0,
+    phone: '+91 98123 45678',
     email: 'rahul.s@example.com',
-    ageGender: '32, Male',
-    doctor: 'Dr. Sarah Chen',
-    lastInvoice: '01 Jun 2024',
-    totalInvoices: 5,
-    activeProgramTag: 'Arm Therapy',
-    category: 'outstanding',
+    ageGender: '34 Yrs / Male',
+    doctor: 'Dr. Priya Desai',
+    lastInvoice: 'INV-2026-00090',
+    totalInvoices: 2,
+    activeProgramTag: 'Active',
+    category: 'today',
   },
 ];
 
@@ -214,33 +184,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>('All Services');
   const [serviceTab, setServiceTab] = useState<'Popular' | 'Frequently Used' | "Today's Services">('Popular');
 
-  // Selected Services matching exact Figma design
-  const [selectedServices, setSelectedServices] = useState<ServiceLineItem[]>([
-    {
-      id: 'cs1',
-      title: 'Initial Assessment',
-      description: 'Full diagnostic evaluation of ACL strain',
-      unitPrice: 2500,
-      quantity: 1,
-      discountPercent: 0,
-    },
-    {
-      id: 'cs2',
-      title: 'Manual Therapy (3x Sessions)',
-      description: 'Deep tissue mobilization & alignment',
-      unitPrice: 3000,
-      quantity: 3,
-      discountPercent: 10,
-    },
-    {
-      id: 'cs3',
-      title: 'Custom Exercise Plan',
-      description: 'Home-based recovery module via app',
-      unitPrice: 1500,
-      quantity: 1,
-      discountPercent: 0,
-    },
-  ]);
+  const [selectedServices, setSelectedServices] = useState<ServiceLineItem[]>([]);
 
   const [dueDate, setDueDate] = useState<string>('2024-11-15');
   const [paymentMethod, setPaymentMethod] = useState<string>('UPI (PhonePe)');
@@ -249,7 +193,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
   );
 
   const selectedPatient =
-    mockPatients.find((p) => p.id === selectedPatientId) || mockPatients[0];
+    mockPatients.find((p) => p.id === selectedPatientId) || mockPatients[0] || defaultPatient;
 
   // Exact figures matching Figma screenshot (₹12,450 total, ₹4,000 paid, ₹8,450 due)
   const subtotal = 12100;

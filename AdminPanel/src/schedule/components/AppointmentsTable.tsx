@@ -1,4 +1,5 @@
 import React from 'react';
+import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import { Calendar as CalendarIcon, Clock, MoreVertical, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export interface AppointmentItem {
@@ -13,6 +14,7 @@ export interface AppointmentItem {
   date: string;
   time: string;
   status: 'Confirmed' | 'Scheduled' | 'Completed' | 'Cancelled';
+  paymentStatus?: 'Paid' | 'Pending';
 }
 
 interface AppointmentsTableProps {
@@ -23,6 +25,7 @@ interface AppointmentsTableProps {
   onPageChange: (page: number) => void;
   viewMode: 'list' | 'grid';
   onSelectSession?: (item: AppointmentItem) => void;
+  onStatusChange?: (item: AppointmentItem, newStatus: AppointmentItem['status']) => void;
 }
 
 export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
@@ -33,6 +36,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
   onPageChange,
   viewMode,
   onSelectSession,
+  onStatusChange,
 }) => {
   const getTypeBadgeClass = (type: AppointmentItem['type']) => {
     switch (type) {
@@ -62,19 +66,26 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
     }
   };
 
+  const getPaymentBadgeClass = (paymentStatus?: 'Paid' | 'Pending') => {
+    return paymentStatus === 'Paid'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : 'bg-amber-50 text-amber-700 border-amber-200';
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden flex flex-col">
       {viewMode === 'list' ? (
         <>
           {/* Table Container */}
           <div className="overflow-x-auto min-w-full">
-            <table className="w-full text-left border-collapse min-w-[700px]">
+            <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] font-bold text-slate-400 tracking-wider uppercase">
                   <th className="py-4 px-6">PATIENT</th>
                   <th className="py-4 px-6">THERAPIST</th>
                   <th className="py-4 px-6">TYPE</th>
                   <th className="py-4 px-6">DATE & TIME</th>
+                  <th className="py-4 px-6">PAYMENT</th>
                   <th className="py-4 px-6">STATUS</th>
                   <th className="py-4 px-4 text-right"></th>
                 </tr>
@@ -82,7 +93,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
               <tbody className="divide-y divide-slate-100 text-sm">
                 {appointments.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
                       No appointments found matching your search.
                     </td>
                   </tr>
@@ -96,11 +107,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
                       {/* Patient Column */}
                       <td className="py-4 px-6">
                         <div className="flex items-center space-x-3">
-                          <img
-                            src={item.patientAvatar}
-                            alt={item.patientName}
-                            className="w-10 h-10 rounded-full object-cover border border-slate-100"
-                          />
+                          <InitialsAvatar name={item.patientName} className="w-10 h-10 text-xs font-bold shrink-0" />
                           <div>
                             <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
                               {item.patientName}
@@ -115,11 +122,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
                       {/* Therapist Column */}
                       <td className="py-4 px-6">
                         <div className="flex items-center space-x-3">
-                          <img
-                            src={item.therapistAvatar}
-                            alt={item.therapistName}
-                            className="w-9 h-9 rounded-full object-cover border border-slate-100"
-                          />
+                          <InitialsAvatar name={item.therapistName} className="w-9 h-9 text-xs font-bold shrink-0" />
                           <div>
                             <div className="font-bold text-slate-800 text-xs">
                               {item.therapistName}
@@ -154,20 +157,43 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
                         </div>
                       </td>
 
-                      {/* Status Column */}
+                      {/* Payment Status Column */}
                       <td className="py-4 px-6">
                         <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border ${getStatusBadgeClass(
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${getPaymentBadgeClass(
+                            item.paymentStatus
+                          )}`}
+                        >
+                          {item.paymentStatus || 'Paid'}
+                        </span>
+                      </td>
+
+                      {/* Status Column */}
+                      <td className="py-4 px-6" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={item.status}
+                          onChange={(e) => {
+                            const newStatus = e.target.value as AppointmentItem['status'];
+                            onStatusChange?.(item, newStatus);
+                          }}
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border cursor-pointer outline-none transition-all ${getStatusBadgeClass(
                             item.status
                           )}`}
                         >
-                          {item.status}
-                        </span>
+                          <option value="Confirmed">Confirmed</option>
+                          <option value="Scheduled">Scheduled</option>
+                          <option value="Completed">Completed</option>
+                          <option value="Cancelled">Cancelled</option>
+                        </select>
                       </td>
 
                       {/* Options / Action Column */}
                       <td className="py-4 px-4 text-right">
                         <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectSession?.(item);
+                          }}
                           className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
                           aria-label="More options"
                         >
@@ -198,21 +224,26 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
                 >
                   {item.status}
                 </span>
-                <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${getTypeBadgeClass(
-                    item.type
-                  )}`}
-                >
-                  {item.type}
-                </span>
+                <div className="flex items-center space-x-1.5">
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold border ${getPaymentBadgeClass(
+                      item.paymentStatus
+                    )}`}
+                  >
+                    {item.paymentStatus || 'Paid'}
+                  </span>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${getTypeBadgeClass(
+                      item.type
+                    )}`}
+                  >
+                    {item.type}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center space-x-3">
-                <img
-                  src={item.patientAvatar}
-                  alt={item.patientName}
-                  className="w-12 h-12 rounded-full object-cover border border-slate-200"
-                />
+                <InitialsAvatar name={item.patientName} className="w-12 h-12 text-sm font-bold shrink-0" />
                 <div>
                   <h4 className="font-bold text-slate-900">{item.patientName}</h4>
                   <p className="text-xs text-slate-500">{item.patientSubtitle}</p>
@@ -221,11 +252,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2">
-                  <img
-                    src={item.therapistAvatar}
-                    alt={item.therapistName}
-                    className="w-7 h-7 rounded-full object-cover"
-                  />
+                  <InitialsAvatar name={item.therapistName} className="w-7 h-7 text-[10px] font-bold shrink-0" />
                   <span className="font-semibold text-slate-700">{item.therapistName}</span>
                 </div>
                 <div className="text-right">

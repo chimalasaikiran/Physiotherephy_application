@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { createProgram } from '@/services/programService';
+
 import {
   Plus,
   User,
@@ -126,7 +128,7 @@ export const CreateRecoveryProgramPage: React.FC<CreateRecoveryProgramPageProps>
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newProg: Omit<Program, 'id'> = {
       title: programName || 'Untitled Recovery Program',
@@ -137,19 +139,26 @@ export const CreateRecoveryProgramPage: React.FC<CreateRecoveryProgramPageProps>
         'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=800&q=80',
       duration: `${estimatedDuration} Weeks`,
       difficulty: difficulty,
-      activePatients: '0',
+      activePatients: 0,
       completionRate: 'N/A',
       updatedAt: 'Just now',
       type: 'Rehabilitation',
       exercisesCount: 12,
     };
 
-    if (onCreateProgram) {
-      onCreateProgram(newProg);
-    } else if (onBack) {
-      onBack();
+    try {
+      if (onCreateProgram) {
+        onCreateProgram(newProg);
+      } else {
+        await createProgram(newProg);
+        if (onBack) onBack();
+      }
+    } catch (err) {
+      console.error('Failed to create program:', err);
+      if (onBack) onBack();
     }
   };
+
 
   return (
     <div className="w-full space-y-8 pb-16 animate-in fade-in duration-300">

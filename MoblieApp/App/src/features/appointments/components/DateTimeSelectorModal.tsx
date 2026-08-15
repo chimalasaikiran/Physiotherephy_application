@@ -479,8 +479,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   timeChip: {
-    width: (SCREEN_WIDTH - 48 - 20) / 3,
-    paddingVertical: 10,
+    width: (SCREEN_WIDTH - 40 - 20) / 3,
+    height: 46,
     borderRadius: 12,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
