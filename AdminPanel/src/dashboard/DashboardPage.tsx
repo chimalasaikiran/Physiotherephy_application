@@ -183,17 +183,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
             <ReportsPage initialSubTab="Exports" />
           ) : activeTab === 'reports' ? (
             <ReportsPage />
-          ) : activeTab === 'analytics-therapists' || activeTab === 'analytics_therapists' ? (
+          ) : activeTab === 'analytics' || activeTab.startsWith('analytics') ? (
             <AnalyticsPage
-              initialSubTab="Therapists"
+              initialSubTab={
+                activeTab.includes('therapist')
+                  ? 'Therapists'
+                  : activeTab.includes('patient')
+                  ? 'Patients'
+                  : activeTab.includes('program')
+                  ? 'Recovery Programs'
+                  : activeTab.includes('revenue')
+                  ? 'Revenue'
+                  : 'Overview'
+              }
               onNavigateToTherapists={() => setActiveTab('therapists')}
               onNavigateToPatients={() => setActiveTab('patients')}
-            />
-          ) : activeTab === 'analytics-patients' || activeTab === 'analytics_patients' ? (
-            <AnalyticsPage
-              initialSubTab="Patients"
-              onNavigateToTherapists={() => setActiveTab('therapists')}
-              onNavigateToPatients={() => setActiveTab('patients')}
+              dashboardData={dashboardData}
             />
           ) : activeTab === 'create-treatment-package' || activeTab === 'create-package' ? (
             <CreateTreatmentPackagePage

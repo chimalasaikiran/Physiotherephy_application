@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Download,
   ChevronDown,
@@ -28,12 +28,14 @@ interface AnalyticsPageProps {
   onNavigateToTherapists?: () => void;
   onNavigateToPatients?: () => void;
   initialSubTab?: 'Overview' | 'Patients' | 'Therapists' | 'Recovery Programs' | 'Revenue';
+  dashboardData?: any;
 }
 
 export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({
   onNavigateToTherapists,
   onNavigateToPatients,
   initialSubTab = 'Overview',
+  dashboardData,
 }) => {
   // Navigation Tabs state
   const [activeSubTab, setActiveSubTab] = useState<
@@ -47,6 +49,66 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({
     program: 'All Programs',
     location: 'All Centers',
   });
+
+  const summaryMetrics = dashboardData?.summaryMetrics;
+
+  const metricCards = useMemo(() => {
+    if (!summaryMetrics) return mockMetricCards;
+
+    const liveTotalPatients = summaryMetrics.totalPatients > 0 
+      ? summaryMetrics.totalPatients.toLocaleString() 
+      : '1,248';
+    
+    const liveRevenue = summaryMetrics.totalRevenue > 0 
+      ? `₹${summaryMetrics.totalRevenue.toLocaleString('en-IN')}` 
+      : '₹2,45,000';
+
+    const liveTherapistUtil = summaryMetrics.totalTherapists > 0 
+      ? `${Math.min(100, Math.round((summaryMetrics.activeTherapists / summaryMetrics.totalTherapists) * 100))}%` 
+      : '88%';
+
+    const liveCompletionRate = summaryMetrics.totalAppointments > 0 
+      ? `${Math.min(100, Math.round((summaryMetrics.completedAppointments / summaryMetrics.totalAppointments) * 100))}%` 
+      : '96%';
+
+    return [
+      {
+        id: 'total-patients',
+        title: 'TOTAL PATIENTS',
+        value: liveTotalPatients,
+        trendText: '+4.2%',
+        subtext: 'vs last year',
+        isPositive: true,
+      },
+      {
+        id: 'recovery-success',
+        title: 'RECOVERY SUCCESS',
+        value: '94.2%',
+        badge: 'TOP 5%',
+        subtext: 'Average completion score',
+      },
+      {
+        id: 'monthly-revenue',
+        title: 'MONTHLY REVENUE',
+        value: liveRevenue,
+        trendText: '+14%',
+        subtext: 'vs target revenue',
+        isPositive: true,
+      },
+      {
+        id: 'therapist-utilization',
+        title: 'THERAPIST UTIL...',
+        value: liveTherapistUtil,
+        subtext: 'Optimal capacity range',
+      },
+      {
+        id: 'completion-rate',
+        title: 'COMPLETION RATE',
+        value: liveCompletionRate,
+        subtext: 'High patient retention',
+      },
+    ];
+  }, [summaryMetrics]);
 
   // Modal states
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -187,7 +249,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({
 
       {/* Top KPI Metric Cards (5 Cards matching Figma layout) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {mockMetricCards.map((card) => (
+        {metricCards.map((card) => (
           <div
             key={card.id}
             className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex flex-col justify-between hover:shadow-md transition-shadow relative overflow-hidden group min-h-[120px]"
