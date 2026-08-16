@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import * as SplashScreenExpo from 'expo-splash-screen';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants/colors';
 import { Typography } from '@/constants/typography';
 import { Spacing } from '@/constants/spacing';
@@ -37,6 +38,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
   autoNavigate = true,
   testID = 'splash-screen',
 }) => {
+  const insets = useSafeAreaInsets();
   // Animation values
   const logoScale = useRef(new Animated.Value(0.85)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -147,12 +149,12 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({
       </View>
 
       {/* Bottom Footer & Loading Indicator */}
-      <SafeAreaView style={styles.footerSafeArea}>
+      <View style={[styles.footerSafeArea, { bottom: Math.max(insets.bottom, 20) }]}>
         <Animated.View style={[styles.footerContainer, { opacity: footerOpacity }]}>
           <ActivityIndicator size="small" color={Colors.primary} style={styles.loader} />
           <Text style={styles.footerText}>{Strings.brand.footer}</Text>
         </Animated.View>
-      </SafeAreaView>
+      </View>
     </TouchableOpacity>
   );
 };

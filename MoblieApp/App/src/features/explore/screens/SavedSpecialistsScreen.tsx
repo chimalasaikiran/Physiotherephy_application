@@ -122,43 +122,42 @@ export const SavedSpecialistsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
-      <View style={styles.container}>
-        {/* HEADER BAR */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={styles.headerIconButton}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="arrow-back" size={22} color="#003D9B" />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle}>{s.headerTitle}</Text>
-
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={styles.headerIconButton}
-            onPress={handleShareScreen}
-            accessibilityRole="button"
-            accessibilityLabel="Share saved specialists"
-          >
-            <Ionicons name="share-outline" size={22} color="#003D9B" />
-          </TouchableOpacity>
-        </View>
-
-        {/* SCROLLABLE CONTENT AREA */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: 110 + Math.max(insets.bottom, 12) },
-          ]}
+      {/* HEADER BAR */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          style={styles.headerIconButton}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
+          <Ionicons name="arrow-back" size={22} color="#003D9B" />
+        </TouchableOpacity>
+
+        <Text style={styles.headerTitle}>{s.headerTitle}</Text>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          style={styles.headerIconButton}
+          onPress={handleShareScreen}
+          accessibilityRole="button"
+          accessibilityLabel="Share saved specialists"
+        >
+          <Ionicons name="share-outline" size={22} color="#003D9B" />
+        </TouchableOpacity>
+      </View>
+
+      {/* SCROLLABLE CONTENT AREA */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 110 + Math.max(insets.bottom, 12) },
+        ]}
+      >
           {/* SEARCH BAR */}
           <View style={styles.searchContainer}>
             <Ionicons name="search-outline" size={20} color="#94A3B8" style={styles.searchIcon} />
@@ -372,9 +371,8 @@ export const SavedSpecialistsScreen: React.FC = () => {
         {/* BOTTOM NAVIGATION BAR */}
         <BottomNavBar activeTab="profile" onTabPress={handleTabPress} />
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {

@@ -90,16 +90,15 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
   const chartHeight = 110;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
 
-      <View style={styles.container}>
-        {/* 1. TOP NAVBAR HEADER */}
-        <View
-          style={[
+      {/* 1. TOP NAVBAR HEADER */}
+      <View
+        style={[
             styles.headerBar,
             {
-              paddingTop: Platform.OS === 'android' ? Math.max(StatusBar.currentHeight || 0, 12) : 8,
+              paddingTop: insets.top + 8,
             },
           ]}
         >
@@ -353,9 +352,8 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
         {/* 8. BOTTOM NAVIGATION BAR */}
         <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {

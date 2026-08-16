@@ -132,16 +132,15 @@ export const ServiceSelectionScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
-      <View style={styles.container}>
-        {/* 1. Header */}
-        <ServiceSelectionHeader
-          title={Strings.serviceSelection.headerTitle}
-          onBack={handleBack}
-          onAvatarPress={() => Alert.alert('Profile', 'Opening सागर user profile...')}
-        />
+      {/* 1. Header */}
+      <ServiceSelectionHeader
+        title={Strings.serviceSelection.headerTitle}
+        onBack={handleBack}
+        onAvatarPress={() => Alert.alert('Profile', 'Opening सागर user profile...')}
+      />
 
         {/* 2. Search Bar */}
         <View style={styles.searchContainer}>
@@ -280,9 +279,8 @@ export const ServiceSelectionScreen: React.FC = () => {
         {/* 5. BOTTOM NAVIGATION BAR */}
         <BottomNavBar activeTab={activeTab} onTabPress={handleTabPress} />
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -30,6 +31,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
   onMaybeLater,
 }) => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleExplore = () => {
@@ -76,7 +78,7 @@ export const CompletionScreen: React.FC<CompletionScreenProps> = ({
         </View>
 
         {/* MAIN CONTENT SECTION: FLEX 1 & JUSTIFY-CONTENT BETWEEN */}
-        <View style={styles.bodyContent}>
+        <View style={[styles.bodyContent, { paddingBottom: Math.max(insets.bottom, 16) }]}>
           <View style={styles.headlineSection}>
             <Text style={styles.title}>{Strings.completion.title}</Text>
             <Text style={styles.subtitle}>{Strings.completion.subtitle}</Text>

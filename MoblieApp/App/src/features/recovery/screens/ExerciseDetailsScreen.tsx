@@ -96,12 +96,11 @@ export const ExerciseDetailsScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
-      <View style={styles.container}>
-        {/* HEADER BAR */}
-        <View style={styles.header}>
+      {/* HEADER BAR */}
+      <View style={[styles.header, { paddingTop: insets.top + 4, height: 56 + insets.top }]}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -304,9 +303,8 @@ export const ExerciseDetailsScreen: React.FC = () => {
         {/* BOTTOM NAV BAR */}
         <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {

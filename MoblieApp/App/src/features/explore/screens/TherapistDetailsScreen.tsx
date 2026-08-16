@@ -249,8 +249,8 @@ export const TherapistDetailsScreen: React.FC = () => {
 
   if (!doctor) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
         <View style={styles.errorContainer}>
           <EmptyStateView
             title={Strings.therapistDetails.emptyState.title}
@@ -258,7 +258,7 @@ export const TherapistDetailsScreen: React.FC = () => {
             onReset={handleBack}
           />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -272,7 +272,7 @@ export const TherapistDetailsScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 100 + Math.max(insets.bottom, 14) },
+          { paddingBottom: 110 + Math.max(insets.bottom, 14) },
         ]}
       >
         {/* 1. HERO HEADER WITH DOCTOR IMAGE & OVERLAYS */}
@@ -283,7 +283,7 @@ export const TherapistDetailsScreen: React.FC = () => {
             resizeMode="cover"
           >
             {/* Top Navigation Overlay */}
-            <View style={[styles.topNavOverlay, { paddingTop: Math.max(insets.top, Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 16) + 8 }]}>
+            <View style={[styles.topNavOverlay, { paddingTop: insets.top + 8 }]}>
               <TouchableOpacity
                 activeOpacity={0.8}
                 onPress={handleBack}

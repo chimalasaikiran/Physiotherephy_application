@@ -1,10 +1,9 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ViewStyle, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
-import { Strings } from '@/constants';
 
 export type TabKey = 'home' | 'bookings' | 'schedule' | 'recovery' | 'alerts' | 'profile';
 
@@ -25,93 +24,139 @@ interface TabConfig {
 const TABS: TabConfig[] = [
   {
     key: 'home',
-    label: Strings.explore?.tabs?.home || 'Home',
+    label: 'Home',
     activeIcon: 'home',
     inactiveIcon: 'home-outline',
   },
   {
-    key: 'bookings',
-    label: Strings.myBookings?.headerTitle || 'Bookings',
-    activeIcon: 'calendar-clear',
-    inactiveIcon: 'calendar-clear-outline',
+    key: 'recovery',
+    label: 'Recovery',
+    activeIcon: 'fitness',
+    inactiveIcon: 'fitness-outline',
   },
   {
-    key: 'recovery',
-    label: Strings.explore?.tabs?.recovery || 'Recovery',
-    activeIcon: 'analytics',
-    inactiveIcon: 'analytics-outline',
+    key: 'bookings',
+    label: 'bookings',
+    activeIcon: 'calendar',
+    inactiveIcon: 'calendar-outline',
   },
   {
     key: 'alerts',
-    label: Strings.explore?.tabs?.alerts || 'Alerts',
-    activeIcon: 'notifications',
-    inactiveIcon: 'notifications-outline',
+    label: 'Notifications',
+    activeIcon: 'document-text',
+    inactiveIcon: 'document-text-outline',
     hasBadge: true,
   },
   {
     key: 'profile',
-    label: Strings.explore?.tabs?.profile || 'Profile',
+    label: 'Profile',
     activeIcon: 'person',
     inactiveIcon: 'person-outline',
   },
 ];
 
+interface TabButtonProps {
+  tab: TabConfig;
+  isActive: boolean;
+  onPress: () => void;
+}
+
+const TabButton: React.FC<TabButtonProps> = React.memo(({ tab, isActive, onPress }) => {
+  const scaleAnim = useRef(new Animated.Value(isActive ? 1 : 0.88)).current;
+  const bgOpacityAnim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: isActive ? 1 : 0.88,
+        friction: 6,
+        tension: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(bgOpacityAnim, {
+        toValue: isActive ? 1 : 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [isActive, scaleAnim, bgOpacityAnim]);
+
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={styles.tabButton}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isActive }}
+      accessibilityLabel={tab.label}
+    >
+      <Animated.View
+        style={[
+          styles.iconContainer,
+          {
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      >
+        {/* Active Circular Background */}
+        <Animated.View
+          style={[
+            styles.activeBackground,
+            {
+              opacity: bgOpacityAnim,
+            },
+          ]}
+        />
+
+        {/* Icon */}
+        <Ionicons
+          name={isActive ? tab.activeIcon : tab.inactiveIcon}
+          size={19}
+          color={isActive ? Colors.white : '#64748B'}
+        />
+
+        {/* Optional Notification Badge */}
+        {tab.hasBadge && (
+          <View style={[styles.notificationDot, isActive && styles.notificationDotActive]} />
+        )}
+      </Animated.View>
+
+      <Text
+        style={[
+          styles.tabLabel,
+          isActive ? styles.activeLabel : styles.inactiveLabel,
+        ]}
+        numberOfLines={1}
+        adjustsFontSizeToFit={true}
+        minimumFontScale={0.85}
+      >
+        {tab.label}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
 export const BottomNavBar: React.FC<BottomNavBarProps> = React.memo(({ activeTab, onTabPress, style }) => {
   const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'android' ? 8 : 6);
 
   return (
     <View
       style={[
         styles.container,
-        { paddingBottom: Math.max(insets.bottom, 10) },
+        { paddingBottom: bottomInset },
         style,
       ]}
     >
       <View style={styles.floatingBar}>
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              onPress={() => onTabPress(tab.key)}
-              activeOpacity={1}
-              style={styles.tabButton}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              accessibilityLabel={tab.label}
-            >
-              <View style={[styles.iconWrapper, isActive && styles.activeIconWrapper]}>
-                {tab.key === 'home' && isActive ? (
-                  <View style={styles.homeIconContainer}>
-                    <Ionicons name="home" size={22} color="#FFFFFF" />
-                    <View style={styles.homeCrossBadge}>
-                      <Ionicons name="add" size={9} color="#003D9B" style={{ fontWeight: 'bold' }} />
-                    </View>
-                  </View>
-                ) : (
-                  <Ionicons
-                    name={isActive ? tab.activeIcon : tab.inactiveIcon}
-                    size={23}
-                    color={isActive ? Colors.white : '#5F6D7E'}
-                  />
-                )}
-
-                {tab.hasBadge && (
-                  <View style={[styles.notificationDot, isActive && styles.notificationDotActive]} />
-                )}
-              </View>
-
-              <Text
-                style={[
-                  styles.tabLabel,
-                  isActive ? styles.activeLabel : styles.inactiveLabel,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+        {TABS.map((tab) => (
+          <TabButton
+            key={tab.key}
+            tab={tab}
+            isActive={activeTab === tab.key}
+            onPress={() => onTabPress(tab.key)}
+          />
+        ))}
       </View>
     </View>
   );
@@ -124,82 +169,71 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: 'transparent',
-    paddingHorizontal: 14,
-    paddingTop: 6,
+    paddingHorizontal: 12,
+    paddingTop: 4,
     zIndex: 100,
   },
   floatingBar: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    borderRadius: 50,
-    paddingVertical: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 24,
+    paddingVertical: 5,
     paddingHorizontal: 4,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowRadius: 12,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: 'rgba(238, 242, 246, 0.85)',
+    borderColor: '#E2E8F0',
   },
   tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
     paddingVertical: 2,
+    paddingHorizontal: 2,
   },
-  iconWrapper: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 4,
     position: 'relative',
   },
-  activeIconWrapper: {
+  activeBackground: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 18,
     backgroundColor: Colors.primary, // #003D9B
     shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  homeIconContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  homeCrossBadge: {
-    position: 'absolute',
-    bottom: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   notificationDot: {
     position: 'absolute',
-    top: 10,
-    right: 11,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    top: 5,
+    right: 6,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#EF4444',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: '#FFFFFF',
   },
   notificationDotActive: {
     borderColor: Colors.primary,
-    top: 8,
-    right: 9,
+    top: 5,
+    right: 5,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 10,
+    lineHeight: 12,
+    marginTop: 3,
     textAlign: 'center',
   },
   activeLabel: {
@@ -207,18 +241,11 @@ const styles = StyleSheet.create({
     fontWeight: Typography.fontWeight.bold,
   },
   inactiveLabel: {
-    color: '#5F6D7E',
+    color: '#64748B',
     fontWeight: Typography.fontWeight.medium,
-  },
-  bottomHomeIndicator: {
-    width: 134,
-    height: 4,
-    backgroundColor: '#CBD5E1',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginTop: 10,
   },
 });
 
 export default BottomNavBar;
+
 

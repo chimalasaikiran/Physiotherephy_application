@@ -4,7 +4,6 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Dimensions,
   KeyboardAvoidingView,
@@ -18,6 +17,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -48,6 +48,7 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
   onNeedHelpPress,
 }) => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ phone?: string }>();
   const { verifyOtp, sendOtp, pendingPhoneNumber } = useAuth();
   
@@ -103,7 +104,6 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
       const result = await verifyOtp(fullCode);
 
       if (result.success) {
-        // Keep isVerifying true during navigation to prevent screen flash or duplicate taps
         if (onVerifySuccess) {
           onVerifySuccess(fullCode, result.profileCompleted);
         } else {
@@ -149,7 +149,6 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
     }
   };
 
-
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -161,11 +160,14 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) },
+          ]}
           bounces={false}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -191,7 +193,7 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
             />
 
             {/* Back Button Shell */}
-            <SafeAreaView style={styles.topNavSafeArea}>
+            <View style={[styles.topNavSafeArea, { paddingTop: insets.top + 8 }]}>
               <TouchableOpacity
                 style={styles.backButton}
                 onPress={handleBack}
@@ -203,100 +205,95 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
                   <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
                 </View>
               </TouchableOpacity>
-            </SafeAreaView>
+            </View>
           </View>
 
           {/* Bottom Content Section */}
-          <SafeAreaView style={styles.contentSafeArea}>
-            <View style={styles.contentSection}>
-              {/* Brand Logo */}
-              <BrandHeader />
+          <View style={styles.contentSection}>
+            {/* Brand Logo */}
+            <BrandHeader />
 
-              {/* Header & Subtext */}
-              <View style={styles.headlineSection}>
-                <Text style={styles.title}>{Strings.otp.title}</Text>
-                <View style={styles.subtitleContainer}>
-                  <Text style={styles.subtitle}>
-                    {Strings.otp.subtitlePrefix}{' '}
-                    <Text style={styles.phoneNumberHighlight}>{displayPhone}</Text>
-                  </Text>
-                  <TouchableOpacity
-                    onPress={handleEditNumber}
-                    activeOpacity={0.7}
-                    style={styles.editNumberButton}
-                    accessibilityRole="button"
-                    accessibilityLabel={Strings.accessibility.editNumberButton}
-                  >
-                    <Text style={styles.editNumberText}>{Strings.otp.editNumber}</Text>
-                  </TouchableOpacity>
-                </View>
+            {/* Header & Subtext */}
+            <View style={styles.headlineSection}>
+              <Text style={styles.title}>{Strings.otp.title}</Text>
+              <View style={styles.subtitleContainer}>
+                <Text style={styles.subtitle}>
+                  {Strings.otp.subtitlePrefix}{' '}
+                  <Text style={styles.phoneNumberHighlight}>{displayPhone}</Text>
+                </Text>
+                <TouchableOpacity
+                  onPress={handleEditNumber}
+                  activeOpacity={0.7}
+                  style={styles.editNumberButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={Strings.accessibility.editNumberButton}
+                >
+                  <Text style={styles.editNumberText}>{Strings.otp.editNumber}</Text>
+                </TouchableOpacity>
               </View>
-
-              {/* OTP Grid & Submit */}
-              <View style={styles.formSection}>
-                <OtpInputGrid
-                  otp={otp}
-                  onChangeOtp={(newOtp) => {
-                    setOtp(newOtp);
-                    if (error) setError(undefined);
-                  }}
-                  error={!!error}
-                />
-                {error && <Text style={styles.errorText}>{error}</Text>}
-
-                <PrimaryButton
-                  title={Strings.otp.continue}
-                  onPress={handleVerify}
-                  isLoading={isVerifying}
-                  disabled={isVerifying || otp.join('').length < 6}
-                  accessibilityLabel={Strings.accessibility.continueButton}
-                />
-              </View>
-
-              {/* Footer Actions */}
-              <View style={styles.footerSection}>
-                {/* Timer Display */}
-                <View style={styles.timerRow}>
-                  <Text style={styles.resendInText}>{Strings.otp.resendIn}</Text>
-                  <Text style={styles.timerText}>{formatTimer(timer)}</Text>
-                </View>
-
-                {/* Resend & Help Links */}
-                <View style={styles.footerLinksRow}>
-                  <TouchableOpacity
-                    onPress={handleResendCode}
-                    disabled={timer > 0}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={Strings.accessibility.resendCodeButton}
-                  >
-                    <Text
-                      style={[
-                        styles.resendCodeText,
-                        timer > 0 && styles.resendCodeDisabled,
-                      ]}
-                    >
-                      {Strings.otp.resendCode}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <View style={styles.verticalDivider} />
-
-                  <TouchableOpacity
-                    onPress={handleNeedHelp}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={Strings.accessibility.needHelpButton}
-                  >
-                    <Text style={styles.needHelpText}>{Strings.otp.needHelp}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Home Indicator Placeholder */}
-              <View style={styles.homeIndicator} />
             </View>
-          </SafeAreaView>
+
+            {/* OTP Grid & Submit */}
+            <View style={styles.formSection}>
+              <OtpInputGrid
+                otp={otp}
+                onChangeOtp={(newOtp) => {
+                  setOtp(newOtp);
+                  if (error) setError(undefined);
+                }}
+                error={!!error}
+              />
+              {error && <Text style={styles.errorText}>{error}</Text>}
+
+              <PrimaryButton
+                title={Strings.otp.continue}
+                onPress={handleVerify}
+                isLoading={isVerifying}
+                disabled={isVerifying || otp.join('').length < 6}
+                accessibilityLabel={Strings.accessibility.continueButton}
+              />
+            </View>
+
+            {/* Footer Actions */}
+            <View style={styles.footerSection}>
+              {/* Timer Display */}
+              <View style={styles.timerRow}>
+                <Text style={styles.resendInText}>{Strings.otp.resendIn}</Text>
+                <Text style={styles.timerText}>{formatTimer(timer)}</Text>
+              </View>
+
+              {/* Resend & Help Links */}
+              <View style={styles.footerLinksRow}>
+                <TouchableOpacity
+                  onPress={handleResendCode}
+                  disabled={timer > 0}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={Strings.accessibility.resendCodeButton}
+                >
+                  <Text
+                    style={[
+                      styles.resendCodeText,
+                      timer > 0 && styles.resendCodeDisabled,
+                    ]}
+                  >
+                    {Strings.otp.resendCode}
+                  </Text>
+                </TouchableOpacity>
+
+                <View style={styles.verticalDivider} />
+
+                <TouchableOpacity
+                  onPress={handleNeedHelp}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={Strings.accessibility.needHelpButton}
+                >
+                  <Text style={styles.needHelpText}>{Strings.otp.needHelp}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -348,7 +345,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginLeft: Spacing.lg,
-    marginTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 12,
+    marginTop: 4,
   },
   backButtonInner: {
     width: 36,

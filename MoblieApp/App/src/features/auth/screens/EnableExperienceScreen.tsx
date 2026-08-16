@@ -101,7 +101,10 @@ export const EnableExperienceScreen: React.FC<EnableExperienceScreenProps> = ({
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: Math.max(insets.bottom, 20) },
+        ]}
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
@@ -114,7 +117,7 @@ export const EnableExperienceScreen: React.FC<EnableExperienceScreenProps> = ({
           />
 
           {/* Top Bar with Back Button & Brand Header */}
-          <SafeAreaView style={styles.headerSafeArea}>
+          <View style={[styles.headerSafeArea, { paddingTop: insets.top + 8 }]}>
             <View style={styles.headerRow}>
               <TouchableOpacity
                 style={styles.backButton}
@@ -132,7 +135,7 @@ export const EnableExperienceScreen: React.FC<EnableExperienceScreenProps> = ({
 
               <View style={styles.headerSpacer} />
             </View>
-          </SafeAreaView>
+          </View>
         </View>
 
         {/* MAIN BODY CONTENT SECTION */}
@@ -176,9 +179,6 @@ export const EnableExperienceScreen: React.FC<EnableExperienceScreenProps> = ({
               <Text style={styles.skipText}>{Strings.enableExperience.skipForNow}</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Home Indicator Spacing */}
-          <View style={styles.homeIndicator} />
         </View>
       </ScrollView>
     </View>

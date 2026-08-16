@@ -255,71 +255,70 @@ export const BookAppointmentScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
-      <View style={styles.container}>
-        {/* Header */}
-        <BookAppointmentHeader onBack={handleBack} />
+      {/* Header */}
+      <BookAppointmentHeader onBack={handleBack} />
 
-        {/* Selected Service Banner */}
-        {Boolean(selectedServiceTitle) && (
-          <View style={styles.selectedServiceBanner}>
-            <View style={styles.serviceBannerLeft}>
-              <View style={styles.serviceIconCircle}>
-                <Ionicons name="medical" size={14} color="#003D9B" />
-              </View>
-              <View>
-                <Text style={styles.serviceBannerLabel}>Selected Service</Text>
-                <Text style={styles.serviceBannerTitle}>{selectedServiceTitle}</Text>
-              </View>
+      {/* Selected Service Banner */}
+      {Boolean(selectedServiceTitle) && (
+        <View style={styles.selectedServiceBanner}>
+          <View style={styles.serviceBannerLeft}>
+            <View style={styles.serviceIconCircle}>
+              <Ionicons name="medical" size={14} color="#003D9B" />
             </View>
-
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push('/service-selection' as any)}
-              style={styles.changeServiceBtn}
-            >
-              <Text style={styles.changeServiceText}>Change</Text>
-            </TouchableOpacity>
+            <View>
+              <Text style={styles.serviceBannerLabel}>Selected Service</Text>
+              <Text style={styles.serviceBannerTitle}>{selectedServiceTitle}</Text>
+            </View>
           </View>
-        )}
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={18} color="#94A3B8" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={Strings.booking.searchPlaceholder}
-            placeholderTextColor="#94A3B8"
-            value={searchQuery}
-            onChangeText={(text) => {
-              setSearchQuery(text);
-              setIsLoading(true);
-              setTimeout(() => setIsLoading(false), 200);
-            }}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
-              <Ionicons name="close-circle" size={18} color="#94A3B8" />
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push('/service-selection' as any)}
+            style={styles.changeServiceBtn}
+          >
+            <Text style={styles.changeServiceText}>Change</Text>
+          </TouchableOpacity>
         </View>
+      )}
 
-        {/* Horizontal Filter Chips */}
-        <DoctorFilterChips
-          activeFilterId={activeFilterId}
-          onSelectFilter={handleFilterSelect}
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search-outline" size={18} color="#94A3B8" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={Strings.booking.searchPlaceholder}
+          placeholderTextColor="#94A3B8"
+          value={searchQuery}
+          onChangeText={(text) => {
+            setSearchQuery(text);
+            setIsLoading(true);
+            setTimeout(() => setIsLoading(false), 200);
+          }}
         />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        )}
+      </View>
 
-        {/* Main List Area */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: 100 + Math.max(insets.bottom, 12) },
-          ]}
-        >
+      {/* Horizontal Filter Chips */}
+      <DoctorFilterChips
+        activeFilterId={activeFilterId}
+        onSelectFilter={handleFilterSelect}
+      />
+
+      {/* Main List Area */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 110 + Math.max(insets.bottom, 12) },
+        ]}
+      >
           <View style={styles.listHeaderRow}>
             <Text style={styles.listHeaderTitle}>
               {Strings.booking.allSpecialistsTitle} ({filteredDoctors.length})
@@ -354,7 +353,6 @@ export const BookAppointmentScreen: React.FC = () => {
 
         {/* Bottom Tab Bar */}
         <BottomNavBar activeTab={activeTab} onTabPress={handleNavTabPress} />
-      </View>
 
       {/* Date & Time Selector Sheet */}
       <DateTimeSelectorModal
@@ -378,7 +376,7 @@ export const BookAppointmentScreen: React.FC = () => {
         booking={completedBooking}
         onDone={handleBookingDone}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 

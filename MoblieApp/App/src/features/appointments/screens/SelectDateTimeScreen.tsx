@@ -302,8 +302,8 @@ export const SelectDateTimeScreen: React.FC = () => {
   // ERROR STATE VIEW
   if (!doctor) {
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <View style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
         <View style={styles.errorContainer}>
           <EmptyStateView
             title={strings.errorState.title}
@@ -311,16 +311,16 @@ export const SelectDateTimeScreen: React.FC = () => {
             onReset={handleBack}
           />
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
       {/* HEADER BAR */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 4, height: 56 + insets.top }]}>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={handleBack}
@@ -646,7 +646,7 @@ export const SelectDateTimeScreen: React.FC = () => {
         booking={completedBooking}
         onDone={handleBookingDone}
       />
-    </SafeAreaView>
+    </View>
   );
 };
 

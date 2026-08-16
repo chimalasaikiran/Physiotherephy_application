@@ -29,3 +29,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# Android APK / Binaries
+*.apk
+**/*.apk
+
+

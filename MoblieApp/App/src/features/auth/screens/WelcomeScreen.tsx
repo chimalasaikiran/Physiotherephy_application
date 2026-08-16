@@ -4,12 +4,12 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -28,6 +28,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onGetStarted,
   onSignIn,
 }) => {
+  const insets = useSafeAreaInsets();
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
@@ -50,46 +52,46 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       </View>
 
       {/* Bottom Section: Content & Actions */}
-      <SafeAreaView style={styles.contentSafeArea}>
-        <View style={styles.contentSection}>
-          <View style={styles.mainContentGroup}>
-            {/* Brand Logo & Name */}
-            <BrandHeader />
+      <View
+        style={[
+          styles.contentSection,
+          { paddingBottom: Math.max(insets.bottom, 20) },
+        ]}
+      >
+        <View style={styles.mainContentGroup}>
+          {/* Brand Logo & Name */}
+          <BrandHeader />
 
-            {/* Headline Text */}
-            <View style={styles.textContainer}>
-              <Text style={styles.headline}>{Strings.welcome.title}</Text>
-              <Text style={styles.subtext}>{Strings.welcome.subtitle}</Text>
-            </View>
+          {/* Headline Text */}
+          <View style={styles.textContainer}>
+            <Text style={styles.headline}>{Strings.welcome.title}</Text>
+            <Text style={styles.subtext}>{Strings.welcome.subtitle}</Text>
           </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actionGroup}>
-            <PrimaryButton
-              title={Strings.welcome.getStarted}
-              onPress={onGetStarted}
-              accessibilityLabel={Strings.accessibility.getStartedButton}
-            />
-
-            <View style={styles.secondaryContainer}>
-              <Text style={styles.secondaryText}>
-                {Strings.welcome.alreadyHaveAccount}
-              </Text>
-              <TouchableOpacity
-                onPress={onSignIn}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel={Strings.accessibility.signInButton}
-              >
-                <Text style={styles.signInText}>{Strings.welcome.signIn}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Home Indicator Placeholder Bar */}
-          <View style={styles.homeIndicator} />
         </View>
-      </SafeAreaView>
+
+        {/* Action Buttons */}
+        <View style={styles.actionGroup}>
+          <PrimaryButton
+            title={Strings.welcome.getStarted}
+            onPress={onGetStarted}
+            accessibilityLabel={Strings.accessibility.getStartedButton}
+          />
+
+          <View style={styles.secondaryContainer}>
+            <Text style={styles.secondaryText}>
+              {Strings.welcome.alreadyHaveAccount}
+            </Text>
+            <TouchableOpacity
+              onPress={onSignIn}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={Strings.accessibility.signInButton}
+            >
+              <Text style={styles.signInText}>{Strings.welcome.signIn}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
     </View>
   );
 };

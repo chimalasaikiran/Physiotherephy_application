@@ -60,7 +60,7 @@ async function seedAdmin() {
         fullName,
         role: 'superadmin',
         isActive: true,
-        mustChangePassword: true, // Requires mandatory password update on first login
+        mustChangePassword: false, // User credentials are set directly by initial setup
         department: 'Executive Clinic Operations',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

@@ -199,8 +199,8 @@ export const PaymentProcessingScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} />
+    <View style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} translucent />
 
       {/* Full screen container blocking all touches during loading */}
       <View style={styles.container} pointerEvents="none">
@@ -210,7 +210,7 @@ export const PaymentProcessingScreen: React.FC = () => {
           durationMs={2800}
         />
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 

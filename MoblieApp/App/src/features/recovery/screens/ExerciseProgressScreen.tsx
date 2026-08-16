@@ -160,7 +160,7 @@ export const ExerciseProgressScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       {/* TOP HEADER BAR */}
@@ -168,7 +168,7 @@ export const ExerciseProgressScreen: React.FC = () => {
         style={[
           styles.headerBar,
           {
-            paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 6 : 8,
+            paddingTop: insets.top + 8,
           },
         ]}
       >
@@ -388,7 +388,7 @@ export const ExerciseProgressScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 

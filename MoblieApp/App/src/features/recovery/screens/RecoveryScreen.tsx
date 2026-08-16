@@ -209,17 +209,16 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
-      <View style={styles.container}>
-        {/* MAIN SCROLLABLE CONTENT */}
+      {/* MAIN SCROLLABLE CONTENT */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Spacing.md,
+              paddingTop: insets.top + Spacing.xs,
               paddingBottom: 110 + Math.max(insets.bottom, 12),
             },
           ]}
@@ -507,9 +506,8 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
         {/* BOTTOM NAVIGATION MENU BAR */}
         {!hideBottomNavBar && <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />}
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {

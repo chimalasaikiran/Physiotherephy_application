@@ -179,33 +179,34 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.background} translucent />
 
-      <SafeAreaView style={styles.topSafeArea}>
-        {/* Top Header Row with Back Button & Brand Logo */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={handleBack}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={Strings.accessibility.backButton}
-          >
-            <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
-          </TouchableOpacity>
+      {/* Top Header Row with Back Button & Brand Logo */}
+      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleBack}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={Strings.accessibility.backButton}
+        >
+          <Ionicons name="chevron-back" size={22} color={Colors.textPrimary} />
+        </TouchableOpacity>
 
-          <View style={styles.brandContainer}>
-            <BrandHeader />
-          </View>
-
-          <View style={styles.headerSpacer} />
+        <View style={styles.brandContainer}>
+          <BrandHeader />
         </View>
-      </SafeAreaView>
+
+        <View style={styles.headerSpacer} />
+      </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 24) },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -328,9 +329,6 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
               accessibilityLabel={Strings.accessibility.continueButton}
             />
           </View>
-
-          {/* Home Indicator Spacing Bar */}
-          <View style={styles.homeIndicator} />
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

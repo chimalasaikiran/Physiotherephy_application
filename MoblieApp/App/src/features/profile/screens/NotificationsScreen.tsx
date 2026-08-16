@@ -189,12 +189,11 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ hideBo
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
-      <View style={styles.container}>
-        {/* Header Bar */}
-        <View style={styles.header}>
+      {/* Header Bar */}
+      <View style={[styles.header, { paddingTop: insets.top + 4, height: 56 + insets.top }]}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -310,9 +309,8 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({ hideBo
         {/* Bottom Navigation Menu Bar */}
         {!hideBottomNavBar && <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />}
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {

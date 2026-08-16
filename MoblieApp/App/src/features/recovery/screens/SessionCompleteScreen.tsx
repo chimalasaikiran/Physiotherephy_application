@@ -101,14 +101,14 @@ export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 16,
+            paddingTop: insets.top + 12,
             paddingBottom: Math.max(insets.bottom, 20) + 16,
           },
         ]}
@@ -235,7 +235,7 @@ export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 };
 

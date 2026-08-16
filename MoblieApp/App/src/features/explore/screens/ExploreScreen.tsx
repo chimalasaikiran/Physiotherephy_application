@@ -298,30 +298,29 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
-      <View style={styles.container}>
-        {/* MAIN SCROLLABLE CONTENT */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={['#003D9B']}
-              tintColor="#003D9B"
-            />
-          }
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingTop: Spacing.md,
-              paddingBottom: 100 + Math.max(insets.bottom, 12),
-            },
-          ]}
-          bounces={true}
-        >
+      {/* MAIN SCROLLABLE CONTENT */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#003D9B']}
+            tintColor="#003D9B"
+          />
+        }
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: insets.top + Spacing.xs,
+            paddingBottom: 110 + Math.max(insets.bottom, 12),
+          },
+        ]}
+        bounces={true}
+      >
           {/* 1. HEADER SECTION */}
           <View style={styles.header}>
             <TouchableOpacity
@@ -758,9 +757,8 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
         {/* 11. BOTTOM NAVIGATION TAB BAR */}
         {!hideBottomNavBar && <BottomNavBar activeTab={activeTab} onTabPress={handleTabPress} />}
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {

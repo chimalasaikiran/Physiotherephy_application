@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { StyleSheet, View, Animated } from 'react-native';
 import { BottomNavBar, TabKey } from './BottomNavBar';
 import { ExploreScreen } from '@/features/explore';
@@ -14,22 +14,32 @@ interface MainTabContainerProps {
 export const MainTabContainer: React.FC<MainTabContainerProps> = ({ initialTab = 'home' }) => {
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   // Trigger smooth screen content transition on tab change
-  const handleTabPress = (tab: TabKey) => {
+  const handleTabPress = useCallback((tab: TabKey) => {
     if (tab === activeTab) return;
 
     // Instantly switch activeTab so BottomNavBar updates instantly
     setActiveTab(tab);
 
     // Smooth screen content transition animation
-    fadeAnim.setValue(0.85);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  };
+    fadeAnim.setValue(0.92);
+    scaleAnim.setValue(0.99);
+
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [activeTab, fadeAnim, scaleAnim]);
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -38,7 +48,15 @@ export const MainTabContainer: React.FC<MainTabContainerProps> = ({ initialTab =
   return (
     <View style={styles.container}>
       {/* SCREEN CONTENT AREA (TRANSITIONS SMOOTHLY ABOVE STATIC NAV BAR) */}
-      <Animated.View style={[styles.screenContainer, { opacity: fadeAnim }]}>
+      <Animated.View
+        style={[
+          styles.screenContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }],
+          },
+        ]}
+      >
         <View style={[styles.tabScreen, activeTab === 'home' ? styles.visible : styles.hidden]}>
           <ExploreScreen hideBottomNavBar={true} onTabPress={handleTabPress} />
         </View>
@@ -87,3 +105,4 @@ const styles = StyleSheet.create({
 });
 
 export default MainTabContainer;
+

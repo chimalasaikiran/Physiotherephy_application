@@ -4,7 +4,6 @@ import {
   Text,
   View,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Dimensions,
   KeyboardAvoidingView,
@@ -16,6 +15,7 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -46,6 +46,7 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
   onPrivacyPress,
 }) => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { sendOtp } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(getDefaultCountry);
@@ -90,8 +91,6 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
     }
   };
 
-
-
   const handleNeedHelp = () => {
     if (onNeedHelpPress) {
       onNeedHelpPress();
@@ -105,11 +104,14 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardAvoidingView}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 20) },
+          ]}
           bounces={false}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -136,7 +138,7 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
             />
 
             {/* Floating Top Navigation Shell / Back Button */}
-            <SafeAreaView style={styles.topNavSafeArea}>
+            <View style={[styles.topNavSafeArea, { paddingTop: insets.top + 8 }]}>
               <TouchableOpacity
                 style={styles.backButton}
                 onPress={handleBack}
@@ -148,86 +150,81 @@ export const PhoneLoginScreen: React.FC<PhoneLoginScreenProps> = ({
                   <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
                 </View>
               </TouchableOpacity>
-            </SafeAreaView>
+            </View>
           </View>
 
           {/* Bottom Section: Content & Phone Input Form */}
-          <SafeAreaView style={styles.contentSafeArea}>
-            <View style={styles.contentSection}>
-              {/* Brand Logo Header */}
-              <BrandHeader />
+          <View style={styles.contentSection}>
+            {/* Brand Logo Header */}
+            <BrandHeader />
 
-              {/* Headline & Subtitle Section */}
-              <View style={styles.headlineSection}>
-                <Text style={styles.title}>{Strings.login.title}</Text>
-                <Text style={styles.subtitle}>{Strings.login.subtitle}</Text>
-              </View>
-
-              {/* Phone Input Form & Action */}
-              <View style={styles.formSection}>
-                <PhoneInputField
-                  value={phoneNumber}
-                  onChangeText={(text) => {
-                    setPhoneNumber(text);
-                    if (error) setError(undefined);
-                  }}
-                  selectedCountry={selectedCountry}
-                  onOpenCountryPicker={() => setIsCountryPickerVisible(true)}
-                  error={error}
-                />
-
-                <PrimaryButton
-                  title={Strings.login.continue}
-                  onPress={handleContinue}
-                  isLoading={isSendingOtp}
-                  accessibilityLabel={Strings.accessibility.continueButton}
-                />
-              </View>
-
-              {/* Footer Section: Terms & Need Help */}
-              <View style={styles.footerSection}>
-                <Text style={styles.termsText}>
-                  {Strings.login.termsPrefix}
-                  <Text
-                    style={styles.termsLink}
-                    onPress={onTermsPress}
-                    accessibilityRole="link"
-                    accessibilityLabel={Strings.accessibility.termsLink}
-                  >
-                    {Strings.login.termsOfService}
-                  </Text>
-                  {Strings.login.and}
-                  <Text
-                    style={styles.termsLink}
-                    onPress={onPrivacyPress}
-                    accessibilityRole="link"
-                    accessibilityLabel={Strings.accessibility.privacyLink}
-                  >
-                    {Strings.login.privacyPolicy}
-                  </Text>
-                  .
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.needHelpButton}
-                  onPress={handleNeedHelp}
-                  activeOpacity={0.7}
-                  accessibilityRole="button"
-                  accessibilityLabel={Strings.accessibility.needHelpButton}
-                >
-                  <Ionicons
-                    name="help-circle-outline"
-                    size={18}
-                    color={Colors.primary}
-                  />
-                  <Text style={styles.needHelpText}>{Strings.login.needHelp}</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Home Indicator Placeholder Bar */}
-              <View style={styles.homeIndicator} />
+            {/* Headline & Subtitle Section */}
+            <View style={styles.headlineSection}>
+              <Text style={styles.title}>{Strings.login.title}</Text>
+              <Text style={styles.subtitle}>{Strings.login.subtitle}</Text>
             </View>
-          </SafeAreaView>
+
+            {/* Phone Input Form & Action */}
+            <View style={styles.formSection}>
+              <PhoneInputField
+                value={phoneNumber}
+                onChangeText={(text) => {
+                  setPhoneNumber(text);
+                  if (error) setError(undefined);
+                }}
+                selectedCountry={selectedCountry}
+                onOpenCountryPicker={() => setIsCountryPickerVisible(true)}
+                error={error}
+              />
+
+              <PrimaryButton
+                title={Strings.login.continue}
+                onPress={handleContinue}
+                isLoading={isSendingOtp}
+                accessibilityLabel={Strings.accessibility.continueButton}
+              />
+            </View>
+
+            {/* Footer Section: Terms & Need Help */}
+            <View style={styles.footerSection}>
+              <Text style={styles.termsText}>
+                {Strings.login.termsPrefix}
+                <Text
+                  style={styles.termsLink}
+                  onPress={onTermsPress}
+                  accessibilityRole="link"
+                  accessibilityLabel={Strings.accessibility.termsLink}
+                >
+                  {Strings.login.termsOfService}
+                </Text>
+                {Strings.login.and}
+                <Text
+                  style={styles.termsLink}
+                  onPress={onPrivacyPress}
+                  accessibilityRole="link"
+                  accessibilityLabel={Strings.accessibility.privacyLink}
+                >
+                  {Strings.login.privacyPolicy}
+                </Text>
+                .
+              </Text>
+
+              <TouchableOpacity
+                style={styles.needHelpButton}
+                onPress={handleNeedHelp}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={Strings.accessibility.needHelpButton}
+              >
+                <Ionicons
+                  name="help-circle-outline"
+                  size={18}
+                  color={Colors.primary}
+                />
+                <Text style={styles.needHelpText}>{Strings.login.needHelp}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -274,7 +271,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginLeft: Spacing.lg,
-    marginTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 12,
+    marginTop: 4,
   },
   backButtonInner: {
     width: 36,

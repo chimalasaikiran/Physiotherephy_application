@@ -158,11 +158,10 @@ export const ActiveSessionScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-      <View style={styles.container}>
-        {/* 1. TOP HERO VIDEO / MEDIA PREVIEW */}
+      {/* 1. TOP HERO VIDEO / MEDIA PREVIEW */}
         <View style={[styles.heroCard, { height: HERO_IMAGE_HEIGHT }]}>
           <Image
             source={currentExerciseObj.image}
@@ -171,7 +170,7 @@ export const ActiveSessionScreen: React.FC = () => {
           />
 
           {/* OVERLAY TOP HEADER ROW */}
-          <View style={styles.topOverlayHeader}>
+          <View style={[styles.topOverlayHeader, { paddingTop: insets.top + 8 }]}>
             {/* Back Button */}
             <TouchableOpacity
               activeOpacity={0.8}
@@ -299,9 +298,8 @@ export const ActiveSessionScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
-    </SafeAreaView>
-  );
-};
+    );
+  };
 
 const styles = StyleSheet.create({
   safeArea: {
