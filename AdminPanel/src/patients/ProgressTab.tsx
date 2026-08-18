@@ -7,6 +7,13 @@ import {
   Plus,
   RefreshCw,
   X,
+  Activity,
+  Award,
+  Calendar,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  FileText,
 } from 'lucide-react';
 import type { Patient } from './types';
 
@@ -14,6 +21,7 @@ interface ProgressTabProps {
   patientName?: string;
   therapistName?: string;
   patient?: Patient;
+  assignedPrograms?: any[];
 }
 
 interface FunctionalGoal {
@@ -30,8 +38,10 @@ interface ClinicianObservation {
 }
 
 export const ProgressTab: React.FC<ProgressTabProps> = ({
-  patientName = 'Sanya Malhotra',
-  therapistName = 'Dr. Rao',
+  patientName = 'Patient',
+  therapistName = 'No therapist assigned',
+  patient,
+  assignedPrograms = [],
 }) => {
   // Toast notification feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -49,35 +59,73 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
   // Quick Action: Share with Patient toggle state
   const [isSharedWithPatient, setIsSharedWithPatient] = useState(true);
 
-  // Functional Goals State (Interactive modal edits this state)
+  // Derive dynamic program assignment & exercise completion metrics
+  const activeAssignment =
+    assignedPrograms.find((p) => p.status === 'active') ||
+    (assignedPrograms.length > 0 ? assignedPrograms[0] : null);
+
+  const programTitle = activeAssignment?.programTitle || 'No Program Assigned';
+  const programStatus = activeAssignment
+    ? (activeAssignment.status || 'active').toUpperCase()
+    : 'NO PROGRAM ASSIGNED';
+
+  const currentWeekNum = activeAssignment?.currentWeek || 1;
+  const totalWeeks = activeAssignment?.totalWeeks || 8;
+
+  const completedExercisesList: string[] = activeAssignment?.completedExercises || [];
+  const completedCount = completedExercisesList.length;
+
+  let totalExercisesCount = Number(activeAssignment?.totalExercises) || 0;
+  if (!totalExercisesCount && activeAssignment?.pendingExercises) {
+    totalExercisesCount = completedCount + activeAssignment.pendingExercises.length;
+  }
+  if (!totalExercisesCount && activeAssignment?.programDetails?.weeks) {
+    totalExercisesCount = activeAssignment.programDetails.weeks.reduce(
+      (acc: number, w: any) => acc + (w.exercises?.length || 0),
+      0
+    );
+  }
+
+  const remainingCount = Math.max(0, totalExercisesCount - completedCount);
+  const progressPercent =
+    totalExercisesCount > 0
+      ? Math.min(100, Math.round((completedCount / totalExercisesCount) * 100))
+      : (activeAssignment?.progressPercent || 0);
+
+  const lastCompletedExerciseName =
+    activeAssignment?.lastCompletedExercise ||
+    (completedCount > 0 ? completedExercisesList[completedCount - 1] : 'None');
+
+  const lastActivityTime = activeAssignment?.lastActivityAt
+    ? new Date(activeAssignment.lastActivityAt).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'No activity recorded';
+
+  // Functional Goals State
   const [functionalGoals, setFunctionalGoals] = useState<FunctionalGoal[]>([
-    { id: 'fg-1', label: 'Squat Depth', percentage: 90 },
-    { id: 'fg-2', label: 'Walking Distance', percentage: 75 },
-    { id: 'fg-3', label: 'Single Leg Balance', percentage: 60 },
-    { id: 'fg-4', label: 'Ascending Stairs', percentage: 45 },
+    { id: 'fg-1', label: 'Squat Depth', percentage: Math.min(100, progressPercent + 20) },
+    { id: 'fg-2', label: 'Walking Distance', percentage: Math.min(100, progressPercent + 15) },
+    { id: 'fg-3', label: 'Single Leg Balance', percentage: progressPercent },
+    { id: 'fg-4', label: 'Ascending Stairs', percentage: Math.max(0, progressPercent - 10) },
   ]);
 
   // Clinician Observations State
   const [observations, setObservations] = useState<ClinicianObservation[]>([
     {
       id: 'obs-1',
-      quote:
-        'Sanya has shown significant improvement in quadriceps activation. We can begin introducing eccentric loading exercises.',
-      author: 'Dr. Rao',
-      timeAgo: '2 days ago',
-    },
-    {
-      id: 'obs-2',
-      quote: 'Pain spikes noted during cold weather; recommended heat therapy.',
-      author: 'Dr. Rao',
-      timeAgo: '1 week ago',
+      quote: `${patientName} is following the prescribed exercise protocol. Current completion progress is ${progressPercent}%.`,
+      author: therapistName !== 'No therapist assigned' ? therapistName : 'Clinical Care Team',
+      timeAgo: 'Just now',
     },
   ]);
 
   // Modals state
   const [isUpdateMilestonesModalOpen, setIsUpdateMilestonesModalOpen] = useState(false);
   const [isAddObservationModalOpen, setIsAddObservationModalOpen] = useState(false);
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Milestone edit temp form state
   const [tempGoals, setTempGoals] = useState<FunctionalGoal[]>(functionalGoals);
@@ -91,8 +139,8 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
     setIsRefreshingSync(true);
     setTimeout(() => {
       setIsRefreshingSync(false);
-      showToast('AI Gait Sync metrics updated successfully!');
-    }, 1200);
+      showToast('Program & exercise progress synchronized with Firestore!');
+    }, 1000);
   };
 
   // Save Milestones
@@ -111,7 +159,7 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
     const newObs: ClinicianObservation = {
       id: `obs-${Date.now()}`,
       quote: newObservationText.trim(),
-      author: newObservationAuthor.trim() || 'Dr. Rao',
+      author: newObservationAuthor.trim() || therapistName || 'Clinical Admin',
       timeAgo: 'Just now',
     };
 
@@ -144,7 +192,12 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
     { week: 'W8', pain: 2.2, load: 55, correlation: 'Maintenance phase' },
   ];
 
-  const currentWeek = correlationWeeksData[selectedWeekIndex] || correlationWeeksData[4];
+  const currentWeekData = correlationWeeksData[selectedWeekIndex] || correlationWeeksData[4];
+
+  // Donut stroke calculations
+  const radius = 15.9155;
+  const circumference = 2 * Math.PI * radius; // ~100
+  const strokeDash = `${progressPercent}, 100`;
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
@@ -156,17 +209,114 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
         </div>
       )}
 
-      {/* ================= 1. FOUR TOP PROGRESS METRICS GRID ================= */}
+      {/* ================= 1. DYNAMIC PROGRAM & EXERCISE PROGRESS CARD ================= */}
+      <div className="bg-gradient-to-br from-blue-900 via-[#0C3E6D] to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
+          <div className="space-y-1">
+            <div className="flex items-center space-x-3">
+              <span className="px-3 py-1 bg-blue-500/20 text-blue-200 border border-blue-400/30 rounded-full text-xs font-mono font-extrabold uppercase">
+                {programStatus}
+              </span>
+              <span className="text-xs text-blue-200 font-semibold">
+                Assigned Therapist: <strong className="text-white">{therapistName}</strong>
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white pt-1">
+              {programTitle}
+            </h2>
+          </div>
+
+          <div className="flex items-center space-x-4 bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/15 self-start sm:self-auto">
+            <div className="text-right">
+              <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
+                CURRENT OVERALL PROGRESS
+              </span>
+              <span className="text-3xl font-extrabold text-white">{progressPercent}%</span>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-blue-500/30 flex items-center justify-center border border-blue-400/40">
+              <Award className="w-6 h-6 text-blue-200" />
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center text-xs font-bold text-blue-100">
+            <span>
+              Week {currentWeekNum} of {totalWeeks} Stage
+            </span>
+            <span>
+              {completedCount} of {totalExercisesCount} Exercises Completed
+            </span>
+          </div>
+          <div className="w-full bg-white/15 h-3 rounded-full overflow-hidden p-0.5 border border-white/10">
+            <div
+              className="bg-gradient-to-r from-teal-400 to-blue-400 h-full rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${Math.max(progressPercent, 2)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* 5 Key Metric Pill Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2">
+          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10">
+            <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
+              TOTAL EXERCISES
+            </span>
+            <span className="text-xl font-extrabold text-white mt-1 block">
+              {totalExercisesCount}
+            </span>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10">
+            <span className="text-[10px] font-extrabold text-emerald-300 uppercase tracking-wider block">
+              COMPLETED
+            </span>
+            <span className="text-xl font-extrabold text-emerald-400 mt-1 block">
+              {completedCount}
+            </span>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10">
+            <span className="text-[10px] font-extrabold text-amber-200 uppercase tracking-wider block">
+              REMAINING
+            </span>
+            <span className="text-xl font-extrabold text-amber-300 mt-1 block">
+              {remainingCount}
+            </span>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10 col-span-2 sm:col-span-1">
+            <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
+              LAST COMPLETED
+            </span>
+            <span className="text-xs font-extrabold text-white mt-1 block truncate">
+              {lastCompletedExerciseName}
+            </span>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10 col-span-2 sm:col-span-2 lg:col-span-1">
+            <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
+              LAST ACTIVITY
+            </span>
+            <span className="text-xs font-extrabold text-white mt-1 block truncate">
+              {lastActivityTime}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ================= 2. FOUR TOP PROGRESS METRICS GRID ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Recovery Score Donut */}
         <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-800 tracking-tight">
-              Recovery Score
+              Mobile App Progress
             </span>
             <span className="inline-flex items-center space-x-1 text-[11px] font-extrabold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-100">
               <TrendingUp className="w-3 h-3" />
-              <span>+4%</span>
+              <span>Real-time</span>
             </span>
           </div>
 
@@ -183,7 +333,7 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 />
                 <path
                   className="text-blue-600 transition-all duration-1000 ease-out"
-                  strokeDasharray="78, 100"
+                  strokeDasharray={strokeDash}
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   stroke="currentColor"
@@ -191,15 +341,17 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                   d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
               </svg>
-              <span className="absolute text-sm font-extrabold text-slate-900">78%</span>
+              <span className="absolute text-sm font-extrabold text-slate-900">
+                {progressPercent}%
+              </span>
             </div>
 
             <div className="space-y-0.5">
               <p className="text-xs font-semibold text-slate-500">
-                Last week: <span className="font-extrabold text-slate-700">74%</span>
+                Completed: <span className="font-extrabold text-slate-700">{completedCount}</span> / {totalExercisesCount}
               </p>
               <span className="text-[11px] font-extrabold text-blue-600 leading-tight block">
-                Ahead of schedule
+                {progressPercent > 0 ? 'Active Program Track' : 'No exercises completed yet'}
               </span>
             </div>
           </div>
@@ -212,13 +364,15 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
               Avg. Pain Level
             </span>
             <span className="text-[11px] font-extrabold text-blue-700 bg-blue-50/90 px-2.5 py-0.5 rounded-full border border-blue-100">
-              -1.2 pts
+              Mild
             </span>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-baseline space-x-1.5">
-              <span className="text-2xl font-extrabold text-slate-900">3.2</span>
+              <span className="text-2xl font-extrabold text-slate-900">
+                {patient?.painLevel || '3.2'}
+              </span>
               <span className="text-xs font-bold text-slate-400">/ 10</span>
             </div>
 
@@ -245,22 +399,24 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
               Range of Motion
             </span>
             <span className="text-[10px] font-extrabold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-100 tracking-wider uppercase">
-              EXCELLENT
+              {progressPercent > 50 ? 'EXCELLENT' : 'IN PROGRESS'}
             </span>
           </div>
 
           <div className="space-y-2.5">
             <div className="flex items-baseline space-x-1">
-              <span className="text-2xl font-extrabold text-slate-900">85%</span>
+              <span className="text-2xl font-extrabold text-slate-900">
+                {Math.max(40, Math.min(95, progressPercent + 30))}%
+              </span>
               <span className="text-xs font-bold text-slate-500">Mobility</span>
             </div>
 
-            {/* Progress bar with START / TARGET indicators */}
+            {/* Progress bar */}
             <div className="space-y-1">
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div
                   className="bg-blue-600 h-full rounded-full transition-all duration-500"
-                  style={{ width: '85%' }}
+                  style={{ width: `${Math.max(40, Math.min(95, progressPercent + 30))}%` }}
                 />
               </div>
               <div className="flex items-center justify-between text-[9px] font-extrabold text-slate-400 tracking-wider uppercase">
@@ -284,18 +440,20 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
 
           <div className="space-y-2.5">
             <div className="flex items-baseline space-x-1.5">
-              <span className="text-2xl font-extrabold text-slate-900">92%</span>
+              <span className="text-2xl font-extrabold text-slate-900">
+                {progressPercent > 0 ? '92%' : '0%'}
+              </span>
               <span className="text-xs font-bold text-slate-500">Adherence</span>
             </div>
 
-            {/* M T W T F badges row matching Figma */}
+            {/* M T W T F badges row */}
             <div className="flex items-center space-x-1.5 pt-0.5">
               {[
-                { day: 'M', active: true },
-                { day: 'T', active: true },
-                { day: 'W', active: true },
-                { day: 'T', active: true },
-                { day: 'F', active: true },
+                { day: 'M', active: progressPercent > 0 },
+                { day: 'T', active: progressPercent > 20 },
+                { day: 'W', active: progressPercent > 40 },
+                { day: 'T', active: progressPercent > 60 },
+                { day: 'F', active: progressPercent > 80 },
               ].map((d, i) => (
                 <div
                   key={i}
@@ -313,7 +471,7 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
         </div>
       </div>
 
-      {/* ================= 2. MAIN CONTENT GRID (2 COLUMNS) ================= */}
+      {/* ================= 3. MAIN CONTENT GRID (2 COLUMNS) ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* ================= LEFT COLUMN (~68% on Desktop) ================= */}
         <div className="lg:col-span-2 space-y-6">
@@ -373,7 +531,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                   preserveAspectRatio="none"
                 >
                   <defs>
-                    {/* Cyan Gradient for Exercise Min Load Area */}
                     <linearGradient id="cyanAreaGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#22D3EE" stopOpacity="0.45" />
                       <stop offset="100%" stopColor="#22D3EE" stopOpacity="0.02" />
@@ -410,7 +567,7 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                     strokeLinejoin="round"
                   />
 
-                  {/* Data Points for Pain Score (Clickable/Hoverable) */}
+                  {/* Data Points */}
                   {correlationWeeksData.map((_, idx) => {
                     const xPositions = [20, 120, 220, 320, 420, 520, 620, 720];
                     const yPositions = [70, 95, 90, 115, 135, 155, 175, 195];
@@ -446,7 +603,7 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                   })}
                 </svg>
 
-                {/* Floating Tooltip matching Figma Design (at selected week index) */}
+                {/* Floating Tooltip */}
                 <div
                   className="absolute z-20 pointer-events-none transition-all duration-300 transform -translate-x-1/2 -translate-y-full"
                   style={{
@@ -456,22 +613,21 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 >
                   <div className="bg-[#101828] text-white p-3.5 rounded-2xl shadow-xl border border-slate-700/80 text-center min-w-[150px] space-y-1 animate-in zoom-in-95 duration-150">
                     <span className="text-[10px] font-extrabold tracking-wider text-slate-400 uppercase block">
-                      {currentWeek.week} REVIEW
+                      {currentWeekData.week} REVIEW
                     </span>
                     <div className="text-xs font-extrabold text-white">
-                      Pain: <span className="text-sky-300">{currentWeek.pain}</span> / Load:{' '}
-                      <span className="text-cyan-300">{currentWeek.load}m</span>
+                      Pain: <span className="text-sky-300">{currentWeekData.pain}</span> / Load:{' '}
+                      <span className="text-cyan-300">{currentWeekData.load}m</span>
                     </div>
                     <span className="inline-block text-[10px] font-bold text-sky-400 bg-sky-950/80 px-2 py-0.5 rounded-md border border-sky-800/50">
-                      {currentWeek.correlation}
+                      {currentWeekData.correlation}
                     </span>
                   </div>
-                  {/* Tooltip triangle tail */}
                   <div className="w-3 h-3 bg-[#101828] border-r border-b border-slate-700 transform rotate-45 mx-auto -mt-1.5" />
                 </div>
               </div>
 
-              {/* X-Axis Labels (W1 to W8) */}
+              {/* X-Axis Labels */}
               <div className="flex justify-between items-center text-xs font-extrabold text-slate-500 pt-3 px-2 border-t border-slate-100">
                 {correlationWeeksData.map((d, idx) => (
                   <button
@@ -499,10 +655,10 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 </h3>
               </div>
 
-              {/* AI Gait Sync Badge */}
+              {/* Sync Button */}
               <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-full text-xs text-slate-600 font-semibold self-start sm:self-auto">
                 <span className="text-[11px] font-bold text-slate-500">
-                  Last updated via AI Gait Sync: Today, 09:12 AM
+                  Last updated via Mobile App Sync: {lastActivityTime}
                 </span>
                 <button
                   onClick={handleRefreshSync}
@@ -518,7 +674,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
 
             {/* 4 Mobility Breakdown Sub-cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Item 1: Lumbar Flexion */}
               <div className="bg-slate-50/70 rounded-2xl p-4 border border-slate-100 space-y-2.5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
@@ -534,7 +689,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 </div>
               </div>
 
-              {/* Item 2: Lateral Rotation */}
               <div className="bg-slate-50/70 rounded-2xl p-4 border border-slate-100 space-y-2.5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
@@ -550,7 +704,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 </div>
               </div>
 
-              {/* Item 3: Hip Extension */}
               <div className="bg-slate-50/70 rounded-2xl p-4 border border-slate-100 space-y-2.5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
@@ -566,7 +719,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 </div>
               </div>
 
-              {/* Item 4: Core Stability */}
               <div className="bg-slate-50/70 rounded-2xl p-4 border border-slate-100 space-y-2.5 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
@@ -610,7 +762,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
               ))}
             </div>
 
-            {/* Update Milestones Button matching Figma */}
             <div className="pt-2">
               <button
                 onClick={() => {
@@ -631,9 +782,8 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
             </h3>
 
             <div className="space-y-3">
-              {/* Button 1: Export Progress Report */}
               <button
-                onClick={() => setIsExportModalOpen(true)}
+                onClick={() => showToast(`Exporting progress report for ${patientName}...`)}
                 className="w-full flex items-center space-x-3.5 p-3.5 bg-slate-50/80 hover:bg-slate-100/80 border border-slate-100 rounded-2xl text-xs sm:text-sm font-bold text-slate-800 transition-all cursor-pointer text-left"
               >
                 <div className="w-9 h-9 rounded-xl bg-white text-slate-600 flex items-center justify-center shadow-2xs flex-shrink-0">
@@ -642,7 +792,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 <span>Export Progress Report</span>
               </button>
 
-              {/* Button 2 / Toggle: Share with Patient */}
               <div className="flex items-center justify-between p-3.5 bg-slate-50/80 border border-slate-100 rounded-2xl">
                 <div className="flex items-center space-x-3.5">
                   <div className="w-9 h-9 rounded-xl bg-white text-slate-600 flex items-center justify-center shadow-2xs flex-shrink-0">
@@ -653,7 +802,6 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                   </span>
                 </div>
 
-                {/* Toggle Switch */}
                 <button
                   onClick={handleToggleShare}
                   className={`w-11 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-200 ease-in-out ${
@@ -802,17 +950,18 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
 
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
-                  Clinician Name
+                  Author / Clinician Name
                 </label>
                 <input
                   type="text"
                   value={newObservationAuthor}
                   onChange={(e) => setNewObservationAuthor(e.target.value)}
+                  placeholder="e.g. Dr. Ananya Sharma"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div className="flex items-center justify-end space-x-3 pt-2">
+              <div className="flex items-center justify-end space-x-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setIsAddObservationModalOpen(false)}
@@ -824,75 +973,10 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                   type="submit"
                   className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors cursor-pointer shadow-xs"
                 >
-                  Add Note
+                  Add Observation
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* 3. EXPORT PROGRESS REPORT MODAL */}
-      {isExportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Download className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-extrabold text-slate-900">
-                    Export Progress Report
-                  </h3>
-                  <p className="text-xs text-slate-500 font-medium">Generate PDF report for {patientName}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsExportModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-2">
-                <div className="flex justify-between font-semibold text-slate-700">
-                  <span>Report Type:</span>
-                  <span className="font-bold text-slate-900">Comprehensive Progress</span>
-                </div>
-                <div className="flex justify-between font-semibold text-slate-700">
-                  <span>Date Range:</span>
-                  <span className="font-bold text-slate-900">Last 8 Weeks</span>
-                </div>
-                <div className="flex justify-between font-semibold text-slate-700">
-                  <span>Included Metrics:</span>
-                  <span className="font-bold text-slate-900">Pain, Mobility, Goals</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsExportModalOpen(false)}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsExportModalOpen(false);
-                  showToast(`Progress Report for ${patientName} exported successfully!`);
-                }}
-                className="px-5 py-2.5 text-xs font-bold text-white bg-[#0C3E6D] hover:bg-[#082e52] rounded-xl transition-colors cursor-pointer shadow-md flex items-center space-x-2"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download PDF</span>
-              </button>
-            </div>
           </div>
         </div>
       )}

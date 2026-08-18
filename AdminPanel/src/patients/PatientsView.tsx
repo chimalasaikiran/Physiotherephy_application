@@ -238,17 +238,9 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
             <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Patients
             </h2>
-            {/* Real-time sync status badge */}
-            <div className="flex items-center space-x-1.5 px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-100/80 rounded-full text-xs font-bold shadow-2xs">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span>Firestore Real-time Active</span>
-            </div>
           </div>
           <p className="text-sm text-slate-500 font-medium mt-1 max-w-xl">
-            Live patient details connected to backend Patients Service & Firestore (`patient details`).
+            Manage patient records, recovery plans, and clinical history.
           </p>
         </div>
 

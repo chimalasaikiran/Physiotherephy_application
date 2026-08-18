@@ -65,9 +65,9 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80';
   const patientCondition = patient.condition || 'General Rehab';
   const patientStatus = patient.status || 'Active Treatment';
-  const therapistName = patient.therapistName || 'Dr. Ananya Sharma';
-  const nextApptDate = patient.nextAppointmentDate || 'Today';
-  const nextApptTime = patient.nextAppointmentTime || '10:00 AM';
+  const therapistName = patient.therapistName || 'No therapist assigned';
+  const nextApptDate = patient.nextAppointmentDate || 'Pending Schedule';
+  const nextApptTime = patient.nextAppointmentTime || '--';
 
   // Live dynamic computed metrics from Firestore
   const recoveryScore = computedMetrics.avgProgramProgress;
@@ -621,7 +621,12 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
           onAssignProgram={assignProgram}
         />
       ) : activeTab === 'Progress' ? (
-        <ProgressTab patientName={patientName} therapistName={therapistName} patient={patient} />
+        <ProgressTab
+          patientName={patientName}
+          therapistName={therapistName}
+          patient={patient}
+          assignedPrograms={assignedPrograms}
+        />
       ) : activeTab === 'Reports' ? (
         <ReportsTab
           patientName={patientName}

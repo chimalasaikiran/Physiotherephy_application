@@ -16,94 +16,109 @@ import { toIsoStringSafe } from '@/utils/dateUtils';
 export const PATIENTS_FIRESTORE_COLLECTION = 'users';
 export const LEGACY_PATIENTS_COLLECTION = 'patient details';
 
-export const mapDocToPatient = (id: string, data: any): Patient => ({
-  id,
-  patientId: data.patientId || `#OM-${id.slice(0, 4)}`,
-  name: data.name || data.fullName || 'Unnamed Patient',
-  age: Number(data.age) || 30,
-  gender: data.gender || 'Male',
-  avatarUrl:
-    data.avatarUrl ||
-    data.avatarUri ||
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  condition: data.condition || data.primaryConcern || 'General Rehab',
-  therapistName: data.therapistName || 'Dr. Ananya Sharma',
-  therapistInitials: data.therapistInitials || 'AS',
-  therapistAvatarBg: data.therapistAvatarBg || 'bg-teal-50 text-teal-700',
-  therapistSpecialization: data.therapistSpecialization || 'Physiotherapy Specialist',
-  nextAppointmentDate: data.nextAppointmentDate || 'Today',
-  nextAppointmentTime: data.nextAppointmentTime || '10:00 AM',
-  recoveryScore: Number(data.recoveryScore) || 75,
-  status: data.status || 'Active Treatment',
-  phone: data.phone || '',
-  email: data.email || '',
-  joinedDate: data.joinedDate || 'Aug 2026',
-  address: data.address || '',
-  bloodGroup: data.bloodGroup || '',
-  emergencyContact: data.emergencyContact || undefined,
-  notes: data.notes || '',
-  painLevel: data.painLevel || 'Mild',
-  programsAssignedCount: Number(data.programsAssignedCount) || 1,
-  sessionsCompleted: Number(data.sessionsCompleted) || 0,
-  sessionsTotal: Number(data.sessionsTotal) || 12,
-  treatmentPlan: data.treatmentPlan || undefined,
-  medicalHistory: data.medicalHistory || undefined,
-  goals: Array.isArray(data.goals) ? data.goals : [],
-  reports: Array.isArray(data.reports) ? data.reports : [],
-  upcomingAppointments: Array.isArray(data.upcomingAppointments) ? data.upcomingAppointments : [],
-  pastAppointments: Array.isArray(data.pastAppointments) ? data.pastAppointments : [],
-  payments: Array.isArray(data.payments) ? data.payments : [],
-  programs: Array.isArray(data.programs) ? data.programs : [],
-  exercises: Array.isArray(data.exercises) ? data.exercises : [],
-  clinicalNotes: Array.isArray(data.clinicalNotes) ? data.clinicalNotes : [],
-  createdAt: toIsoStringSafe(data.createdAt),
-  updatedAt: toIsoStringSafe(data.updatedAt),
-});
+export const getTherapistInitials = (name?: string): string => {
+  if (!name || name === 'No therapist assigned' || name === 'Unassigned') return '--';
+  const clean = name.replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.)\s+/i, '').trim();
+  const parts = clean.split(/\s+/);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  if (parts.length === 1 && parts[0].length > 0) return parts[0].slice(0, 2).toUpperCase();
+  return '--';
+};
 
-export const mapUserDocToPatient = (id: string, data: any): Patient => ({
-  id,
-  patientId: `#OM-${id.slice(0, 4)}`,
-  name: data.fullName || data.name || `User (${data.phone || id.slice(0, 6)})`,
-  age: Number(data.age) || 28,
-  gender: data.gender || 'Not specified',
-  avatarUrl:
-    data.avatarUri ||
-    data.avatarUrl ||
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-  condition: data.primaryConcern || 'Physiotherapy Evaluation',
-  therapistName: 'Dr. Ananya Sharma',
-  therapistInitials: 'AS',
-  therapistAvatarBg: 'bg-teal-50 text-teal-700',
-  therapistSpecialization: 'Physiotherapy Specialist',
-  nextAppointmentDate: 'Pending Schedule',
-  nextAppointmentTime: '10:00 AM',
-  recoveryScore: 70,
-  status: 'Active Treatment',
-  phone: data.phone || '',
-  email: data.email || '',
-  joinedDate: 'Aug 2026',
-  address: '',
-  bloodGroup: '',
-  notes: '',
-  painLevel: 'Mild',
-  programsAssignedCount: 1,
-  sessionsCompleted: 0,
-  sessionsTotal: 10,
-  goals: [],
-  reports: [],
-  upcomingAppointments: [],
-  pastAppointments: [],
-  payments: [],
-  programs: [],
-  exercises: [],
-  clinicalNotes: [],
-  createdAt: toIsoStringSafe(data.createdAt),
-  updatedAt: toIsoStringSafe(data.updatedAt),
-});
+export const mapDocToPatient = (id: string, data: any): Patient => {
+  const therapistName = data.therapistName || (data.doctorId ? 'Assigned Specialist' : 'No therapist assigned');
+  return {
+    id,
+    patientId: data.patientId || `#OM-${id.slice(0, 4)}`,
+    name: data.name || data.fullName || 'Unnamed Patient',
+    age: Number(data.age) || 30,
+    gender: data.gender || 'Male',
+    avatarUrl:
+      data.avatarUrl ||
+      data.avatarUri ||
+      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    condition: data.condition || data.primaryConcern || 'General Rehab',
+    therapistName,
+    therapistInitials: getTherapistInitials(therapistName),
+    therapistAvatarBg: data.therapistAvatarBg || 'bg-teal-50 text-teal-700',
+    therapistSpecialization: data.therapistSpecialization || 'Physiotherapy Specialist',
+    nextAppointmentDate: data.nextAppointmentDate || 'Pending Schedule',
+    nextAppointmentTime: data.nextAppointmentTime || '--',
+    recoveryScore: Number(data.recoveryScore) || 0,
+    status: data.status || 'Active Treatment',
+    phone: data.phone || '',
+    email: data.email || '',
+    joinedDate: data.joinedDate || 'Aug 2026',
+    address: data.address || '',
+    bloodGroup: data.bloodGroup || '',
+    emergencyContact: data.emergencyContact || undefined,
+    notes: data.notes || '',
+    painLevel: data.painLevel || 'Mild',
+    programsAssignedCount: Number(data.programsAssignedCount) || 0,
+    sessionsCompleted: Number(data.sessionsCompleted) || 0,
+    sessionsTotal: Number(data.sessionsTotal) || 12,
+    treatmentPlan: data.treatmentPlan || undefined,
+    medicalHistory: data.medicalHistory || undefined,
+    goals: Array.isArray(data.goals) ? data.goals : [],
+    reports: Array.isArray(data.reports) ? data.reports : [],
+    upcomingAppointments: Array.isArray(data.upcomingAppointments) ? data.upcomingAppointments : [],
+    pastAppointments: Array.isArray(data.pastAppointments) ? data.pastAppointments : [],
+    payments: Array.isArray(data.payments) ? data.payments : [],
+    programs: Array.isArray(data.programs) ? data.programs : [],
+    exercises: Array.isArray(data.exercises) ? data.exercises : [],
+    clinicalNotes: Array.isArray(data.clinicalNotes) ? data.clinicalNotes : [],
+    createdAt: toIsoStringSafe(data.createdAt),
+    updatedAt: toIsoStringSafe(data.updatedAt),
+  };
+};
+
+export const mapUserDocToPatient = (id: string, data: any): Patient => {
+  const therapistName = data.therapistName || (data.doctorId ? 'Assigned Specialist' : 'No therapist assigned');
+  return {
+    id,
+    patientId: `#OM-${id.slice(0, 4)}`,
+    name: data.fullName || data.name || `User (${data.phone || id.slice(0, 6)})`,
+    age: Number(data.age) || 28,
+    gender: data.gender || 'Not specified',
+    avatarUrl:
+      data.avatarUri ||
+      data.avatarUrl ||
+      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+    condition: data.primaryConcern || 'Physiotherapy Evaluation',
+    therapistName,
+    therapistInitials: getTherapistInitials(therapistName),
+    therapistAvatarBg: 'bg-teal-50 text-teal-700',
+    therapistSpecialization: 'Physiotherapy Specialist',
+    nextAppointmentDate: 'Pending Schedule',
+    nextAppointmentTime: '--',
+    recoveryScore: 0,
+    status: 'Active Treatment',
+    phone: data.phone || '',
+    email: data.email || '',
+    joinedDate: 'Aug 2026',
+    address: '',
+    bloodGroup: '',
+    notes: '',
+    painLevel: 'Mild',
+    programsAssignedCount: 0,
+    sessionsCompleted: 0,
+    sessionsTotal: 10,
+    goals: [],
+    reports: [],
+    upcomingAppointments: [],
+    pastAppointments: [],
+    payments: [],
+    programs: [],
+    exercises: [],
+    clinicalNotes: [],
+    createdAt: toIsoStringSafe(data.createdAt),
+    updatedAt: toIsoStringSafe(data.updatedAt),
+  };
+};
 
 /**
- * Subscribe to real-time updates from Firestore 'users' collection (primary central record)
- * AND legacy 'patient details' collection.
+ * Subscribe to real-time updates from Firestore 'users' collection (primary central record),
+ * legacy 'patient details' collection, AND 'appointments' collection to dynamically resolve Assigned Therapist.
  */
 export const subscribeToPatients = (
   onData: (patients: Patient[]) => void,
@@ -111,17 +126,64 @@ export const subscribeToPatients = (
 ): Unsubscribe => {
   let patientsFromUsers: Patient[] = [];
   let patientsFromDetails: Patient[] = [];
+  let appointmentsList: any[] = [];
 
   const emitMerged = () => {
     const userIds = new Set(patientsFromUsers.map((p) => p.id));
     const uniqueDetails = patientsFromDetails.filter((d) => !userIds.has(d.id));
     const merged = [...patientsFromUsers, ...uniqueDetails];
-    onData(merged);
+
+    // Dynamically resolve assigned therapist and next appointment from appointments collection for each patient
+    const enriched = merged.map((patient) => {
+      const patientAppts = appointmentsList.filter(
+        (a) => a.userId === patient.id || a.patientId === patient.id
+      );
+
+      let therapistName = patient.therapistName;
+      let nextDate = patient.nextAppointmentDate;
+      let nextTime = patient.nextAppointmentTime;
+
+      if (patientAppts.length > 0) {
+        // Sort appointments by date / creation (latest first)
+        const sorted = [...patientAppts].sort((a, b) => {
+          const tA = new Date(a.fullDate || a.createdAt || 0).getTime();
+          const tB = new Date(b.fullDate || b.createdAt || 0).getTime();
+          return tB - tA;
+        });
+
+        const latestAppt = sorted[0];
+        const apptTherapist = latestAppt.doctorName || latestAppt.therapistName;
+        if (apptTherapist && (!therapistName || therapistName === 'No therapist assigned' || therapistName === 'Unassigned')) {
+          therapistName = apptTherapist;
+        }
+
+        const upcoming = sorted.find((a) => a.status === 'Upcoming' || a.status === 'Scheduled');
+        if (upcoming) {
+          nextDate = upcoming.fullDate || upcoming.date || nextDate;
+          nextTime = upcoming.timeSlot || upcoming.time || nextTime;
+        }
+      }
+
+      if (!therapistName || therapistName === 'Unassigned') {
+        therapistName = 'No therapist assigned';
+      }
+
+      return {
+        ...patient,
+        therapistName,
+        therapistInitials: getTherapistInitials(therapistName),
+        nextAppointmentDate: nextDate,
+        nextAppointmentTime: nextTime,
+      };
+    });
+
+    onData(enriched);
   };
 
   try {
     const colRefUsers = collection(db, PATIENTS_FIRESTORE_COLLECTION);
     const colRefDetails = collection(db, LEGACY_PATIENTS_COLLECTION);
+    const colRefAppts = collection(db, 'appointments');
 
     const unsubUsers = onSnapshot(
       query(colRefUsers),
@@ -150,9 +212,21 @@ export const subscribeToPatients = (
       }
     );
 
+    const unsubAppts = onSnapshot(
+      query(colRefAppts),
+      (snapshot) => {
+        appointmentsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        emitMerged();
+      },
+      (err) => {
+        console.warn('Firestore appointments snapshot for patients warning:', err);
+      }
+    );
+
     return () => {
       unsubUsers();
       unsubDetails();
+      unsubAppts();
     };
   } catch (error: any) {
     console.error('Failed to setup Firestore snapshot listener:', error);
@@ -212,13 +286,13 @@ export const fetchPatientsFromApi = async (): Promise<Patient[]> => {
           data.avatarUri ||
           'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
         condition: data.condition || 'General Rehab',
-        therapistName: data.therapistName || 'Dr. Ananya Sharma',
-        therapistInitials: data.therapistInitials || 'AS',
+        therapistName: data.therapistName || 'No therapist assigned',
+        therapistInitials: getTherapistInitials(data.therapistName),
         therapistAvatarBg: data.therapistAvatarBg || 'bg-teal-50 text-teal-700',
         therapistSpecialization: data.therapistSpecialization || 'Physiotherapy Specialist',
-        nextAppointmentDate: data.nextAppointmentDate || 'Today',
-        nextAppointmentTime: data.nextAppointmentTime || '10:00 AM',
-        recoveryScore: Number(data.recoveryScore) || 75,
+        nextAppointmentDate: data.nextAppointmentDate || 'Pending Schedule',
+        nextAppointmentTime: data.nextAppointmentTime || '--',
+        recoveryScore: Number(data.recoveryScore) || 0,
         status: data.status || 'Active Treatment',
         phone: data.phone || '',
         email: data.email || '',
@@ -227,7 +301,7 @@ export const fetchPatientsFromApi = async (): Promise<Patient[]> => {
         bloodGroup: data.bloodGroup || '',
         notes: data.notes || '',
         painLevel: data.painLevel || 'Mild',
-        programsAssignedCount: data.programsAssignedCount || 1,
+        programsAssignedCount: data.programsAssignedCount || 0,
         sessionsCompleted: data.sessionsCompleted || 0,
         sessionsTotal: data.sessionsTotal || 12,
         treatmentPlan: data.treatmentPlan || undefined,
@@ -253,6 +327,7 @@ export const fetchPatientsFromApi = async (): Promise<Patient[]> => {
       usersSnap.docs.forEach((uDoc) => {
         if (!existingIds.has(uDoc.id)) {
           const uData = uDoc.data();
+          const therapistName = uData.therapistName || 'No therapist assigned';
           patientsList.push({
             id: uDoc.id,
             patientId: `#OM-${uDoc.id.slice(0, 4)}`,
@@ -264,13 +339,13 @@ export const fetchPatientsFromApi = async (): Promise<Patient[]> => {
               uData.avatarUrl ||
               'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
             condition: uData.primaryConcern || 'Physiotherapy Evaluation',
-            therapistName: 'Dr. Ananya Sharma',
-            therapistInitials: 'AS',
+            therapistName,
+            therapistInitials: getTherapistInitials(therapistName),
             therapistAvatarBg: 'bg-teal-50 text-teal-700',
             therapistSpecialization: 'Physiotherapy Specialist',
             nextAppointmentDate: 'Pending Schedule',
-            nextAppointmentTime: '10:00 AM',
-            recoveryScore: 70,
+            nextAppointmentTime: '--',
+            recoveryScore: 0,
             status: 'Active Treatment',
             phone: uData.phone || '',
             email: uData.email || '',

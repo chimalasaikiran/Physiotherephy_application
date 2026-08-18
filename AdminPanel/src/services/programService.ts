@@ -352,7 +352,27 @@ export const assignPatientToProgram = async (
     return { assignmentId: existingId, isNew: false };
   }
 
-  // 2. Create assignment document
+  // 2. Derive total exercises count from program document
+  let totalExercises = 10;
+  try {
+    const programDocRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId);
+    const programSnap = await getDoc(programDocRef);
+    if (programSnap.exists()) {
+      const pData = programSnap.data();
+      if (Array.isArray(pData.weeks) && pData.weeks.length > 0) {
+        const sum = pData.weeks.reduce((acc: number, w: any) => acc + (Array.isArray(w.exercises) ? w.exercises.length : 0), 0);
+        if (sum > 0) totalExercises = sum;
+      } else if (pData.exercisesCount) {
+        totalExercises = Number(pData.exercisesCount) || 10;
+      } else if (pData.totalExercises) {
+        totalExercises = Number(pData.totalExercises) || 10;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not derive total exercises for program assignment:', err);
+  }
+
+  // Create assignment document
   const now = new Date().toISOString();
   const startDate = new Date().toLocaleDateString('en-US', {
     month: 'short',
@@ -378,6 +398,7 @@ export const assignPatientToProgram = async (
     assignmentStatus: 'On Track' as AssignmentStatus,
     currentWeek: 1,
     totalWeeks,
+    totalExercises,
     progressPercent: 0,
     adherence: 100,
     completedExercises: [],
@@ -600,12 +621,10 @@ export const markExerciseComplete = async (
 
   const updatedCompleted = [...completed, exerciseId];
   const updatedPending = (currentAssignment.pendingExercises || []).filter((id) => id !== exerciseId);
-  const calculatedTotal = updatedCompleted.length + updatedPending.length;
-  const totalExercises = calculatedTotal > 0 ? calculatedTotal : 10;
-  const progressPercent = Math.min(
-    100,
-    Math.round((updatedCompleted.length / totalExercises) * 100)
-  );
+  const totalExercises = Number((currentAssignment as any).totalExercises) || (updatedCompleted.length + updatedPending.length) || 10;
+  const progressPercent = totalExercises > 0
+    ? Math.min(100, Math.round((updatedCompleted.length / totalExercises) * 100))
+    : 0;
 
   let assignmentStatus: AssignmentStatus = currentAssignment.assignmentStatus || 'On Track';
   if (progressPercent >= 90) assignmentStatus = 'Ahead';

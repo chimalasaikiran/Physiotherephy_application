@@ -226,6 +226,37 @@ export const createAppointmentViaBackend = async (
           console.warn('Non-critical user subcollection appointment mirror error:', subErr);
         }
 
+        // Update patient record in Firestore users & patient details collections to automatically set Assigned Therapist
+        try {
+          const userDocRef = doc(db, 'users', currentUid);
+          await setDoc(
+            userDocRef,
+            {
+              therapistId: params.doctorId,
+              therapistName: params.doctorName,
+              nextAppointmentDate: params.fullDate,
+              nextAppointmentTime: params.timeSlot,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+
+          const detailDocRef = doc(db, 'patient details', currentUid);
+          await setDoc(
+            detailDocRef,
+            {
+              therapistId: params.doctorId,
+              therapistName: params.doctorName,
+              nextAppointmentDate: params.fullDate,
+              nextAppointmentTime: params.timeSlot,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (uErr) {
+          console.warn('Non-critical patient therapist update error:', uErr);
+        }
+
         if (params.doctorId) {
           try {
             const therapistRef = doc(db, 'therapists', params.doctorId);

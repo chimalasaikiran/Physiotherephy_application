@@ -31,30 +31,14 @@ export function usePatients() {
     }
   }, []);
 
-  // Initial API fetch + Subscribe to real-time updates from Firestore
+  // Real-time subscription to Firestore (single source of truth)
   useEffect(() => {
     setIsLoading(true);
     setError(null);
 
-    // 1. Immediate fetch from Backend Microservice API
-    fetchPatientsFromApi()
-      .then((apiData) => {
-        if (apiData && apiData.length > 0) {
-          setPatients(apiData);
-          setIsLoading(false);
-        }
-      })
-      .catch((err) => {
-        console.warn('Initial API fetch failed, relying on real-time listener:', err);
-      });
-
-    // 2. Real-time subscription to Firestore
     const unsubscribe = subscribeToPatients(
       (data) => {
-        setPatients((prev) => {
-          if (!data || data.length === 0) return prev.length > 0 ? prev : data;
-          return data;
-        });
+        setPatients(data);
         setIsLoading(false);
         setIsRealtimeActive(true);
         setError(null);

@@ -76,21 +76,10 @@ export const TherapistsView: React.FC<TherapistsViewProps> = ({
   useEffect(() => {
     setLoading(true);
     const unsub = subscribeToTherapists(
-      async (data) => {
+      (data) => {
         setTherapists(data);
         setError(null);
         setLoading(false);
-        // Auto-seed on empty collection (first run)
-        if (data.length === 0) {
-          setSeeding(true);
-          try {
-            await seedDemoTherapistsIfEmpty(data);
-          } catch {
-            // Seed failure is non-fatal
-          } finally {
-            setSeeding(false);
-          }
-        }
       },
       (err) => {
         console.error('TherapistsView subscription error:', err);
@@ -281,13 +270,8 @@ export const TherapistsView: React.FC<TherapistsViewProps> = ({
       {/* 1. Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Therapists
-            {/* Real-time indicator */}
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 ml-1">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              LIVE
-            </span>
           </h2>
           <p className="text-sm font-medium text-slate-500 mt-1">
             Manage therapists, schedules and patient assignments.{' '}

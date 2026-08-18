@@ -391,11 +391,20 @@ export function usePatientProfileData(patient: Patient) {
 
     // Active Programs Count & Progress
     const activePrograms = assignedPrograms.filter((p) => p.status === 'active');
-    const programsCount = activePrograms.length > 0 ? activePrograms.length : (assignedPrograms.length || patient.programsAssignedCount || 1);
+    const programsCount = assignedPrograms.length;
 
-    const avgProgramProgress = activePrograms.length > 0
-      ? Math.round(activePrograms.reduce((acc, p) => acc + (p.progressPercent || 0), 0) / activePrograms.length)
-      : (assignedPrograms.length > 0 ? Math.round(assignedPrograms.reduce((acc, p) => acc + (p.progressPercent || 0), 0) / assignedPrograms.length) : (patient.recoveryScore || 75));
+    let avgProgramProgress = 0;
+    if (activePrograms.length > 0) {
+      avgProgramProgress = Math.round(
+        activePrograms.reduce((acc, p) => acc + (p.progressPercent || 0), 0) / activePrograms.length
+      );
+    } else if (assignedPrograms.length > 0) {
+      avgProgramProgress = Math.round(
+        assignedPrograms.reduce((acc, p) => acc + (p.progressPercent || 0), 0) / assignedPrograms.length
+      );
+    } else {
+      avgProgramProgress = Number(patient.recoveryScore) || 0;
+    }
 
     // Financial Metrics
     let totalPaid = 0;

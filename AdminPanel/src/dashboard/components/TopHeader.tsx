@@ -92,19 +92,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Right Header Actions */}
       <div className="flex items-center space-x-3 sm:space-x-4">
-        {/* Live Realtime Sync Status Badge */}
-        <button
-          onClick={onOpenRealtimeGuide}
-          className="flex items-center space-x-2 bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-3 py-1.5 rounded-full text-xs font-bold shadow-2xs hover:bg-emerald-100 transition-all cursor-pointer"
-          title="Click to view Real-time Workflow Guide"
-        >
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span className="hidden md:inline">Real-Time Sync Active</span>
-          <span className="md:hidden">Sync Live</span>
-        </button>
 
         {/* New Appointment Button */}
         <button
