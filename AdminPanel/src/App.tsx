@@ -14,7 +14,7 @@ function MainAppContent() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white font-sans">
         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4 shadow-lg shadow-blue-500/20" />
         <p className="text-sm font-semibold tracking-wide text-slate-300">
-          Verifying Security Credentials & Role Permissions...
+          Loading...
         </p>
       </div>
     );

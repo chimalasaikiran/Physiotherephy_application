@@ -11,7 +11,6 @@ import {
   BarChart3,
   Bell,
   Settings,
-  HelpCircle,
   LogOut,
   X,
   Cross,
@@ -51,7 +50,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const bottomNavItems = [
     { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'support', label: 'Support', icon: HelpCircle },
   ];
 
   const isItemActive = (itemId: string, currentTab: string) => {
