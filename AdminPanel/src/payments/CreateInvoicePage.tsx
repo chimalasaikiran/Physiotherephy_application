@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Search,
   Phone,
@@ -30,6 +30,10 @@ import {
   Copy,
 } from 'lucide-react';
 import { RecordPaymentModal } from './components/RecordPaymentModal';
+import { createInvoice, generateInvoiceNumber } from '@/services/paymentService';
+import { subscribeToPatients } from '@/services/patientService';
+import type { InvoiceDocument } from './types';
+
 
 interface PatientData {
   id: string;
@@ -166,44 +170,248 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
   onSuccess,
   onNavigateToPatientProfile,
 }) => {
-  // Wizard Step State: 1, 2, 3, or 4
-  const [currentStep, setCurrentStep] = useState<number>(4);
+  // Wizard Step State: ALWAYS start at Step 1
+  const [currentStep, setCurrentStep] = useState<number>(1);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('p1');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<
     'Recent Patients' | "Today's Appointments" | 'Outstanding Balance' | 'Active Treatment'
   >('Recent Patients');
   const [previewPatient, setPreviewPatient] = useState<PatientData | null>(null);
+  const [realPatients, setRealPatients] = useState<PatientData[]>([]);
 
-  // Modal & Toast State
+  // Modal, Toast & Firestore Save State
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [createdInvoice, setCreatedInvoice] = useState<InvoiceDocument | null>(null);
 
   // Step 2 Catalog Filters & State
   const [serviceSearch, setServiceSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('All Services');
   const [serviceTab, setServiceTab] = useState<'Popular' | 'Frequently Used' | "Today's Services">('Popular');
 
-  const [selectedServices, setSelectedServices] = useState<ServiceLineItem[]>([]);
+  const [selectedServices, setSelectedServices] = useState<ServiceLineItem[]>([
+    {
+      id: 'cs1',
+      title: 'Initial Assessment',
+      description: 'Full diagnostic evaluation of ACL strain',
+      unitPrice: 2500,
+      quantity: 1,
+      discountPercent: 0,
+    },
+  ]);
 
-  const [dueDate, setDueDate] = useState<string>('2024-11-15');
+  const [dueDate, setDueDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  });
   const [paymentMethod, setPaymentMethod] = useState<string>('UPI (PhonePe)');
   const [notes, setNotes] = useState<string>(
-    'Patient requested splitting the payment into two installments. First installment processed on Oct 25 via UPI. Next follow-up session scheduled for Nov 05.'
+    'Patient requested invoice for treatment session. Standard clinic payment terms apply.'
   );
 
-  const selectedPatient =
-    mockPatients.find((p) => p.id === selectedPatientId) || mockPatients[0] || defaultPatient;
+  // Real-time Firestore Patients Subscription
+  useEffect(() => {
+    const unsub = subscribeToPatients((pts) => {
+      if (pts && pts.length > 0) {
+        const mapped: PatientData[] = pts.map((p) => ({
+          id: p.id,
+          name: p.name,
+          patientCode: p.patientCode || `P-${p.id.slice(0, 5).toUpperCase()}`,
+          initials: p.name
+            ? p.name
+                .split(' ')
+                .map((n) => n[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2)
+            : 'PT',
+          program: p.primaryCondition || p.treatmentPlan || 'ACL Recovery Program',
+          balance: p.balance ?? 0,
+          phone: p.phone || '+91 98765 43210',
+          email: p.email || 'patient@example.com',
+          ageGender: `${p.age || '28'} Yrs / ${p.gender || 'Female'}`,
+          doctor: p.assignedTherapistName || p.therapistName || 'Dr. Arjun Mehta',
+          lastInvoice: 'INV-2026-00089',
+          totalInvoices: 1,
+          activeProgramTag: p.status || 'Active',
+          category: 'recent' as const,
+        }));
+        setRealPatients(mapped);
+      }
+    });
+    return () => unsub();
+  }, []);
 
-  // Exact figures matching Figma screenshot (₹12,450 total, ₹4,000 paid, ₹8,450 due)
-  const subtotal = 12100;
-  const discountAmount = 900;
-  const gstAmount = 1250;
-  const grandTotal = 12450;
+  const allPatients = useMemo(() => {
+    const combined = [...realPatients];
+    mockPatients.forEach((mp) => {
+      if (!combined.some((cp) => cp.id === mp.id)) {
+        combined.push(mp);
+      }
+    });
+    return combined;
+  }, [realPatients]);
+
+  const selectedPatient =
+    allPatients.find((p) => p.id === selectedPatientId) || allPatients[0] || defaultPatient;
+
+  // Dynamic figures calculation based on selected services
+  const subtotal = useMemo(() => {
+    return selectedServices.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  }, [selectedServices]);
+
+  const discountAmount = useMemo(() => {
+    return selectedServices.reduce(
+      (sum, item) =>
+        sum + Math.round((item.unitPrice * item.quantity * (item.discountPercent || 0)) / 100),
+      0
+    );
+  }, [selectedServices]);
+
+  const taxableAmount = Math.max(0, subtotal - discountAmount);
+  const gstAmount = Math.round(taxableAmount * 0.18);
+  const grandTotal = taxableAmount + gstAmount;
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Reset form and step state to start fresh at Step 1
+  const resetInvoiceForm = () => {
+    setCurrentStep(1);
+    setSelectedPatientId(allPatients[0]?.id || 'p1');
+    setSelectedServices([
+      {
+        id: 'cs1',
+        title: 'Initial Assessment',
+        description: 'Full diagnostic evaluation of ACL strain',
+        unitPrice: 2500,
+        quantity: 1,
+        discountPercent: 0,
+      },
+    ]);
+    setSearchQuery('');
+    setServiceSearch('');
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    setDueDate(d.toISOString().split('T')[0]);
+    setPaymentMethod('UPI (PhonePe)');
+    setNotes('Patient requested invoice for treatment session. Standard clinic payment terms apply.');
+    setCreatedInvoice(null);
+    showToast('Invoice form reset to Step 1.');
+  };
+
+  // Step Validation & Navigation Handlers
+  const handleNextFromStep1 = () => {
+    if (!selectedPatientId || !selectedPatient) {
+      showToast('Please select a patient before moving forward.');
+      return;
+    }
+    setCurrentStep(2);
+  };
+
+  const handleNextFromStep2 = () => {
+    if (selectedServices.length === 0) {
+      showToast('Please add at least one service to the invoice.');
+      return;
+    }
+    setCurrentStep(3);
+  };
+
+  const handleGenerateInvoice = async () => {
+    if (!selectedPatient) {
+      showToast('Please select a patient.');
+      return;
+    }
+    if (selectedServices.length === 0) {
+      showToast('Please add at least one service to the invoice.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const invNum = await generateInvoiceNumber();
+      const lineItems = selectedServices.map((s) => ({
+        description: s.title,
+        quantity: s.quantity,
+        unitPrice: s.unitPrice,
+        total:
+          s.unitPrice * s.quantity -
+          Math.round((s.unitPrice * s.quantity * (s.discountPercent || 0)) / 100),
+      }));
+
+      const newInvoiceData = {
+        invoiceNumber: invNum,
+        patientId: selectedPatient.id,
+        patientName: selectedPatient.name,
+        patientEmail: selectedPatient.email || '',
+        therapistId: '',
+        therapistName: selectedPatient.doctor || 'Dr. Arjun Mehta',
+        description: selectedServices.map((s) => s.title).join(', ') || 'Physiotherapy Session',
+        lineItems,
+        amount: subtotal,
+        taxAmount: gstAmount,
+        discountAmount: discountAmount,
+        totalAmount: grandTotal,
+        currency: 'INR',
+        status: 'Pending' as const,
+        paymentMethod: paymentMethod,
+        issueDate: new Date().toISOString().split('T')[0],
+        dueDate: dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+        notes: notes,
+      };
+
+      const docId = await createInvoice(newInvoiceData);
+      const savedDoc: InvoiceDocument = {
+        id: docId,
+        ...newInvoiceData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      setCreatedInvoice(savedDoc);
+      setCurrentStep(4);
+      showToast(`Invoice #${invNum} created and saved to Firestore!`);
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      console.error('Failed to create invoice in Firestore:', err);
+      showToast('Failed to save invoice to backend. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleStepIndicatorClick = (stepNum: number) => {
+    if (stepNum < currentStep) {
+      // Navigating backwards is always allowed
+      setCurrentStep(stepNum);
+    } else if (stepNum > currentStep) {
+      if (currentStep === 1) {
+        if (!selectedPatientId || !selectedPatient) {
+          showToast('Please select a patient before advancing.');
+          return;
+        }
+        if (stepNum === 2) {
+          setCurrentStep(2);
+        } else if (stepNum >= 3) {
+          if (selectedServices.length === 0) {
+            showToast('Please add at least one service before advancing.');
+            return;
+          }
+          setCurrentStep(stepNum);
+        }
+      } else if (currentStep === 2) {
+        if (selectedServices.length === 0) {
+          showToast('Please add at least one service before advancing.');
+          return;
+        }
+        setCurrentStep(stepNum);
+      }
+    }
   };
 
   // Handlers for Services
@@ -249,7 +457,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
   };
 
   // Filtered Patients for Step 1
-  const filteredPatients = mockPatients.filter((p) => {
+  const filteredPatients = allPatients.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.patientCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -283,6 +491,8 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
     { number: 4, label: 'Generate' },
   ];
 
+  const currentInvoiceNum = createdInvoice ? createdInvoice.invoiceNumber : 'INV-2026-00125';
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300 min-h-screen pb-24 font-sans text-slate-900">
       {/* Toast Notification Banner */}
@@ -293,7 +503,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
         </div>
       )}
 
-      {/* Top Header & Wizard Navigation Header with GREEN Checkmark Stepper */}
+      {/* Top Header & Wizard Navigation Header */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
@@ -308,13 +518,13 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
             )}
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                {currentStep === 4 ? 'Invoice #INV-2026-00125' : 'Create Invoice'}
+                {currentStep === 4 ? `Invoice #${currentInvoiceNum}` : 'Create Invoice'}
               </h1>
               <p className="text-sm font-medium text-slate-500 mt-1">
                 {currentStep === 1 && 'Step 1 of 4 — Select a patient to generate a treatment invoice.'}
                 {currentStep === 2 && 'Step 2 of 4 — Add treatment services, quantity & discounts.'}
                 {currentStep === 3 && 'Step 3 of 4 — Review itemized billing statement and payment terms.'}
-                {currentStep === 4 && 'Step 4 of 4 — Generated Invoice view matching Figma design.'}
+                {currentStep === 4 && 'Step 4 of 4 — Invoice created and saved successfully.'}
               </p>
             </div>
           </div>
@@ -322,7 +532,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
           {currentStep === 4 && (
             <div className="flex items-center space-x-3">
               <button
-                onClick={() => setCurrentStep(1)}
+                onClick={resetInvoiceForm}
                 className="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition-colors cursor-pointer inline-flex items-center space-x-1.5"
               >
                 <Plus className="w-4 h-4" />
@@ -343,7 +553,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                 <React.Fragment key={step.number}>
                   {/* Step Item Button */}
                   <button
-                    onClick={() => setCurrentStep(step.number)}
+                    onClick={() => handleStepIndicatorClick(step.number)}
                     className="flex items-center space-x-3 cursor-pointer group focus:outline-none"
                   >
                     {/* Circle Indicator */}
@@ -905,17 +1115,17 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
           <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
             <div className="flex items-center space-x-3.5">
               <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                Invoice #INV-2026-00125
+                Invoice #{currentInvoiceNum}
               </h2>
               <span className="bg-amber-100/90 text-amber-700 font-extrabold text-xs px-3 py-1 rounded-full border border-amber-200/60 shadow-2xs">
-                Partially Paid
+                {createdInvoice?.status || 'Pending'}
               </span>
             </div>
 
-            {/* Header Action Buttons matching screenshot */}
+            {/* Header Action Buttons */}
             <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={() => showToast('Invoice emailed to patient sanya.m@example.com')}
+                onClick={() => showToast(`Invoice emailed to patient ${selectedPatient.email || 'patient'}`)}
                 className="px-4 py-2.5 bg-blue-50/80 hover:bg-blue-100 text-blue-600 border border-blue-200/60 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer inline-flex items-center space-x-2"
               >
                 <Send className="w-4 h-4" />
@@ -963,7 +1173,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                 Total Amount
               </span>
               <div className="text-3xl font-black text-blue-600 tracking-tight">
-                ₹12,450
+                ₹{(createdInvoice ? createdInvoice.totalAmount : grandTotal).toLocaleString('en-IN')}
               </div>
             </div>
 
@@ -973,17 +1183,17 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                 Amount Paid
               </span>
               <div className="text-3xl font-black text-emerald-600 tracking-tight">
-                ₹4,000
+                ₹{(createdInvoice?.status === 'Paid' ? createdInvoice.totalAmount : 0).toLocaleString('en-IN')}
               </div>
             </div>
 
-            {/* Card 3: Outstanding (with Red Accent Bar) */}
+            {/* Card 3: Outstanding */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200/80 border-l-4 border-l-rose-500 shadow-xs space-y-2">
               <span className="text-xs font-bold text-rose-500 uppercase tracking-wider block">
                 Outstanding
               </span>
               <div className="text-3xl font-black text-rose-600 tracking-tight">
-                ₹8,450
+                ₹{(createdInvoice ? (createdInvoice.status === 'Paid' ? 0 : createdInvoice.totalAmount) : grandTotal).toLocaleString('en-IN')}
               </div>
             </div>
 
@@ -993,7 +1203,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                 Due Date
               </span>
               <div className="text-3xl font-black text-slate-900 tracking-tight">
-                Nov 15, 2024
+                {createdInvoice?.dueDate || dueDate}
               </div>
             </div>
           </div>
@@ -1006,33 +1216,33 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
               <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
                 <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
                   <div className="w-20 h-20 rounded-full bg-blue-950 text-white flex items-center justify-center font-bold text-2xl shrink-0 ring-4 ring-slate-100">
-                    SM
+                    {selectedPatient.initials}
                   </div>
 
                   <div className="flex-1 text-center sm:text-left space-y-2">
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
                       <h3 className="text-2xl font-black text-slate-900 tracking-tight">
-                        Sanya Malhotra
+                        {selectedPatient.name}
                       </h3>
                       <span className="bg-blue-600 text-white text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-md tracking-wider">
-                        ACL Recovery
+                        {selectedPatient.program}
                       </span>
                     </div>
 
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs font-semibold text-slate-500">
-                      <span>ID #OM-90210</span>
+                      <span>ID #{selectedPatient.patientCode}</span>
                       <span>•</span>
-                      <span>Assigned: <strong className="text-slate-800">Dr. Ananya Iyer</strong></span>
+                      <span>Assigned: <strong className="text-slate-800">{selectedPatient.doctor}</strong></span>
                     </div>
 
                     <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-medium text-slate-600">
                       <div className="flex items-center justify-center sm:justify-start space-x-2">
                         <span className="text-slate-400 font-bold uppercase text-[10px]">PHONE</span>
-                        <span className="font-extrabold text-slate-900">+91 98765 43210</span>
+                        <span className="font-extrabold text-slate-900">{selectedPatient.phone}</span>
                       </div>
                       <div className="flex items-center justify-center sm:justify-start space-x-2">
                         <span className="text-slate-400 font-bold uppercase text-[10px]">EMAIL</span>
-                        <span className="font-extrabold text-slate-900">sanya.m@example.com</span>
+                        <span className="font-extrabold text-slate-900">{selectedPatient.email}</span>
                       </div>
                     </div>
                   </div>
@@ -1052,7 +1262,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                       Invoice Date
                     </span>
                     <span className="text-sm font-extrabold text-slate-900 block">
-                      Oct 24, 2024
+                      {createdInvoice?.issueDate || new Date().toISOString().split('T')[0]}
                     </span>
                   </div>
 
@@ -1063,7 +1273,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                     <div className="flex items-center space-x-2">
                       <Building2 className="w-4 h-4 text-blue-600" />
                       <span className="text-sm font-extrabold text-slate-900">
-                        UPI (PhonePe)
+                        {createdInvoice?.paymentMethod || paymentMethod}
                       </span>
                     </div>
                   </div>
@@ -1073,7 +1283,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                       Status
                     </span>
                     <span className="text-sm font-extrabold text-amber-600 block">
-                      Partially Paid
+                      {createdInvoice?.status || 'Pending'}
                     </span>
                   </div>
                 </div>
@@ -1093,64 +1303,29 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                         <th className="py-3.5 px-6">Service</th>
                         <th className="py-3.5 px-4 text-center">Qty</th>
                         <th className="py-3.5 px-4 text-right">Unit Price</th>
-                        <th className="py-3.5 px-4 text-right">Discount</th>
-                        <th className="py-3.5 px-4 text-right pr-6">Subtotal</th>
+                        <th className="py-3.5 px-4 text-right">Subtotal</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
-                      {/* Row 1 */}
-                      <tr className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 px-6">
-                          <p className="font-extrabold text-slate-900 text-sm">
-                            Initial Assessment
-                          </p>
-                          <p className="text-xs text-slate-500 font-normal mt-0.5">
-                            Full diagnostic evaluation of ACL strain
-                          </p>
-                        </td>
-                        <td className="py-4 px-4 text-center font-bold">1</td>
-                        <td className="py-4 px-4 text-right font-bold">₹2,500</td>
-                        <td className="py-4 px-4 text-right font-bold text-slate-600">0%</td>
-                        <td className="py-4 px-4 text-right pr-6 font-black text-slate-900">
-                          ₹2,500
-                        </td>
-                      </tr>
-
-                      {/* Row 2 */}
-                      <tr className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 px-6">
-                          <p className="font-extrabold text-slate-900 text-sm">
-                            Manual Therapy (3x Sessions)
-                          </p>
-                          <p className="text-xs text-slate-500 font-normal mt-0.5">
-                            Deep tissue mobilization & alignment
-                          </p>
-                        </td>
-                        <td className="py-4 px-4 text-center font-bold">3</td>
-                        <td className="py-4 px-4 text-right font-bold">₹3,000</td>
-                        <td className="py-4 px-4 text-right font-bold text-slate-600">10%</td>
-                        <td className="py-4 px-4 text-right pr-6 font-black text-slate-900">
-                          ₹8,100
-                        </td>
-                      </tr>
-
-                      {/* Row 3 */}
-                      <tr className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 px-6">
-                          <p className="font-extrabold text-slate-900 text-sm">
-                            Custom Exercise Plan
-                          </p>
-                          <p className="text-xs text-slate-500 font-normal mt-0.5">
-                            Home-based recovery module via app
-                          </p>
-                        </td>
-                        <td className="py-4 px-4 text-center font-bold">1</td>
-                        <td className="py-4 px-4 text-right font-bold">₹1,500</td>
-                        <td className="py-4 px-4 text-right font-bold text-slate-600">0%</td>
-                        <td className="py-4 px-4 text-right pr-6 font-black text-slate-900">
-                          ₹1,500
-                        </td>
-                      </tr>
+                      {selectedServices.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-4 px-6">
+                            <p className="font-extrabold text-slate-900 text-sm">
+                              {item.title}
+                            </p>
+                            {item.description && (
+                              <p className="text-xs text-slate-500 font-normal mt-0.5">
+                                {item.description}
+                              </p>
+                            )}
+                          </td>
+                          <td className="py-4 px-4 text-center font-bold">{item.quantity}</td>
+                          <td className="py-4 px-4 text-right font-bold">₹{item.unitPrice.toLocaleString('en-IN')}</td>
+                          <td className="py-4 px-4 text-right pr-6 font-black text-slate-900">
+                            ₹{(item.unitPrice * item.quantity).toLocaleString('en-IN')}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -1203,17 +1378,23 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                 <div className="space-y-3 text-xs font-semibold">
                   <div className="flex justify-between text-slate-600">
                     <span>Subtotal</span>
-                    <span className="font-bold text-slate-900">₹12,100.00</span>
+                    <span className="font-bold text-slate-900">
+                      ₹{(createdInvoice ? createdInvoice.amount : subtotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
 
                   <div className="flex justify-between text-sky-600">
-                    <span>Discount (10%)</span>
-                    <span className="font-bold">-₹900.00</span>
+                    <span>Discount</span>
+                    <span className="font-bold">
+                      -₹{(createdInvoice ? (createdInvoice.discountAmount || 0) : discountAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
 
                   <div className="flex justify-between text-slate-600">
                     <span>GST (18%)</span>
-                    <span className="font-bold">₹1,250.00</span>
+                    <span className="font-bold">
+                      ₹{(createdInvoice ? (createdInvoice.taxAmount || 0) : gstAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
 
                   <div className="pt-3 border-t border-slate-200 flex justify-between items-baseline">
@@ -1221,18 +1402,22 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                       Grand Total
                     </span>
                     <span className="text-2xl font-black text-blue-900">
-                      ₹12,450
+                      ₹{(createdInvoice ? createdInvoice.totalAmount : grandTotal).toLocaleString('en-IN')}
                     </span>
                   </div>
 
                   <div className="flex justify-between text-emerald-600 pt-1">
                     <span>Amount Paid</span>
-                    <span className="font-extrabold">₹4,000.00</span>
+                    <span className="font-extrabold">
+                      ₹{(createdInvoice?.status === 'Paid' ? createdInvoice.totalAmount : 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
 
                   <div className="flex justify-between text-rose-600 pt-2 border-t border-slate-100 text-sm font-black">
                     <span>Remaining Due</span>
-                    <span>₹8,450</span>
+                    <span>
+                      ₹{(createdInvoice ? (createdInvoice.status === 'Paid' ? 0 : createdInvoice.totalAmount) : grandTotal).toLocaleString('en-IN')}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1350,18 +1535,30 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
       {/* FIXED BOTTOM ACTION FOOTER BAR FOR WIZARD STEPS 1-3 */}
       {currentStep < 4 && (
         <div className="fixed bottom-6 left-6 right-6 lg:left-72 max-w-[1400px] bg-white/95 rounded-full p-3.5 border border-slate-200/90 shadow-xl flex items-center justify-between gap-4 z-40 backdrop-blur-md">
-          <button
-            onClick={() => {
-              if (currentStep > 1) {
-                setCurrentStep((prev) => prev - 1);
-              } else if (onBack) {
-                onBack();
-              }
-            }}
-            className="px-6 py-2.5 rounded-full border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer flex items-center space-x-1.5"
-          >
-            <span>&lt; Back</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => {
+                if (currentStep > 1) {
+                  setCurrentStep((prev) => prev - 1);
+                } else if (onBack) {
+                  onBack();
+                }
+              }}
+              className="px-5 py-2.5 rounded-full border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs sm:text-sm font-extrabold transition-colors cursor-pointer flex items-center space-x-1.5"
+            >
+              <span>&lt; Back</span>
+            </button>
+
+            <button
+              onClick={() => {
+                resetInvoiceForm();
+                if (onBack) onBack();
+              }}
+              className="px-4 py-2.5 rounded-full border border-rose-200 bg-rose-50/80 hover:bg-rose-100 text-rose-700 text-xs sm:text-sm font-bold transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
 
           <div className="flex items-center space-x-6">
             <div className="text-right hidden sm:block">
@@ -1375,7 +1572,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
 
             {currentStep === 1 && (
               <button
-                onClick={() => setCurrentStep(2)}
+                onClick={handleNextFromStep1}
                 className="px-7 py-3 rounded-full bg-[#003882] hover:bg-[#002B66] text-white text-xs sm:text-sm font-extrabold transition-all shadow-md cursor-pointer"
               >
                 Continue to Services
@@ -1384,7 +1581,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
 
             {currentStep === 2 && (
               <button
-                onClick={() => setCurrentStep(3)}
+                onClick={handleNextFromStep2}
                 className="px-7 py-3 rounded-full bg-[#003882] hover:bg-[#002B66] text-white text-xs sm:text-sm font-extrabold transition-all shadow-md cursor-pointer"
               >
                 Continue to Review
@@ -1393,14 +1590,21 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
 
             {currentStep === 3 && (
               <button
-                onClick={() => {
-                  setCurrentStep(4);
-                  showToast('Invoice #INV-2026-00125 generated successfully!');
-                }}
+                onClick={handleGenerateInvoice}
+                disabled={isSaving}
                 className="px-7 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-extrabold transition-all shadow-md cursor-pointer inline-flex items-center space-x-2"
               >
-                <Sparkles className="w-4 h-4" />
-                <span>Generate Invoice</span>
+                {isSaving ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-1" />
+                    <span>Saving Invoice...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Generate & Save Invoice</span>
+                  </>
+                )}
               </button>
             )}
           </div>
