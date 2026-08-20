@@ -22,6 +22,9 @@ import {
 
 import { updateScheduleStatusRecord } from '@/services/scheduleService';
 
+import { ProcessRefundModal, type ProcessRefundModalTarget } from '@/payments/components/ProcessRefundModal';
+import { RotateCcw } from 'lucide-react';
+
 interface AppointmentDetailsPageProps {
   appointment?: any;
   onBack?: () => void;
@@ -45,6 +48,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Form states for reschedule
@@ -91,7 +95,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
   const handleCancelConfirm = async () => {
     setSessionStatus('Cancelled');
     setShowCancelModal(false);
-    triggerToast('Appointment has been cancelled.');
+    triggerToast('Appointment cancelled. You can now process a refund for this patient.');
     if (appointment?.id) {
       await updateScheduleStatusRecord(
         appointment.id,
@@ -101,6 +105,24 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
         appointment.timeSlot || appointment.time
       );
     }
+  };
+
+  const refundTarget: ProcessRefundModalTarget = {
+    paymentId: appointment?.paymentId || appointment?.id,
+    appointmentId: appointment?.id,
+    bookingId: appointment?.id,
+    patientId: appointment?.patientId || appointment?.userId,
+    patientName: appointment?.patientName || 'Sanya Malhotra',
+    therapistName: appointment?.therapistName || 'Dr. Arjun Mehta',
+    appointmentDate: appointment?.date || appointment?.fullDate || 'Oct 23, 2024',
+    appointmentTime: appointment?.time || appointment?.timeSlot || '01:45 PM',
+    sessionType: appointment?.type || 'Clinic Visit',
+    originalAmount: Number(appointment?.amount || appointment?.totalPayable || 1500),
+    refundedAmount: Number(appointment?.refundedAmount || 0),
+    remainingRefundableAmount: Number(appointment?.remainingRefundableAmount ?? Number(appointment?.amount || appointment?.totalPayable || 1500)),
+    paymentMethod: appointment?.paymentMethod || 'UPI',
+    transactionId: appointment?.transactionId || `TXN-${appointment?.id?.slice(0, 6) || '1024'}`,
+    cancellationReason: 'Patient requested cancellation',
   };
 
   const handleDownloadPdf = () => {
@@ -177,6 +199,15 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
 
           {/* Action Header Buttons */}
           <div className="flex items-center gap-3 flex-wrap">
+            {sessionStatus === 'Cancelled' && (
+              <button
+                onClick={() => setShowRefundModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Process Refund
+              </button>
+            )}
             <button
               onClick={() => onNavigateToReschedule ? onNavigateToReschedule() : setShowRescheduleModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer"
@@ -775,6 +806,14 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Process Refund Modal */}
+      <ProcessRefundModal
+        isOpen={showRefundModal}
+        onClose={() => setShowRefundModal(false)}
+        target={refundTarget}
+        onSuccess={(msg) => triggerToast(msg)}
+      />
     </div>
   );
 };

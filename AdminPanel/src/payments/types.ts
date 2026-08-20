@@ -36,6 +36,9 @@ export interface PaymentRecord {
   invoiceNumber?: string;
   invoiceNo?: string; // mobile compat
   refundStatus?: RefundStatus | string;
+  refundedAmount?: number;
+  remainingRefundableAmount?: number;
+  paymentProvider?: string;
   bookingId?: string; // mobile compat
   title?: string; // mobile compat (service description)
   doctor?: string; // mobile compat
@@ -131,17 +134,24 @@ export interface RefundDocument {
   id: string;
   refundId: string;
   paymentId: string;
+  appointmentId?: string;
+  bookingId?: string;
   transactionId?: string;
   invoiceId?: string;
   patientId: string;
   patientName: string;
   therapistId?: string;
   therapistName?: string;
-  amount: number;
+  amount: number; // refund amount
   originalAmount: number;
+  remainingRefundableAmount?: number;
   currency: string;
   reason: string;
+  refundReason?: string;
   status: RefundStatus;
+  refundStatus?: string;
+  paymentProvider?: string;
+  providerRefundId?: string;
   requestDate: string;
   processedDate?: string;
   processedBy?: string;
@@ -297,7 +307,10 @@ export interface PayoutRecordItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface PaymentsDashboardMetrics {
-  revenue: number;
+  grossRevenue: number;
+  refundedAmount: number;
+  netRevenue: number;
+  revenue: number; // net revenue for backward compat
   revenueChange: number; // percentage vs last period
   outstanding: number;
   outstandingPatientCount: number;

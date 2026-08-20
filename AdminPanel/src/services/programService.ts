@@ -178,7 +178,7 @@ export const subscribeToPrograms = (
   } catch (error: any) {
     console.error('Failed to setup Firestore snapshot listener for programs:', error);
     if (onError) onError(error);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -551,7 +551,7 @@ export const subscribeToAssignedPatients = (
   } catch (error: any) {
     console.error('Failed to setup assignments snapshot listener:', error);
     if (onError) onError(error);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -586,7 +586,7 @@ export const subscribeToPatientAssignments = (
   } catch (error: any) {
     console.error('Failed to setup patient assignments snapshot listener:', error);
     if (onError) onError(error);
-    return () => {};
+    return () => { };
   }
 };
 

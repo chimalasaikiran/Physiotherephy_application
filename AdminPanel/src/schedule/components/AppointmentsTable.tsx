@@ -13,7 +13,7 @@ export interface AppointmentItem {
   type: 'Clinic Visit' | 'Online' | 'Home Visit';
   date: string;
   time: string;
-  status: 'Confirmed' | 'Scheduled' | 'Completed' | 'Cancelled';
+  status: 'Confirmed' | 'Scheduled' | 'Completed' | 'Cancelled' | 'Expired';
   paymentStatus?: 'Paid' | 'Pending';
 }
 
@@ -61,6 +61,8 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
         return 'bg-emerald-50 text-emerald-700 border-emerald-100';
       case 'Cancelled':
         return 'bg-rose-50 text-rose-600 border-rose-100';
+      case 'Expired':
+        return 'bg-amber-100/70 text-amber-900 border-amber-300';
       default:
         return 'bg-slate-50 text-slate-600 border-slate-100';
     }
@@ -184,6 +186,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
                           <option value="Scheduled">Scheduled</option>
                           <option value="Completed">Completed</option>
                           <option value="Cancelled">Cancelled</option>
+                          <option value="Expired">Expired</option>
                         </select>
                       </td>
 

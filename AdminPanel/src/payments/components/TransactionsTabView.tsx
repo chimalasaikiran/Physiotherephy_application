@@ -4,10 +4,12 @@ import type { TransactionRecord } from '../types';
 
 interface TransactionsTabViewProps {
   transactions?: TransactionRecord[];
+  onRefundClick?: (txn: TransactionRecord) => void;
 }
 
 export const TransactionsTabView: React.FC<TransactionsTabViewProps> = ({
   transactions = [],
+  onRefundClick,
 }) => {
   const [typeFilter, setTypeFilter] = useState('All');
 
@@ -23,7 +25,7 @@ export const TransactionsTabView: React.FC<TransactionsTabViewProps> = ({
             Transaction History
           </h3>
           <p className="text-xs text-slate-400 font-medium">
-            Real-time log of payments, payouts, and refund processed.
+            Real-time log of payments, payouts, and refunds processed.
           </p>
         </div>
 
@@ -56,12 +58,13 @@ export const TransactionsTabView: React.FC<TransactionsTabViewProps> = ({
               <th className="py-3 px-4">Timestamp</th>
               <th className="py-3 px-4">Amount</th>
               <th className="py-3 px-4">Status</th>
+              <th className="py-3 px-4 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50 text-xs font-medium text-slate-700">
             {filteredTransactions.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400 font-medium">
+                <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                   No transactions found.
                 </td>
               </tr>
@@ -121,6 +124,19 @@ export const TransactionsTabView: React.FC<TransactionsTabViewProps> = ({
                     >
                       {txn.status}
                     </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    {txn.type === 'Payment' && txn.status === 'Completed' && onRefundClick ? (
+                      <button
+                        onClick={() => onRefundClick(txn)}
+                        className="inline-flex items-center px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 font-bold text-xs rounded-lg transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" />
+                        Refund
+                      </button>
+                    ) : (
+                      <span className="text-slate-400 text-xs italic">—</span>
+                    )}
                   </td>
                 </tr>
               ))

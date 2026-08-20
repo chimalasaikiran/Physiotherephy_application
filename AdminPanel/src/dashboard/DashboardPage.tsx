@@ -38,7 +38,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
   const [isRealtimeGuideOpen, setIsRealtimeGuideOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-slate-50/60 font-sans text-slate-900 flex antialiased">
+    <div className="min-h-screen bg-[#F2F4FD] font-sans text-slate-900 flex antialiased">
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
@@ -49,7 +49,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 bg-[#F2F4FD]">
         {/* Top Header */}
         <TopHeader
           onMenuToggle={() => setIsSidebarOpen(true)}
@@ -59,7 +59,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
         />
 
         {/* Page Content Body */}
-        <main className="p-4 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto">
+        <main className="p-4 sm:p-6 lg:p-8 w-full max-w-[1720px] mx-auto">
           {activeTab === 'schedule' ? (
             <SchedulePage
               onOpenNewAppointment={() => setActiveTab('create-appointment')}
@@ -189,12 +189,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 activeTab.includes('therapist')
                   ? 'Therapists'
                   : activeTab.includes('patient')
-                  ? 'Patients'
-                  : activeTab.includes('program')
-                  ? 'Recovery Programs'
-                  : activeTab.includes('revenue')
-                  ? 'Revenue'
-                  : 'Overview'
+                    ? 'Patients'
+                    : activeTab.includes('program')
+                      ? 'Recovery Programs'
+                      : activeTab.includes('revenue')
+                        ? 'Revenue'
+                        : 'Overview'
               }
               onNavigateToTherapists={() => setActiveTab('therapists')}
               onNavigateToPatients={() => setActiveTab('patients')}
@@ -227,10 +227,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
                 activeTab.includes('security')
                   ? 'Security'
                   : activeTab.includes('notification')
-                  ? 'Notifications'
-                  : activeTab.includes('integration')
-                  ? 'Integrations'
-                  : 'Security'
+                    ? 'Notifications'
+                    : activeTab.includes('integration')
+                      ? 'Integrations'
+                      : 'Security'
               }
               onNavigateToTab={(tab) => setActiveTab(tab)}
             />
@@ -239,32 +239,41 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onLogout }) => {
 
             <div className="space-y-6 sm:space-y-8">
               {/* Main Title Section */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              <div className="self-stretch flex flex-col justify-start items-start gap-1">
+                <div className="self-stretch flex flex-col justify-start items-start">
+                  <h1 className="self-stretch justify-center text-slate-900 text-3xl font-semibold font-['Inter'] leading-9">
                     Dashboard
-                  </h2>
-                  <p className="text-sm font-medium text-slate-500 mt-0.5">
+                  </h1>
+                </div>
+                <div className="self-stretch flex flex-col justify-start items-start">
+                  <p className="self-stretch justify-center text-gray-700 text-base font-normal font-['Inter'] leading-6">
                     Monitor clinic operations and patient recovery in real-time.
                   </p>
                 </div>
               </div>
 
-              {/* Metric Stat Cards */}
-              <MetricCards
-                summaryMetrics={dashboardData.summaryMetrics}
-                isLoading={dashboardData.isLoading}
-                onNavigateToTab={(tab) => setActiveTab(tab)}
-              />
-
               {/* Core Dashboard Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
-                {/* Left & Middle Column (2 Spans on Desktop) */}
-                <div className="lg:col-span-2 space-y-6 sm:space-y-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 items-start">
+                {/* Left & Middle Column (2 Spans on lg, 3 Spans on xl) */}
+                <div className="lg:col-span-2 xl:col-span-3 space-y-6 sm:space-y-8">
+                  {/* Metric Stat Cards */}
+                  <MetricCards
+                    summaryMetrics={dashboardData.summaryMetrics}
+                    isLoading={dashboardData.isLoading}
+                    onNavigateToTab={(tab) => setActiveTab(tab)}
+                  />
+
                   {/* Two Charts Side by Side */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <AppointmentsTrendChart getAppointmentsTrend={dashboardData.getAppointmentsTrend} />
-                    <PatientGrowthChart getRevenueTrend={dashboardData.getRevenueTrend} />
+                    <AppointmentsTrendChart
+                      getAppointmentsTrend={dashboardData.getAppointmentsTrend}
+                      isLoading={dashboardData.isLoading}
+                    />
+                    <PatientGrowthChart
+                      patients={dashboardData.patients}
+                      appointments={dashboardData.rawAppointmentDocs}
+                      getRevenueTrend={dashboardData.getRevenueTrend}
+                    />
                   </div>
 
                   {/* Recent Appointments Table */}

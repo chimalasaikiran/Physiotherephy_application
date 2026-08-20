@@ -4,48 +4,48 @@ import type { AppointmentTrendPoint } from '../useDashboardData';
 
 interface AppointmentsTrendChartProps {
   getAppointmentsTrend?: (timeframe: string) => AppointmentTrendPoint[];
+  isLoading?: boolean;
 }
 
 export const AppointmentsTrendChart: React.FC<AppointmentsTrendChartProps> = ({
   getAppointmentsTrend,
+  isLoading,
 }) => {
   const [timeframe, setTimeframe] = useState('Last 30 Days');
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
 
   const rawData = getAppointmentsTrend ? getAppointmentsTrend(timeframe) : [];
 
-  const data = rawData.length > 0
-    ? rawData
-    : [
-        { label: 'WK 1', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
-        { label: 'WK 2', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
-        { label: 'WK 3', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
-        { label: 'WK 4', count: 0, scheduled: 0, completed: 0, cancelled: 0 },
-      ];
+  const defaultData: AppointmentTrendPoint[] = timeframe === 'Last 7 Days'
+    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => ({ label: day, count: 0, scheduled: 0, completed: 0, cancelled: 0 }))
+    : ['WK 1', 'WK 2', 'WK 3', 'WK 4'].map((wk) => ({ label: wk, count: 0, scheduled: 0, completed: 0, cancelled: 0 }));
 
-  // SVG dimensions
-  const viewBoxWidth = 400;
-  const viewBoxHeight = 180;
-  const paddingLeft = 35;
-  const paddingBottom = 25;
-  const paddingTop = 20;
-  const paddingRight = 20;
+  const data: AppointmentTrendPoint[] = rawData.length > 0 ? rawData : defaultData;
+
+  // SVG chart parameters matching exact design spec
+  const viewBoxWidth = 360;
+  const viewBoxHeight = 175;
+  const paddingLeft = 45;
+  const paddingRight = 45;
+  const paddingTop = 25;
+  const paddingBottom = 35;
 
   const chartWidth = viewBoxWidth - paddingLeft - paddingRight;
   const chartHeight = viewBoxHeight - paddingTop - paddingBottom;
 
-  const maxCount = Math.max(5, ...data.map((d) => d.count));
-  const yMax = Math.ceil(maxCount * 1.25);
+  const maxVal = Math.max(...data.map((d) => d.count), 0);
+  const yMax = maxVal > 0 ? Math.ceil(maxVal / 10) * 10 : 40;
+  const yAxisValues = [yMax, Math.round(yMax * 0.75), Math.round(yMax * 0.5), Math.round(yMax * 0.25), 0];
 
-  // Calculate points for SVG path
+  // Calculate coordinates for points
   const points = data.map((d, index) => {
     const denominator = data.length > 1 ? data.length - 1 : 1;
     const x = paddingLeft + (index / denominator) * chartWidth;
-    const y = paddingTop + chartHeight - (d.count / yMax) * chartHeight;
+    const y = paddingTop + chartHeight - (Math.min(d.count, yMax) / yMax) * chartHeight;
     return { x, y, ...d };
   });
 
-  // Construct smooth bezier curve path string
+  // Construct smooth cubic bezier path
   const dPath = points.reduce((acc, point, index, array) => {
     if (index === 0) return `M ${point.x},${point.y}`;
     const prev = array[index - 1];
@@ -56,136 +56,176 @@ export const AppointmentsTrendChart: React.FC<AppointmentsTrendChartProps> = ({
     return `${acc} C ${cp1x},${cp1y} ${cp2x},${cp2y} ${point.x},${point.y}`;
   }, '');
 
-  // Area path
-  const areaPath = points.length > 0
-    ? `${dPath} L ${points[points.length - 1].x},${paddingTop + chartHeight} L ${points[0].x},${paddingTop + chartHeight} Z`
-    : '';
+  // Construct gradient area fill path from WK 1 x-coord to WK 4 x-coord
+  const areaPath =
+    points.length > 0
+      ? `${dPath} L ${points[points.length - 1].x},${paddingTop + chartHeight} L ${points[0].x},${paddingTop + chartHeight} Z`
+      : '';
 
-  const yStep = Math.ceil(yMax / 4);
-  const yAxisValues = [0, yStep, yStep * 2, yStep * 3, yStep * 4];
+  const activePoint = hoveredPoint !== null ? points[hoveredPoint] : null;
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex flex-col justify-between h-full">
+    <div className="flex-1 h-80 p-8 bg-white/70 rounded-[32px] shadow-[0px_8px_32px_0px_rgba(0,61,155,0.05)] outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] inline-flex flex-col justify-start items-start w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h4 className="text-xs font-bold tracking-wider text-slate-400 uppercase">
-            Appointments Trend
-          </h4>
-        </div>
-        <div className="relative">
-          <select
-            value={timeframe}
-            onChange={(e) => setTimeframe(e.target.value)}
-            className="appearance-none bg-slate-50 border border-slate-100 text-slate-700 text-xs font-semibold py-1.5 pl-3 pr-7 rounded-lg focus:outline-none cursor-pointer"
-          >
-            <option>Last 30 Days</option>
-            <option>Last 7 Days</option>
-            <option>This Quarter</option>
-          </select>
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <div className="self-stretch pb-4 flex flex-col justify-start items-start">
+        <div className="self-stretch inline-flex justify-between items-center">
+          <div className="pr-2 inline-flex flex-col justify-start items-start">
+            <div className="justify-center text-gray-700 text-sm font-medium font-['Inter'] uppercase leading-5 tracking-wider">
+              APPOINTMENTS
+              <br />
+              TREND
+            </div>
+          </div>
+
+          {/* Timeframe Dropdown Select */}
+          <div className="pl-3 pr-8 py-2 relative inline-flex flex-col justify-center items-start">
+            <select
+              value={timeframe}
+              onChange={(e) => setTimeframe(e.target.value)}
+              className="appearance-none bg-transparent border-none text-blue-900 text-sm font-bold font-['Inter'] leading-5 pr-6 focus:outline-none cursor-pointer hover:opacity-80"
+            >
+              <option value="Last 30 Days">Last 30 Days</option>
+              <option value="Last 7 Days">Last 7 Days</option>
+              <option value="This Quarter">This Quarter</option>
+            </select>
+            <ChevronDown className="w-4 h-4 text-blue-900 absolute right-2 pointer-events-none stroke-[2.5]" />
+          </div>
         </div>
       </div>
 
-      {/* SVG Line Chart */}
-      <div className="relative w-full h-48 sm:h-52">
-        <svg
-          viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-          className="w-full h-full overflow-visible"
-        >
-          <defs>
-            <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2563EB" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#2563EB" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
+      {/* Chart Canvas */}
+      <div className="self-stretch flex-1 relative flex flex-col justify-center items-start w-full">
+        <div className="self-stretch flex-1 relative w-full h-full">
+          <svg
+            viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
+            className="w-full h-full overflow-visible"
+          >
+            <defs>
+              <linearGradient id="appointmentsTrendBlueGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#003D9B" stopOpacity="0.18" />
+                <stop offset="100%" stopColor="#003D9B" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
 
-          {/* Y Axis Grid Lines */}
-          {yAxisValues.map((val) => {
-            const y = paddingTop + chartHeight - (val / (yStep * 4 || 1)) * chartHeight;
-            return (
-              <g key={val}>
-                <line
-                  x1={paddingLeft}
-                  y1={y}
-                  x2={viewBoxWidth - paddingRight}
-                  y2={y}
-                  stroke="#F1F5F9"
-                  strokeWidth="1"
-                  strokeDasharray={val === 0 ? undefined : "3 3"}
-                />
-                <text
-                  x={paddingLeft - 8}
-                  y={y + 4}
-                  textAnchor="end"
-                  className="text-[10px] fill-slate-400 font-medium"
-                >
-                  {val}
-                </text>
-              </g>
-            );
-          })}
+            {/* Y Axis Gridlines and Numerical Labels */}
+            {yAxisValues.map((val) => {
+              const y = paddingTop + chartHeight - (val / yMax) * chartHeight;
+              return (
+                <g key={val}>
+                  {/* Gridline (draw for 30, 20, 10, 0) */}
+                  {val <= 30 && (
+                    <line
+                      x1={paddingLeft}
+                      y1={y}
+                      x2={viewBoxWidth - paddingRight}
+                      y2={y}
+                      stroke="#E2E8F0"
+                      strokeWidth="1"
+                    />
+                  )}
+                  {/* Y-Axis Label */}
+                  <text
+                    x={paddingLeft - 12}
+                    y={y + 4}
+                    textAnchor="end"
+                    className="text-gray-400 text-xs font-normal font-['Liberation_Mono'] fill-gray-400"
+                  >
+                    {val}
+                  </text>
+                </g>
+              );
+            })}
 
-          {/* Area Gradient Fill */}
-          {areaPath && <path d={areaPath} fill="url(#blueGradient)" />}
+            {/* Gradient Area Fill */}
+            {areaPath && <path d={areaPath} fill="url(#appointmentsTrendBlueGradient)" />}
 
-          {/* Trend Line */}
-          {dPath && (
-            <path
-              d={dPath}
-              fill="none"
-              stroke="#1D4ED8"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-          )}
-
-          {/* Data Points */}
-          {points.map((pt, idx) => (
-            <g key={idx}>
-              <circle
-                cx={pt.x}
-                cy={pt.y}
-                r={hoveredPoint === idx ? "6" : "4"}
-                fill="#1D4ED8"
-                stroke="#FFFFFF"
-                strokeWidth="2"
-                className="cursor-pointer transition-all duration-200"
-                onMouseEnter={() => setHoveredPoint(idx)}
-                onMouseLeave={() => setHoveredPoint(null)}
+            {/* Trend Line */}
+            {dPath && (
+              <path
+                d={dPath}
+                fill="none"
+                stroke="#003D9B"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               />
-              {/* X Axis Labels */}
+            )}
+
+            {/* Data Points (Dots) */}
+            {points.map((pt, idx) => {
+              const isHovered = hoveredPoint === idx;
+              return (
+                <g key={idx}>
+                  {/* Invisible hit box for hover */}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r="12"
+                    fill="transparent"
+                    className="cursor-pointer"
+                    onMouseEnter={() => setHoveredPoint(idx)}
+                    onMouseLeave={() => setHoveredPoint(null)}
+                  />
+                  {/* Visible Dark Blue Dot */}
+                  <circle
+                    cx={pt.x}
+                    cy={pt.y}
+                    r={isHovered ? '5.5' : '3.8'}
+                    fill="#003D9B"
+                    className="cursor-pointer transition-all duration-150"
+                    onMouseEnter={() => setHoveredPoint(idx)}
+                    onMouseLeave={() => setHoveredPoint(null)}
+                  />
+                </g>
+              );
+            })}
+
+            {/* X Axis Labels */}
+            {points.map((pt, idx) => (
               <text
+                key={idx}
                 x={pt.x}
-                y={viewBoxHeight - 4}
+                y={viewBoxHeight - 6}
                 textAnchor="middle"
-                className="text-[10px] fill-slate-400 font-semibold uppercase"
+                className="text-gray-500 text-[10px] font-normal font-['Liberation_Mono'] fill-gray-500"
               >
                 {pt.label}
               </text>
-            </g>
-          ))}
-        </svg>
+            ))}
 
-        {/* Hover Tooltip Overlay */}
-        {hoveredPoint !== null && points[hoveredPoint] && (
-          <div
-            className="absolute bg-slate-900 text-white text-xs px-2.5 py-1.5 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full transition-all duration-150 whitespace-nowrap z-20"
-            style={{
-              left: `${(points[hoveredPoint].x / viewBoxWidth) * 100}%`,
-              top: `${(points[hoveredPoint].y / viewBoxHeight) * 100 - 10}%`,
-            }}
-          >
-            <div className="font-bold border-b border-slate-700 pb-1 mb-1">{points[hoveredPoint].label}</div>
-            <div>Total: {points[hoveredPoint].count}</div>
-            <div className="text-[10px] text-emerald-300">Completed: {points[hoveredPoint].completed}</div>
-            <div className="text-[10px] text-blue-300">Scheduled: {points[hoveredPoint].scheduled}</div>
-            {points[hoveredPoint].cancelled > 0 && (
-              <div className="text-[10px] text-rose-300">Cancelled: {points[hoveredPoint].cancelled}</div>
+            {/* Hover Callout Badge */}
+            {activePoint && (
+              <g
+                transform={`translate(${activePoint.x}, ${Math.max(16, activePoint.y - 12)})`}
+                className="pointer-events-none transition-all duration-150"
+              >
+                <rect
+                  x="-30"
+                  y="-18"
+                  width="60"
+                  height="20"
+                  rx="5"
+                  fill="#0F172A"
+                />
+                <text
+                  x="0"
+                  y="-4"
+                  textAnchor="middle"
+                  fill="#FFFFFF"
+                  fontSize="9.5"
+                  fontWeight="700"
+                  fontFamily="Inter, sans-serif"
+                >
+                  {activePoint.count} Appts
+                </text>
+              </g>
             )}
-          </div>
-        )}
+          </svg>
+        </div>
       </div>
     </div>
   );
 };
+
+
+

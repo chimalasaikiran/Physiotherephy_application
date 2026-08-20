@@ -23,6 +23,8 @@ import { PayoutsTabView } from './components/PayoutsTabView';
 import { CreateInvoiceModal } from './components/CreateInvoiceModal';
 import { RecordPaymentModal } from './components/RecordPaymentModal';
 import { ExportFinancialsModal } from './components/ExportFinancialsModal';
+import { ProcessRefundModal, type ProcessRefundModalTarget } from './components/ProcessRefundModal';
+import { CheckCircle2 } from 'lucide-react';
 
 import { CreateInvoicePage } from './CreateInvoicePage';
 import { CreateTreatmentPackagePage } from './CreateTreatmentPackagePage';
@@ -93,6 +95,36 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [isExportFinancialsOpen, setIsExportFinancialsOpen] = useState(false);
+
+  // Refund Modal State
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [selectedRefundTarget, setSelectedRefundTarget] = useState<ProcessRefundModalTarget | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleTransactionRefundClick = (txn: TransactionRecord) => {
+    // Find matching payment if exists
+    const matchingPay = payments.find((p) => p.transactionId === txn.transactionId || p.id === txn.id || p.paymentId === txn.paymentId);
+    setSelectedRefundTarget({
+      paymentId: matchingPay?.id || txn.paymentId || txn.id,
+      appointmentId: matchingPay?.appointmentId || txn.appointmentId || '',
+      bookingId: matchingPay?.bookingId || txn.appointmentId || '',
+      patientId: matchingPay?.patientId || txn.patientId || '',
+      patientName: txn.patientName || matchingPay?.patientName || 'Patient',
+      therapistName: matchingPay?.therapistName || txn.therapistName || '',
+      appointmentDate: matchingPay?.paidAt ? new Date(matchingPay.paidAt).toLocaleDateString('en-IN') : 'Recent',
+      originalAmount: Number(matchingPay?.amount || txn.amount || 1000),
+      refundedAmount: Number(matchingPay?.refundedAmount || 0),
+      remainingRefundableAmount: Number(matchingPay?.remainingRefundableAmount ?? (Number(matchingPay?.amount || txn.amount || 1000) - Number(matchingPay?.refundedAmount || 0))),
+      paymentMethod: txn.method || matchingPay?.paymentMethod || 'UPI',
+      transactionId: txn.transactionId,
+    });
+    setIsRefundModalOpen(true);
+  };
 
   // 1. Seed demo data on initial mount if empty
   useEffect(() => {
@@ -422,14 +454,31 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
           invoices={invoices}
         />
       ) : activeSubTab === 'Transactions' ? (
-        <TransactionsTabView transactions={combinedTransactions} />
+        <TransactionsTabView
+          transactions={combinedTransactions}
+          onRefundClick={handleTransactionRefundClick}
+        />
       ) : activeSubTab === 'Packages' ? (
         <PackagesTabView
           onCreatePackage={handleCreatePackageClick}
           packages={packages}
         />
       ) : activeSubTab === 'Refunds' ? (
-        <RefundsTabView refunds={refunds} />
+        <RefundsTabView
+          refunds={refunds}
+          onProcessRefundClick={() => {
+            setSelectedRefundTarget({
+              patientName: 'Patient',
+              originalAmount: 1500,
+              refundedAmount: 0,
+              remainingRefundableAmount: 1500,
+              paymentMethod: 'UPI',
+              transactionId: 'TXN-DEMO-REFUND',
+              cancellationReason: 'Admin initiated cancellation refund',
+            });
+            setIsRefundModalOpen(true);
+          }}
+        />
       ) : (
         <PayoutsTabView payouts={payouts} />
       )}
@@ -449,6 +498,23 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
         isOpen={isExportFinancialsOpen}
         onClose={() => setIsExportFinancialsOpen(false)}
       />
+
+      <ProcessRefundModal
+        isOpen={isRefundModalOpen}
+        onClose={() => {
+          setIsRefundModalOpen(false);
+          setSelectedRefundTarget(null);
+        }}
+        target={selectedRefundTarget}
+        onSuccess={(msg) => showToast(msg)}
+      />
+
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-xs sm:text-sm font-semibold px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center space-x-2.5 animate-in slide-in-from-bottom duration-200">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 };

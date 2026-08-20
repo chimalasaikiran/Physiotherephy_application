@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Calendar, User, Tag, ChevronDown, List, LayoutGrid } from 'lucide-react';
+import { Search, Calendar, User, Tag, ChevronDown, List, LayoutGrid, CheckCircle2 } from 'lucide-react';
 
 interface ScheduleFiltersProps {
   searchTerm: string;
@@ -10,6 +10,8 @@ interface ScheduleFiltersProps {
   onTherapistChange: (value: string) => void;
   selectedType: string;
   onTypeChange: (value: string) => void;
+  selectedStatus?: string;
+  onStatusChangeFilter?: (value: string) => void;
   viewMode: 'list' | 'grid';
   onViewModeChange: (mode: 'list' | 'grid') => void;
 }
@@ -23,6 +25,8 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
   onTherapistChange,
   selectedType,
   onTypeChange,
+  selectedStatus = 'All',
+  onStatusChangeFilter,
   viewMode,
   onViewModeChange,
 }) => {
@@ -49,15 +53,35 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
             onChange={(e) => onTimeframeChange(e.target.value)}
             className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
           >
-            <option value="This Week">This Week</option>
+            <option value="All">All Dates</option>
             <option value="Today">Today</option>
-            <option value="Tomorrow">Tomorrow</option>
-            <option value="Next Week">Next Week</option>
+            <option value="Yesterday">Yesterday</option>
+            <option value="This Week">This Week</option>
             <option value="This Month">This Month</option>
+            <option value="This Year">This Year</option>
           </select>
           <Calendar className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
+
+        {/* Status Filter Dropdown */}
+        {onStatusChangeFilter && (
+          <div className="relative">
+            <select
+              value={selectedStatus}
+              onChange={(e) => onStatusChangeFilter(e.target.value)}
+              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Confirmed">Confirmed / Active</option>
+              <option value="Completed">Completed</option>
+              <option value="Expired">Expired</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <CheckCircle2 className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        )}
 
         {/* Therapist Filter Dropdown */}
         <div className="relative">
@@ -66,7 +90,7 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
             onChange={(e) => onTherapistChange(e.target.value)}
             className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
           >
-            <option value="All">Therapist</option>
+            <option value="All">All Therapists</option>
             <option value="Dr. PriyaSharma">Dr. PriyaSharma</option>
             <option value="Dr. Rohan Gupta">Dr. Rohan Gupta</option>
             <option value="Dr. Ananya Roy">Dr. Ananya Roy</option>
@@ -82,7 +106,7 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
             onChange={(e) => onTypeChange(e.target.value)}
             className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
           >
-            <option value="All">Type</option>
+            <option value="All">All Types</option>
             <option value="Clinic Visit">Clinic Visit</option>
             <option value="Online">Online</option>
             <option value="Home Visit">Home Visit</option>
@@ -122,3 +146,4 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
     </div>
   );
 };
+

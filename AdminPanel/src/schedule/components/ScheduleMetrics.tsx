@@ -15,27 +15,19 @@ interface ScheduleMetricsProps {
 }
 
 export const ScheduleMetrics: React.FC<ScheduleMetricsProps> = ({ appointments = [] }) => {
-  const activeCount = appointments.filter((a) => a.status !== 'Cancelled').length;
-  const pendingCount = appointments.filter((a) => a.status === 'Scheduled').length;
+  const activeCount = appointments.filter((a) => a.status === 'Confirmed' || a.status === 'Scheduled').length;
   const completedCount = appointments.filter((a) => a.status === 'Completed').length;
+  const expiredCount = appointments.filter((a) => a.status === 'Expired').length;
   const cancelledCount = appointments.filter((a) => a.status === 'Cancelled').length;
 
   const metrics: MetricItem[] = [
     {
-      id: 'today',
+      id: 'active',
       label: "ACTIVE APPOINTMENTS",
       badgeText: `${activeCount > 0 ? '+' : ''}${activeCount}`,
       badgeType: 'positive',
       value: activeCount,
-      description: 'Active scheduled sessions',
-    },
-    {
-      id: 'pending',
-      label: 'PENDING CONFIRMATIONS',
-      badgeText: String(pendingCount),
-      badgeType: pendingCount > 0 ? 'negative' : 'neutral',
-      value: pendingCount,
-      description: 'Requires immediate action',
+      description: 'Upcoming scheduled sessions',
     },
     {
       id: 'completed',
@@ -44,6 +36,14 @@ export const ScheduleMetrics: React.FC<ScheduleMetricsProps> = ({ appointments =
       badgeType: 'positive',
       value: completedCount,
       description: 'Successfully finished sessions',
+    },
+    {
+      id: 'expired',
+      label: 'EXPIRED SESSIONS',
+      badgeText: String(expiredCount),
+      badgeType: expiredCount > 0 ? 'negative' : 'neutral',
+      value: expiredCount,
+      description: 'Uncompleted past time slots',
     },
     {
       id: 'cancelled',

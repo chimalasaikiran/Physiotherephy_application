@@ -45,11 +45,11 @@ export const mapDocToTherapist = (id: string, data: Record<string, any>): Therap
     data.initials ||
     (data.name
       ? data.name
-          .split(' ')
-          .map((n: string) => n[0])
-          .join('')
-          .substring(0, 2)
-          .toUpperCase()
+        .split(' ')
+        .map((n: string) => n[0])
+        .join('')
+        .substring(0, 2)
+        .toUpperCase()
       : 'DR'),
   assignedPatientIds: Array.isArray(data.assignedPatientIds) ? data.assignedPatientIds : [],
   createdAt: data.createdAt || null,
@@ -102,7 +102,7 @@ export const subscribeToTherapists = (
   } catch (error: any) {
     console.error('Failed to setup therapists snapshot listener:', error);
     if (onError) onError(error);
-    return () => {};
+    return () => { };
   }
 };
 

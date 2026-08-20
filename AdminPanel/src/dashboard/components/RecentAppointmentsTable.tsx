@@ -12,7 +12,7 @@ export interface RecentAppointmentRow {
   type: string;
   typeBg: string;
   typeColor: string;
-  status: 'Confirmed' | 'In Progress' | 'Completed' | 'Scheduled' | 'Cancelled';
+  status: 'Confirmed' | 'In Progress' | 'Completed' | 'Scheduled' | 'Cancelled' | 'Expired';
   statusColor: string;
   dotColor: string;
   time: string;
@@ -52,15 +52,19 @@ export const RecentAppointmentsTable: React.FC<RecentAppointmentsTableProps> = (
     }
   };
 
+  const displayAppointments = recentAppointments;
+
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs">
+    <div className="self-stretch bg-white/70 rounded-[32px] shadow-[0px_8px_32px_0px_rgba(0,61,155,0.05)] outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] flex flex-col justify-start items-start overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-lg font-bold text-slate-900">Recent Appointments</h3>
+      <div className="self-stretch p-8 border-b border-blue-100/30 inline-flex justify-between items-center w-full">
+        <div className="inline-flex flex-col justify-start items-start">
+          <h3 className="justify-center text-slate-900 text-2xl font-semibold font-['Inter'] leading-8">Recent Appointments</h3>
+        </div>
         {onViewAll && (
           <button
             onClick={onViewAll}
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+            className="text-center justify-center text-blue-900 text-sm font-bold font-['Inter'] leading-5 cursor-pointer hover:underline"
           >
             View All
           </button>
@@ -68,93 +72,95 @@ export const RecentAppointmentsTable: React.FC<RecentAppointmentsTableProps> = (
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[600px]">
+      <div className="self-stretch flex flex-col justify-start items-start overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[700px]">
           <thead>
-            <tr className="text-[11px] font-bold text-slate-400 uppercase border-b border-slate-100 pb-3">
-              <th className="py-3 px-2">Patient Name</th>
-              <th className="py-3 px-2">Therapist</th>
-              <th className="py-3 px-2">Type</th>
-              <th className="py-3 px-2">Status</th>
-              <th className="py-3 px-2">Time</th>
-              <th className="py-3 px-2 text-right"></th>
+            <tr className="bg-indigo-50/30 border-b border-blue-100/20">
+              <th className="px-6 py-4 text-gray-700 text-base font-bold font-['Inter'] leading-6">Patient Name</th>
+              <th className="px-6 py-4 text-gray-700 text-base font-bold font-['Inter'] leading-6">Therapist</th>
+              <th className="px-6 py-4 text-gray-700 text-base font-bold font-['Inter'] leading-6">Type</th>
+              <th className="px-6 py-4 text-gray-700 text-base font-bold font-['Inter'] leading-6">Status</th>
+              <th className="px-6 py-4 text-gray-700 text-base font-bold font-['Inter'] leading-6">Time</th>
+              <th className="px-6 py-4 text-right"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50 text-sm font-medium">
+          <tbody className="divide-y divide-blue-100/20 text-base font-normal font-['Inter']">
             {isLoading ? (
               <tr>
                 <td colSpan={6} className="py-8 text-center text-xs text-slate-400 font-medium">
                   <div className="flex items-center justify-center space-x-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-900" />
                     <span>Loading real-time appointments...</span>
                   </div>
                 </td>
               </tr>
-            ) : recentAppointments.length === 0 ? (
+            ) : displayAppointments.length === 0 ? (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-xs text-slate-400 font-medium">
-                  No recent appointments found in Firestore
+                <td colSpan={6} className="py-10 text-center text-slate-500 text-sm font-normal">
+                  No appointments recorded in the system.
                 </td>
               </tr>
             ) : (
-              recentAppointments.map((apt) => (
+              displayAppointments.map((apt) => (
                 <tr
                   key={apt.id}
                   onClick={() => onSelectSession?.(apt.raw)}
-                  className="hover:bg-slate-50/60 transition-colors cursor-pointer"
+                  className="hover:bg-indigo-50/20 transition-colors cursor-pointer"
                 >
                   {/* Patient Name with Avatar */}
-                  <td className="py-3.5 px-2">
+                  <td className="px-6 py-4">
                     <div className="flex items-center space-x-3">
-                      <InitialsAvatar name={apt.patientName} className="w-9 h-9 text-xs font-bold" />
-                      <span className="font-semibold text-slate-900">{apt.patientName}</span>
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex justify-center items-center text-blue-900 text-xs font-bold font-['Inter'] leading-4 shrink-0">
+                        {apt.avatarInitials || apt.patientName.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <span className="justify-center text-slate-900 text-base font-normal font-['Inter'] leading-6">{apt.patientName}</span>
                     </div>
                   </td>
 
                   {/* Therapist */}
-                  <td className="py-3.5 px-2 text-slate-600 font-medium">
+                  <td className="px-6 py-4 text-gray-700 text-base font-normal font-['Inter'] leading-6">
                     {apt.therapistName}
                   </td>
 
                   {/* Type */}
-                  <td className="py-3.5 px-2">
+                  <td className="px-6 py-4">
                     <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-bold ${apt.typeBg} ${apt.typeColor}`}
+                      className={`inline-flex px-3 py-[2.50px] rounded-full text-xs font-bold font-['Inter'] leading-4 ${apt.typeBg || 'bg-purple-200'} ${apt.typeColor || 'text-indigo-800'}`}
                     >
                       {apt.type}
                     </span>
                   </td>
 
                   {/* Status */}
-                  <td className="py-3.5 px-2">
+                  <td className="px-6 py-4">
                     <div className="flex items-center space-x-2">
-                      <span className={`w-2 h-2 rounded-full ${apt.dotColor}`} />
-                      <span className={`text-xs font-semibold ${apt.statusColor}`}>
+                      <span className={`size-2 rounded-full ${apt.dotColor || 'bg-sky-800'}`} />
+                      <span className={`text-base font-normal font-['Inter'] leading-6 ${apt.statusColor || 'text-slate-900'}`}>
                         {apt.status}
                       </span>
                     </div>
                   </td>
 
                   {/* Time */}
-                  <td className="py-3.5 px-2 text-xs font-medium text-slate-500">
+                  <td className="px-6 py-4 text-gray-700 text-base font-normal font-['Inter'] leading-6">
                     {apt.time}
                   </td>
 
                   {/* Actions Dropdown */}
-                  <td className="py-3.5 px-2 text-right relative">
+                  <td className="px-6 py-4 text-right relative">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         setActiveMenuId(activeMenuId === apt.id ? null : apt.id);
                       }}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      className="p-1.5 text-gray-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                     >
                       <MoreVertical className="w-4 h-4" />
                     </button>
 
                     {/* Dropdown Menu */}
                     {activeMenuId === apt.id && (
-                      <div className="absolute right-2 mt-1 w-40 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-30 text-left text-xs font-semibold text-slate-700">
+                      <div className="absolute right-6 mt-1 w-40 bg-white rounded-xl shadow-lg border border-slate-100 py-1.5 z-30 text-left text-xs font-semibold text-slate-700">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

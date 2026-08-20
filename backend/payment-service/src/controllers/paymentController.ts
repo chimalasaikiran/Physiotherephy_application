@@ -175,23 +175,42 @@ export class PaymentController {
 
   static async processRefund(req: Request, res: Response): Promise<void> {
     try {
-      const { bookingId, refundAmount } = req.body;
-      if (!bookingId || !refundAmount) {
+      const {
+        paymentId,
+        bookingId,
+        appointmentId,
+        refundAmount,
+        refundReason,
+        processedBy,
+        paymentProvider,
+      } = req.body;
+
+      const targetId = paymentId || bookingId || appointmentId;
+      if (!targetId || refundAmount === undefined || refundAmount === null) {
         res.status(400).json({
           success: false,
-          error: 'Missing bookingId or refundAmount for refund.',
+          error: 'Missing required parameters (paymentId, bookingId, or appointmentId, and refundAmount).',
         });
         return;
       }
 
-      const result = await PaymentService.processRefund(bookingId, Number(refundAmount));
+      const result = await PaymentService.processRefund({
+        paymentId,
+        bookingId,
+        appointmentId,
+        refundAmount: Number(refundAmount),
+        refundReason,
+        processedBy,
+        paymentProvider,
+      });
+
       res.status(200).json({
         success: true,
         data: result,
       });
     } catch (error: any) {
       console.error('PaymentController.processRefund Error:', error);
-      res.status(500).json({
+      res.status(400).json({
         success: false,
         error: 'Failed to process refund.',
         message: error.message,

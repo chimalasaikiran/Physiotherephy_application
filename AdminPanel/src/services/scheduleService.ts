@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/auth/config/firebase';
 import type { AppointmentItem } from '@/schedule/components/AppointmentsTable';
+import { resolveAppointmentStatus } from '@/utils/dateUtils';
 
 export const APPOINTMENTS_COLLECTION = 'appointments';
 export const BOOKED_SLOTS_COLLECTION = 'booked_slots';
@@ -83,11 +84,20 @@ export const mapDocToAppointmentItem = (
   const dateStr = data.dateLabel || data.date || data.fullDate || 'Scheduled Date';
   const timeStr = data.timeSlot || data.time || '10:00 AM';
 
+  const resolvedStatus = resolveAppointmentStatus({
+    status: data.status,
+    fullDate: data.fullDate || data.date,
+    timeSlot: data.timeSlot || data.time,
+    sessionDuration: data.sessionDuration,
+    createdAt: data.createdAt,
+  });
+
   let status: AppointmentItem['status'] = 'Confirmed';
-  if (data.status === 'Cancelled') status = 'Cancelled';
-  else if (data.status === 'Completed') status = 'Completed';
-  else if (data.status === 'Scheduled' || data.status === 'Pending') status = 'Scheduled';
-  else if (data.status === 'Upcoming' || data.status === 'Confirmed') status = 'Confirmed';
+  if (resolvedStatus === 'Cancelled') status = 'Cancelled';
+  else if (resolvedStatus === 'Completed') status = 'Completed';
+  else if (resolvedStatus === 'Expired') status = 'Expired';
+  else if (resolvedStatus === 'Active / Today') status = 'Confirmed';
+  else status = 'Confirmed';
 
   const paymentStatus = (data.paymentStatus || (data.paymentMode === 'online' ? 'Paid' : 'Pending')) as 'Paid' | 'Pending';
   const resolvedPatientName = resolvePatientName(data, patientsMap);
@@ -171,7 +181,7 @@ export const subscribeToSchedules = (
   } catch (err: any) {
     console.error('Failed to subscribe to schedules:', err);
     if (onError) onError(err);
-    return () => {};
+    return () => { };
   }
 };
 

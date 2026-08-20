@@ -6,6 +6,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -57,18 +58,18 @@ const safeDateIso = (val: any): string => {
     if (typeof val.toDate === 'function') {
       try {
         return val.toDate().toISOString();
-      } catch {}
+      } catch { }
     }
     if (typeof val.seconds === 'number') {
       try {
         return new Date(val.seconds * 1000).toISOString();
-      } catch {}
+      } catch { }
     }
   }
   try {
     const d = new Date(val);
     if (!isNaN(d.getTime())) return d.toISOString();
-  } catch {}
+  } catch { }
   return new Date().toISOString();
 };
 
@@ -123,6 +124,9 @@ export const mapDocToPayment = (id: string, data: Record<string, any>): PaymentR
   invoiceNumber: safeString(data.invoiceNumber || data.invoiceNo, ''),
   invoiceNo: safeString(data.invoiceNo || data.invoiceNumber, ''),
   refundStatus: safeString(data.refundStatus, ''),
+  refundedAmount: Number(data.refundedAmount || 0),
+  remainingRefundableAmount: Number(data.remainingRefundableAmount ?? (Number(data.amount || 0) - Number(data.refundedAmount || 0))),
+  paymentProvider: safeString(data.paymentProvider, ''),
   bookingId: safeString(data.bookingId || data.appointmentId, ''),
   title: safeString(data.title || data.serviceTitle, ''),
   doctor: safeString(data.doctor || data.therapistName, ''),
@@ -181,8 +185,8 @@ export const mapDocToTransaction = (id: string, data: Record<string, any>): Tran
   status: (data.status === 'Paid' || data.status === 'PAID' || data.status === 'Completed')
     ? 'Completed'
     : data.status === 'Failed' ? 'Failed'
-    : data.status === 'Processing' ? 'Processing'
-    : 'Completed',
+      : data.status === 'Processing' ? 'Processing'
+        : 'Completed',
   description: safeString(data.description, ''),
   timestamp: safeDateIso(data.timestamp || data.createdAt),
   createdAt: safeDateIso(data.createdAt),
@@ -215,20 +219,27 @@ export const mapDocToRefund = (id: string, data: Record<string, any>): RefundDoc
   id,
   refundId: safeString(data.refundId, `RFD-${id.slice(0, 6).toUpperCase()}`),
   paymentId: safeString(data.paymentId, ''),
+  appointmentId: safeString(data.appointmentId || data.bookingId, ''),
+  bookingId: safeString(data.bookingId || data.appointmentId, ''),
   transactionId: safeString(data.transactionId, ''),
   invoiceId: safeString(data.invoiceId, ''),
   patientId: safeString(data.patientId, ''),
   patientName: safeString(data.patientName, 'Patient'),
   therapistId: safeString(data.therapistId, ''),
   therapistName: safeString(data.therapistName, ''),
-  amount: Number(data.amount || 0),
+  amount: Number(data.amount || data.refundAmount || 0),
   originalAmount: Number(data.originalAmount || data.amount || 0),
+  remainingRefundableAmount: Number(data.remainingRefundableAmount || 0),
   currency: safeString(data.currency, 'INR'),
-  reason: safeString(data.reason, 'No reason provided'),
+  reason: safeString(data.reason || data.refundReason, 'No reason provided'),
+  refundReason: safeString(data.refundReason || data.reason, 'No reason provided'),
   status: (data.status || 'Awaiting Approval') as any,
-  requestDate: safeDateStr(data.requestDate),
+  refundStatus: safeString(data.refundStatus || data.status, 'Completed'),
+  paymentProvider: safeString(data.paymentProvider, 'UPI'),
+  providerRefundId: safeString(data.providerRefundId, ''),
+  requestDate: safeDateStr(data.requestDate || data.createdAt),
   processedDate: data.processedDate ? safeDateIso(data.processedDate) : '',
-  processedBy: safeString(data.processedBy, ''),
+  processedBy: safeString(data.processedBy, 'Admin'),
   notes: safeString(data.notes, ''),
   createdAt: safeDateIso(data.createdAt),
   updatedAt: safeDateIso(data.updatedAt),
@@ -280,7 +291,7 @@ export const subscribeToPayments = (
   } catch (err: any) {
     console.error('Failed to subscribe to payments:', err);
     if (onError) onError(err);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -304,7 +315,7 @@ export const subscribeToInvoices = (
   } catch (err: any) {
     console.error('Failed to subscribe to invoices:', err);
     if (onError) onError(err);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -328,7 +339,7 @@ export const subscribeToTransactions = (
   } catch (err: any) {
     console.error('Failed to subscribe to transactions:', err);
     if (onError) onError(err);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -352,7 +363,7 @@ export const subscribeToPackages = (
   } catch (err: any) {
     console.error('Failed to subscribe to packages:', err);
     if (onError) onError(err);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -376,7 +387,7 @@ export const subscribeToRefunds = (
   } catch (err: any) {
     console.error('Failed to subscribe to refunds:', err);
     if (onError) onError(err);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -400,7 +411,7 @@ export const subscribeToPayouts = (
   } catch (err: any) {
     console.error('Failed to subscribe to payouts:', err);
     if (onError) onError(err);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -755,6 +766,187 @@ export const rejectRefund = async (id: string): Promise<void> => {
   });
 };
 
+export interface ProcessAdminRefundInput {
+  paymentId?: string;
+  bookingId?: string;
+  appointmentId?: string;
+  patientId?: string;
+  refundAmount: number;
+  refundReason?: string;
+  processedBy?: string;
+  paymentProvider?: string;
+}
+
+export const processAdminRefund = async (input: ProcessAdminRefundInput): Promise<any> => {
+  const now = new Date().toISOString();
+  const targetId = input.paymentId || input.appointmentId || input.bookingId;
+
+  // 1. Attempt call to backend payment service
+  try {
+    const backendUrl = import.meta.env.VITE_PAYMENT_SERVICE_URL || 'http://localhost:5003/api/v1/payments/refund';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+
+    const res = await fetch(backendUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+
+    if (res.ok) {
+      const json = await res.json();
+      return json.data;
+    }
+  } catch (backendErr) {
+    console.warn('Backend payment service unreachable. Falling back to direct Firestore refund logic:', backendErr);
+  }
+
+  // 2. Direct Firestore Fallback logic
+  if (!targetId) {
+    throw new Error('Target Payment or Appointment ID is required for refund.');
+  }
+
+  let paymentDocRef: any = null;
+  let paymentData: any = null;
+
+  if (input.paymentId) {
+    const paySnap = await getDoc(doc(db, PAYMENTS_COLLECTION, input.paymentId));
+    if (paySnap.exists()) {
+      paymentDocRef = doc(db, PAYMENTS_COLLECTION, input.paymentId);
+      paymentData = paySnap.data();
+    }
+  }
+
+  if (!paymentData && (input.appointmentId || input.bookingId)) {
+    const searchId = input.appointmentId || input.bookingId;
+    const q = query(collection(db, PAYMENTS_COLLECTION), where('appointmentId', '==', searchId));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      const firstDoc = snap.docs[0]!;
+      paymentDocRef = doc(db, PAYMENTS_COLLECTION, firstDoc.id);
+      paymentData = firstDoc.data();
+    }
+  }
+
+  const originalAmount = Number(paymentData?.amount || paymentData?.numericAmount || input.refundAmount);
+  const existingRefunded = Number(paymentData?.refundedAmount || 0);
+  const remainingRefundable = Math.max(0, originalAmount - existingRefunded);
+
+  if (remainingRefundable <= 0 && paymentData) {
+    throw new Error('This payment has already been fully refunded.');
+  }
+
+  if (input.refundAmount > remainingRefundable && paymentData) {
+    throw new Error(`Refund amount (₹${input.refundAmount}) exceeds maximum refundable amount (₹${remainingRefundable}).`);
+  }
+
+  const newRefundedAmount = existingRefunded + input.refundAmount;
+  const newRemainingRefundable = Math.max(0, originalAmount - newRefundedAmount);
+  const newStatus = newRemainingRefundable === 0 ? 'Refunded' : 'Partially Refunded';
+
+  const refundId = `RFD-${Date.now().toString(36).toUpperCase()}`;
+  const providerRefundId = `rfnd_rzp_${Date.now().toString(36)}`;
+
+  const refundPayload: Omit<RefundDocument, 'id'> = {
+    refundId,
+    paymentId: paymentData?.paymentId || paymentData?.id || input.paymentId || '',
+    appointmentId: input.appointmentId || paymentData?.appointmentId || input.bookingId || '',
+    bookingId: input.bookingId || input.appointmentId || '',
+    patientId: input.patientId || paymentData?.patientId || paymentData?.userId || '',
+    patientName: paymentData?.patientName || 'Patient',
+    therapistId: paymentData?.therapistId || '',
+    therapistName: paymentData?.therapistName || '',
+    amount: input.refundAmount,
+    originalAmount,
+    remainingRefundableAmount: newRemainingRefundable,
+    currency: 'INR',
+    reason: input.refundReason || 'Appointment Cancelled',
+    refundReason: input.refundReason || 'Appointment Cancelled',
+    status: 'Completed',
+    refundStatus: 'Completed',
+    paymentProvider: input.paymentProvider || paymentData?.paymentMethod || 'UPI',
+    providerRefundId,
+    requestDate: now.split('T')[0]!,
+    processedDate: now,
+    processedBy: input.processedBy || 'Admin',
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await setDoc(doc(db, REFUNDS_COLLECTION, refundId), refundPayload);
+
+  // Update Payment record
+  if (paymentDocRef) {
+    await updateDoc(paymentDocRef, {
+      refundedAmount: newRefundedAmount,
+      remainingRefundableAmount: newRemainingRefundable,
+      paymentStatus: newStatus,
+      status: newStatus === 'Refunded' ? 'REFUNDED' : 'PARTIALLY REFUNDED',
+      refundStatus: 'Approved',
+      updatedAt: now,
+    });
+  }
+
+  // Update mirrored payment in user subcollection
+  const resolvedPatientId = input.patientId || paymentData?.patientId || paymentData?.userId;
+  if (resolvedPatientId && (paymentData?.id || input.paymentId)) {
+    try {
+      const payId = paymentData?.id || input.paymentId;
+      await updateDoc(doc(db, 'users', resolvedPatientId, 'payments', payId), {
+        refundedAmount: newRefundedAmount,
+        remainingRefundableAmount: newRemainingRefundable,
+        paymentStatus: newStatus,
+        status: newStatus === 'Refunded' ? 'REFUNDED' : 'PARTIALLY REFUNDED',
+        updatedAt: now,
+      });
+    } catch (e) { }
+  }
+
+  // Write Refund Transaction Log
+  await addDoc(collection(db, TRANSACTIONS_COLLECTION), {
+    transactionId: `TXN-RFD-${refundId}`,
+    type: 'Refund',
+    patientId: resolvedPatientId || '',
+    patientName: paymentData?.patientName || 'Patient',
+    therapistId: paymentData?.therapistId || '',
+    therapistName: paymentData?.therapistName || '',
+    appointmentId: input.appointmentId || paymentData?.appointmentId || '',
+    paymentId: paymentData?.paymentId || paymentData?.id || '',
+    refundId,
+    amount: input.refundAmount,
+    currency: 'INR',
+    method: paymentData?.paymentMethod || 'UPI',
+    status: 'Completed',
+    description: `Refund processed (₹${input.refundAmount}): ${input.refundReason || 'Cancellation'}`,
+    timestamp: now,
+    createdAt: now,
+  });
+
+  // Update Appointment payment status
+  const resolvedAppointmentId = input.appointmentId || paymentData?.appointmentId || input.bookingId;
+  if (resolvedAppointmentId) {
+    try {
+      await updateDoc(doc(db, 'appointments', resolvedAppointmentId), {
+        paymentStatus: newStatus,
+        refundedAmount: newRefundedAmount,
+        remainingRefundableAmount: newRemainingRefundable,
+        updatedAt: now,
+      });
+    } catch (e) { }
+  }
+
+  return {
+    refundId,
+    refundAmount: input.refundAmount,
+    remainingRefundableAmount: newRemainingRefundable,
+    paymentStatus: newStatus,
+    providerRefundId,
+    message: `Refund of ₹${input.refundAmount.toLocaleString('en-IN')} processed successfully.`,
+  };
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CRUD: Payouts
 // ─────────────────────────────────────────────────────────────────────────────
@@ -817,20 +1009,29 @@ export const calculateDashboardMetrics = (
   // Date range filter
   const daysBack = filters.timeframe === 'Last 7 Days' ? 7
     : filters.timeframe === 'Last 30 Days' ? 30
-    : filters.timeframe === 'This Quarter' ? 90
-    : filters.timeframe === 'This Year' ? 365
-    : 30;
+      : filters.timeframe === 'This Quarter' ? 90
+        : filters.timeframe === 'This Year' ? 365
+          : 30;
   const rangeStart = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
 
-  const paidPayments = (payments || []).filter((p) => {
+  // Filter payments within range that have valid payments (Paid, Partially Refunded, Refunded)
+  const eligiblePayments = (payments || []).filter((p) => {
     if (!p) return false;
     const status = normalizePaymentStatus(p.paymentStatus || p.status);
-    if (status !== 'Paid') return false;
+    if (status !== 'Paid' && status !== 'Partially Refunded' && status !== 'Refunded') return false;
     const createdDate = new Date(p.paidAt || p.createdAt);
     return isNaN(createdDate.getTime()) || createdDate >= rangeStart;
   });
 
-  const revenue = paidPayments.reduce((sum, p) => sum + Number(p.amount || p.numericAmount || 0), 0);
+  // Gross Revenue: Sum of original payment amounts before refunds
+  const grossRevenue = eligiblePayments.reduce((sum, p) => sum + Number(p.amount || p.numericAmount || 0), 0);
+
+  // Total Refunds Processed
+  const completedRefunds = (refunds || []).filter((r) => r && (r.status === 'Approved' || r.status === 'Completed'));
+  const refundedAmount = completedRefunds.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+
+  // Net Revenue
+  const netRevenue = Math.max(0, grossRevenue - refundedAmount);
 
   // Outstanding from unpaid invoices AND pending payments
   const outstandingInvoices = (invoices || []).filter((inv) => inv && (inv.status === 'Pending' || inv.status === 'Overdue'));
@@ -859,7 +1060,7 @@ export const calculateDashboardMetrics = (
   const todayPayments = (payments || []).filter((p) => {
     if (!p) return false;
     const status = normalizePaymentStatus(p.paymentStatus || p.status);
-    if (status !== 'Paid') return false;
+    if (status !== 'Paid' && status !== 'Partially Refunded') return false;
     const dateRaw = p.paidAt || p.createdAt || '';
     if (!dateRaw) return false;
     const pDateIso = new Date(dateRaw).toISOString().split('T')[0];
@@ -868,7 +1069,7 @@ export const calculateDashboardMetrics = (
   });
   const collectedToday = todayPayments.reduce((sum, p) => sum + Number(p.amount || p.numericAmount || 0), 0);
 
-  // Pending refunds
+  // Pending refunds count
   const pendingRefunds = (refunds || []).filter((r) => r && r.status === 'Awaiting Approval').length;
 
   // Therapist payouts
@@ -880,15 +1081,18 @@ export const calculateDashboardMetrics = (
   const prevPaidPayments = (payments || []).filter((p) => {
     if (!p) return false;
     const status = normalizePaymentStatus(p.paymentStatus || p.status);
-    if (status !== 'Paid') return false;
+    if (status !== 'Paid' && status !== 'Partially Refunded') return false;
     const createdDate = new Date(p.paidAt || p.createdAt);
     return !isNaN(createdDate.getTime()) && createdDate >= prevRangeStart && createdDate < rangeStart;
   });
   const prevRevenue = prevPaidPayments.reduce((sum, p) => sum + Number(p.amount || p.numericAmount || 0), 0);
-  const revenueChange = prevRevenue > 0 ? Math.round(((revenue - prevRevenue) / prevRevenue) * 100) : 0;
+  const revenueChange = prevRevenue > 0 ? Math.round(((netRevenue - prevRevenue) / prevRevenue) * 100) : 0;
 
   return {
-    revenue,
+    grossRevenue,
+    refundedAmount,
+    netRevenue,
+    revenue: netRevenue,
     revenueChange,
     outstanding,
     outstandingPatientCount: outstandingPatientIds.size,
@@ -901,11 +1105,18 @@ export const calculateDashboardMetrics = (
 
 export const buildMetricCards = (metrics: PaymentsDashboardMetrics): MetricCardData[] => [
   {
-    title: 'REVENUE',
-    value: `₹${metrics.revenue.toLocaleString('en-IN')}`,
-    subtext: `${metrics.revenueChange >= 0 ? '+' : ''}${metrics.revenueChange}% vs last period`,
+    title: 'NET REVENUE',
+    value: `₹${metrics.netRevenue.toLocaleString('en-IN')}`,
+    subtext: `Gross: ₹${metrics.grossRevenue.toLocaleString('en-IN')}`,
     badgeType: 'success',
     iconType: 'trend',
+  },
+  {
+    title: 'REFUNDED AMOUNT',
+    value: `₹${metrics.refundedAmount.toLocaleString('en-IN')}`,
+    subtext: metrics.pendingRefunds > 0 ? `${metrics.pendingRefunds} pending approval` : 'No pending refunds',
+    badgeType: metrics.pendingRefunds > 0 ? 'warning' : 'info',
+    iconType: 'refunds',
   },
   {
     title: 'OUTSTANDING',
@@ -920,12 +1131,6 @@ export const buildMetricCards = (metrics: PaymentsDashboardMetrics): MetricCardD
     value: `₹${metrics.collectedToday.toLocaleString('en-IN')}`,
     subtext: `${metrics.collectedTodayCount} transaction${metrics.collectedTodayCount !== 1 ? 's' : ''}`,
     iconType: 'today',
-  },
-  {
-    title: 'PENDING REFUNDS',
-    value: String(metrics.pendingRefunds),
-    subtext: 'Awaiting approval',
-    iconType: 'refunds',
   },
   {
     title: 'THERAPIST PAYOUTS',
@@ -1059,8 +1264,8 @@ export const toOutstandingItems = (invoices: InvoiceDocument[]): OutstandingPaym
       const dueDateLabel = isOverdue
         ? `Overdue ${diffDays}d`
         : diffDays === 0
-        ? 'Due today'
-        : `Due in ${diffDays}d`;
+          ? 'Due today'
+          : `Due in ${diffDays}d`;
 
       return {
         id: inv.id,
@@ -1085,9 +1290,9 @@ export const toMethodDistribution = (payments: PaymentRecord[]): MethodDistribut
     const method = (p.paymentMethod || 'Other').replace(/\s*\(.*\)/, '').trim();
     const normalizedMethod = method.toUpperCase().includes('UPI') ? 'UPI'
       : method.toUpperCase().includes('CARD') || method.toUpperCase().includes('CREDIT') || method.toUpperCase().includes('DEBIT') ? 'Card'
-      : method.toUpperCase().includes('NET') || method.toUpperCase().includes('BANKING') ? 'Net Banking'
-      : method.toUpperCase().includes('CASH') ? 'Cash'
-      : 'Other';
+        : method.toUpperCase().includes('NET') || method.toUpperCase().includes('BANKING') ? 'Net Banking'
+          : method.toUpperCase().includes('CASH') ? 'Cash'
+            : 'Other';
     if (!methodMap[normalizedMethod]) methodMap[normalizedMethod] = { count: 0, amount: 0 };
     methodMap[normalizedMethod].count += 1;
     methodMap[normalizedMethod].amount += p.amount;
@@ -1120,8 +1325,8 @@ export const toRevenueTrend = (
   const now = new Date();
   const daysBack = timeframe === 'Last 7 Days' ? 7
     : timeframe === 'Last 30 Days' ? 30
-    : timeframe === 'This Quarter' ? 90
-    : 365;
+      : timeframe === 'This Quarter' ? 90
+        : 365;
 
   const paidPayments = (payments || []).filter(
     (p) => p && normalizePaymentStatus(p.paymentStatus || p.status) === 'Paid'
@@ -1242,9 +1447,9 @@ export const applyFiltersToPayments = (
   const now = new Date();
   const daysBack = filters.timeframe === 'Last 7 Days' ? 7
     : filters.timeframe === 'Last 30 Days' ? 30
-    : filters.timeframe === 'This Quarter' ? 90
-    : filters.timeframe === 'This Year' ? 365
-    : 30;
+      : filters.timeframe === 'This Quarter' ? 90
+        : filters.timeframe === 'This Year' ? 365
+          : 30;
   const rangeStart = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
 
   return payments.filter((p) => {

@@ -38,7 +38,7 @@ export interface InvoiceItem {
   date: string;
   description: string;
   amount: number;
-  status: 'Paid' | 'Pending' | 'Overdue' | 'Failed' | 'Refunded';
+  status: 'Paid' | 'Pending' | 'Overdue' | 'Failed' | 'Refunded' | 'Partially Refunded';
   items?: { name: string; qty: number; rate: number; total: number }[];
   transactionId?: string;
   paymentMethod?: string;
@@ -86,7 +86,7 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
           date: pay.paidAt ? new Date(pay.paidAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : (pay.createdAt ? new Date(pay.createdAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'Today'),
           description: pay.title || 'Physiotherapy Session',
           amount: Number(pay.numericAmount || pay.amount) || 0,
-          status: (pay.paymentStatus === 'Paid' || pay.status === 'PAID') ? 'Paid' : (pay.paymentStatus === 'Failed' ? 'Failed' : 'Pending'),
+          status: (pay.paymentStatus as any) || (pay.status === 'PAID' ? 'Paid' : pay.status === 'REFUNDED' ? 'Refunded' : pay.status === 'PARTIALLY REFUNDED' ? 'Partially Refunded' : 'Pending'),
           transactionId: pay.transactionId,
           paymentMethod: pay.paymentMethod || pay.paymentMethodName,
         });
@@ -456,8 +456,12 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
                           className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${
                             invoice.status === 'Paid'
                               ? 'bg-teal-50 text-teal-700 border border-teal-100'
-                              : invoice.status === 'Pending'
+                              : invoice.status === 'Partially Refunded'
                               ? 'bg-amber-50 text-amber-700 border border-amber-100'
+                              : invoice.status === 'Refunded'
+                              ? 'bg-rose-50 text-rose-700 border border-rose-100'
+                              : invoice.status === 'Pending'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-100'
                               : 'bg-rose-50 text-rose-700 border border-rose-100'
                           }`}
                         >

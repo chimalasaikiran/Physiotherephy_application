@@ -8,7 +8,6 @@ import {
   RefreshCw,
   X,
   Activity,
-  Award,
   Calendar,
   Clock,
   CheckCircle,
@@ -209,104 +208,7 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
         </div>
       )}
 
-      {/* ================= 1. DYNAMIC PROGRAM & EXERCISE PROGRESS CARD ================= */}
-      <div className="bg-gradient-to-br from-blue-900 via-[#0C3E6D] to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
-          <div className="space-y-1">
-            <div className="flex items-center space-x-3">
-              <span className="px-3 py-1 bg-blue-500/20 text-blue-200 border border-blue-400/30 rounded-full text-xs font-mono font-extrabold uppercase">
-                {programStatus}
-              </span>
-              <span className="text-xs text-blue-200 font-semibold">
-                Assigned Therapist: <strong className="text-white">{therapistName}</strong>
-              </span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white pt-1">
-              {programTitle}
-            </h2>
-          </div>
-
-          <div className="flex items-center space-x-4 bg-white/10 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/15 self-start sm:self-auto">
-            <div className="text-right">
-              <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
-                CURRENT OVERALL PROGRESS
-              </span>
-              <span className="text-3xl font-extrabold text-white">{progressPercent}%</span>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-blue-500/30 flex items-center justify-center border border-blue-400/40">
-              <Award className="w-6 h-6 text-blue-200" />
-            </div>
-          </div>
-        </div>
-
-        {/* Dynamic Progress Bar */}
-        <div className="space-y-2">
-          <div className="flex justify-between items-center text-xs font-bold text-blue-100">
-            <span>
-              Week {currentWeekNum} of {totalWeeks} Stage
-            </span>
-            <span>
-              {completedCount} of {totalExercisesCount} Exercises Completed
-            </span>
-          </div>
-          <div className="w-full bg-white/15 h-3 rounded-full overflow-hidden p-0.5 border border-white/10">
-            <div
-              className="bg-gradient-to-r from-teal-400 to-blue-400 h-full rounded-full transition-all duration-700 ease-out"
-              style={{ width: `${Math.max(progressPercent, 2)}%` }}
-            />
-          </div>
-        </div>
-
-        {/* 5 Key Metric Pill Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2">
-          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10">
-            <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
-              TOTAL EXERCISES
-            </span>
-            <span className="text-xl font-extrabold text-white mt-1 block">
-              {totalExercisesCount}
-            </span>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10">
-            <span className="text-[10px] font-extrabold text-emerald-300 uppercase tracking-wider block">
-              COMPLETED
-            </span>
-            <span className="text-xl font-extrabold text-emerald-400 mt-1 block">
-              {completedCount}
-            </span>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10">
-            <span className="text-[10px] font-extrabold text-amber-200 uppercase tracking-wider block">
-              REMAINING
-            </span>
-            <span className="text-xl font-extrabold text-amber-300 mt-1 block">
-              {remainingCount}
-            </span>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10 col-span-2 sm:col-span-1">
-            <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
-              LAST COMPLETED
-            </span>
-            <span className="text-xs font-extrabold text-white mt-1 block truncate">
-              {lastCompletedExerciseName}
-            </span>
-          </div>
-
-          <div className="bg-white/10 backdrop-blur-xs rounded-2xl p-3.5 border border-white/10 col-span-2 sm:col-span-2 lg:col-span-1">
-            <span className="text-[10px] font-extrabold text-blue-200 uppercase tracking-wider block">
-              LAST ACTIVITY
-            </span>
-            <span className="text-xs font-extrabold text-white mt-1 block truncate">
-              {lastActivityTime}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ================= 2. FOUR TOP PROGRESS METRICS GRID ================= */}
+      {/* ================= 1. FOUR TOP PROGRESS METRICS GRID ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Recovery Score Donut */}
         <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between space-y-3">

@@ -33,11 +33,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const adminName = adminProfile?.fullName || 'System Administrator';
-  const adminEmail = adminProfile?.email || 'admin@physiotherapy.com';
+  const adminName = adminProfile?.fullName || 'Dr. Sarah Chen';
+  const adminEmail = adminProfile?.email || 'sarah.chen@onemedical.com';
   const adminRole = adminProfile?.role
-    ? adminProfile.role.charAt(0).toUpperCase() + adminProfile.role.slice(1)
-    : 'Superadmin';
+    ? adminProfile.role.toUpperCase() === 'ADMIN' ? 'CLINIC ADMIN' : adminProfile.role
+    : 'CLINIC ADMIN';
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -64,12 +64,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   };
 
   return (
-    <header className="h-20 bg-white border-b border-slate-100 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+    <header className="h-20 bg-[#F2F4FD] px-4 sm:px-8 flex items-center justify-between sticky top-0 z-30">
       <div className="flex items-center space-x-4 flex-1 max-w-2xl">
         {/* Mobile Hamburger Button */}
         <button
           onClick={onMenuToggle}
-          className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-xl lg:hidden focus:outline-none"
+          className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 rounded-xl lg:hidden focus:outline-none"
           aria-label="Open navigation menu"
         >
           <Menu className="w-6 h-6" />
@@ -85,7 +85,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search patients, doctors, or records (⌘+K)"
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-full text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white focus:border-blue-500 transition-all duration-200"
+            className="w-full pl-10 pr-4 py-2.5 bg-[#EEF2FC]/70 border border-slate-200/50 rounded-xl text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white focus:border-blue-500 transition-all duration-200"
           />
         </div>
       </div>
@@ -96,7 +96,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         {/* New Appointment Button */}
         <button
           onClick={onOpenNewAppointment}
-          className="hidden sm:flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-full text-sm font-semibold shadow-sm transition-all duration-200 hover:shadow-md cursor-pointer"
+          className="hidden sm:flex items-center space-x-2 bg-[#0B4DA2] hover:bg-[#083D82] text-white px-5 py-2.5 rounded-full text-sm font-semibold shadow-xs transition-all duration-200 hover:shadow-md cursor-pointer"
         >
           <Plus className="w-4 h-4 stroke-[2.5]" />
           <span>New Appointment</span>
@@ -139,9 +139,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
                   notifications.map((n) => (
                     <div
                       key={n.id}
-                      className={`p-3.5 hover:bg-slate-50 text-xs transition-colors ${
-                        !n.read ? 'bg-blue-50/30' : ''
-                      }`}
+                      className={`p-3.5 hover:bg-slate-50 text-xs transition-colors ${!n.read ? 'bg-blue-50/30' : ''
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <p className="font-bold text-slate-900">{n.title}</p>

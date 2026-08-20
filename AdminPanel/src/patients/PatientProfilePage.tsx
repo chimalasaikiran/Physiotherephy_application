@@ -511,35 +511,75 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
           {/* RIGHT COLUMN */}
           <div className="space-y-6">
             {/* 1. Upcoming Appointments Card */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-2xs space-y-5">
-              <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
-                Upcoming Appointments
-              </h3>
-
-              <div className="space-y-3">
+            <div className="self-stretch p-6 relative bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] flex flex-col justify-start items-start gap-4 shadow-[0px_4px_24px_-1px_rgba(0,0,0,0.03)]">
+              <div className="self-stretch flex flex-col justify-start items-start">
+                <div className="self-stretch justify-center text-slate-900 text-base font-bold font-['Inter'] leading-6">
+                  Upcoming Appointments
+                </div>
+              </div>
+              <div className="self-stretch flex flex-col justify-start items-start gap-4">
                 {/* Active Next Session Card */}
-                <div className="bg-[#0C3E6D] text-white rounded-3xl p-5 space-y-4 shadow-md">
-                  <div className="flex items-center justify-between text-[11px] font-extrabold tracking-wider uppercase opacity-80">
-                    <span>NEXT SESSION</span>
+                <div className="self-stretch p-4 relative bg-blue-900 rounded-2xl flex flex-col justify-start items-start gap-1 shadow-[0px_4px_6px_-4px_rgba(0,61,155,0.20),0px_10px_15px_-3px_rgba(0,61,155,0.20)]">
+                  <div className="self-stretch inline-flex justify-between items-start">
+                    <div className="opacity-80 justify-center text-white text-xs font-bold font-['Inter'] uppercase leading-4 tracking-wider">
+                      NEXT SESSION
+                    </div>
                     <button
                       onClick={() => showToast('Appointment options')}
-                      className="p-1 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+                      className="p-0.5 opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
                     >
                       <MoreVertical className="w-4 h-4 text-white" />
                     </button>
                   </div>
-
-                  <div>
-                    <h4 className="text-lg font-extrabold text-white">{nextApptDate}</h4>
-                    <p className="text-xs text-blue-100 flex items-center space-x-1.5 mt-1 font-semibold">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span>{nextApptTime}</span>
-                    </p>
+                  <div className="self-stretch pt-3 flex flex-col justify-start items-start">
+                    <div className="self-stretch justify-center text-white text-base font-bold font-['Inter'] leading-6">
+                      {nextApptDate}
+                    </div>
                   </div>
+                  <div className="self-stretch pb-3 inline-flex justify-start items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-white shrink-0" />
+                    <div className="justify-center text-white text-base font-normal font-['Inter'] leading-6">
+                      {nextApptTime}
+                    </div>
+                  </div>
+                  <div className="self-stretch pt-4 border-t border-white/20 inline-flex justify-start items-center gap-3">
+                    <div className="size-8 rounded-full outline outline-1 outline-offset-[-1px] outline-white/40 inline-flex flex-col justify-center items-center overflow-hidden bg-white/10 shrink-0">
+                      <InitialsAvatar name={therapistName} className="w-8 h-8 text-xs font-bold text-white border border-white/30 shrink-0" />
+                    </div>
+                    <div className="inline-flex flex-col justify-start items-start">
+                      <div className="justify-center text-white text-base font-medium font-['Inter'] leading-6">
+                        {therapistName}
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                  <div className="pt-2 border-t border-white/15 flex items-center space-x-3">
-                    <InitialsAvatar name={therapistName} className="w-8 h-8 text-xs font-bold border border-white/30 shrink-0" />
-                    <span className="text-xs font-bold text-white">{therapistName}</span>
+                {/* Upcoming Session Card */}
+                <div
+                  onClick={() => showToast('Upcoming session details')}
+                  className="self-stretch p-4 bg-indigo-50 rounded-2xl outline outline-1 outline-offset-[-1px] outline-slate-300/10 flex flex-col justify-start items-start gap-2 hover:bg-indigo-100/70 transition-colors cursor-pointer group"
+                >
+                  <div className="self-stretch flex flex-col justify-start items-start">
+                    <div className="self-stretch justify-center text-gray-700/60 text-base font-normal font-['Inter'] uppercase leading-6">
+                      UPCOMING
+                    </div>
+                  </div>
+                  <div className="self-stretch inline-flex justify-between items-center">
+                    <div className="inline-flex flex-col justify-start items-start">
+                      <div className="self-stretch flex flex-col justify-start items-start">
+                        <div className="justify-center text-slate-900 text-base font-bold font-['Inter'] leading-6 group-hover:text-blue-900 transition-colors">
+                          March 02
+                        </div>
+                      </div>
+                      <div className="self-stretch flex flex-col justify-start items-start">
+                        <div className="justify-center text-gray-700 text-xs font-normal font-['Inter'] leading-4">
+                          02:15 PM • Video Call
+                        </div>
+                      </div>
+                    </div>
+                    <div className="inline-flex flex-col justify-start items-start">
+                      <ChevronRight className="w-4 h-4 text-gray-700 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
                   </div>
                 </div>
               </div>

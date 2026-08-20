@@ -156,21 +156,21 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
   const getConditionStyle = (condition: ConditionType | string) => {
     switch (condition) {
       case 'Post-Op Rehab':
-        return 'bg-teal-50 text-teal-700 border-teal-100';
+        return 'bg-cyan-300/20 text-cyan-800 outline-cyan-300/30';
       case 'Neuropathy':
-        return 'bg-purple-50 text-purple-700 border-purple-100';
+        return 'bg-indigo-700/10 text-blue-900 outline-indigo-700/20';
       case 'Hypertension':
-        return 'bg-cyan-50 text-cyan-700 border-cyan-100';
+        return 'bg-cyan-300/20 text-cyan-800 outline-cyan-300/30';
       case 'Rehab':
-        return 'bg-sky-50 text-sky-700 border-sky-100';
+        return 'bg-cyan-300/20 text-cyan-800 outline-cyan-300/30';
       case 'ACL Recovery':
-        return 'bg-indigo-50 text-indigo-700 border-indigo-100';
+        return 'bg-indigo-700/10 text-blue-900 outline-indigo-700/20';
       case 'Orthopedic':
-        return 'bg-blue-50 text-blue-700 border-blue-100';
+        return 'bg-sky-900/10 text-sky-900 outline-sky-900/20';
       case 'Chronic Pain':
-        return 'bg-amber-50 text-amber-700 border-amber-100';
+        return 'bg-amber-500/10 text-amber-800 outline-amber-500/20';
       default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
+        return 'bg-cyan-300/20 text-cyan-800 outline-cyan-300/30';
     }
   };
 
@@ -180,31 +180,60 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
       case 'Active Treatment':
       case 'active':
         return {
-          bg: 'bg-teal-50 text-teal-700 border-teal-100',
-          dot: 'bg-teal-500',
+          text: 'text-cyan-800',
+          dot: 'bg-cyan-300',
+          bg: 'bg-cyan-50 border-cyan-100 text-cyan-800',
         };
       case 'Observation':
         return {
-          bg: 'bg-slate-100 text-slate-600 border-slate-200',
-          dot: 'bg-slate-400',
+          text: 'text-gray-700',
+          dot: 'bg-slate-300',
+          bg: 'bg-slate-50 border-slate-200 text-slate-700',
         };
       case 'Recovered':
       case 'completed':
         return {
-          bg: 'bg-emerald-50 text-emerald-700 border-emerald-100',
-          dot: 'bg-emerald-500',
+          text: 'text-cyan-800',
+          dot: 'bg-cyan-300',
+          bg: 'bg-cyan-50 border-cyan-100 text-cyan-800',
         };
       case 'On Hold':
       case 'pending':
         return {
-          bg: 'bg-amber-50 text-amber-700 border-amber-100',
-          dot: 'bg-amber-500',
+          text: 'text-amber-700',
+          dot: 'bg-amber-400',
+          bg: 'bg-amber-50 border-amber-100 text-amber-700',
         };
       default:
         return {
-          bg: 'bg-slate-100 text-slate-700 border-slate-200',
-          dot: 'bg-slate-400',
+          text: 'text-gray-700',
+          dot: 'bg-slate-300',
+          bg: 'bg-slate-50 border-slate-200 text-slate-700',
         };
+    }
+  };
+
+  // Helper to extract therapist initials & badge style
+  const getTherapistInitials = (name: string) => {
+    if (!name) return 'PT';
+    const cleanName = name.replace(/^Dr\.\s*/i, '').trim();
+    const parts = cleanName.split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    }
+    return cleanName.substring(0, 2).toUpperCase();
+  };
+
+  const getTherapistBadgeStyle = (initials: string) => {
+    switch (initials) {
+      case 'AS':
+        return 'bg-indigo-800/20 text-indigo-800';
+      case 'RK':
+        return 'bg-blue-900/20 text-blue-900';
+      case 'DM':
+        return 'bg-sky-900/20 text-sky-900';
+      default:
+        return 'bg-indigo-800/20 text-indigo-800';
     }
   };
 
@@ -232,38 +261,41 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
       {/* 1. Page Header Section with Real-time Badge & Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center space-x-3">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+      <div className="self-stretch flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+        <div className="inline-flex flex-col justify-start items-start gap-2">
+          <div className="self-stretch flex flex-col justify-start items-start">
+            <h2 className="justify-center text-slate-900 text-3xl font-semibold font-['Inter'] leading-9">
               Patients
             </h2>
           </div>
-          <p className="text-sm text-slate-500 font-medium mt-1 max-w-xl">
-            Manage patient records, recovery plans, and clinical history.
-          </p>
+          <div className="w-full max-w-[672px] flex flex-col justify-start items-start">
+            <p className="justify-center text-gray-700 text-lg font-normal font-['Inter'] leading-7">
+              Manage patient records and recovery journeys with precision tools<br className="hidden sm:inline" /> designed for clinical excellence.
+            </p>
+          </div>
         </div>
 
         {/* Right Header Action Buttons */}
-        <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+        <div className="flex justify-start items-center gap-3 flex-wrap sm:flex-nowrap">
           {/* Refresh Button */}
           <button
             onClick={refresh}
             disabled={isLoading}
-            className="flex items-center space-x-2 px-3.5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-semibold text-sm transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+            className="p-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-[48px] transition-all shadow-2xs cursor-pointer disabled:opacity-50 flex items-center justify-center"
             title="Manual Refresh from Backend"
           >
-            <RefreshCw className={`w-4 h-4 text-slate-500 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <RefreshCw className={`w-4 h-4 text-slate-700 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
 
           {/* Import Patients Button */}
           <button
             onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-blue-50/80 hover:bg-blue-100 text-blue-700 border border-blue-100 rounded-xl font-semibold text-sm transition-all shadow-2xs hover:shadow-xs cursor-pointer"
+            className="pl-5 pr-7 py-2.5 bg-[#D8E2FF] hover:bg-[#c3d5ff] rounded-[48px] outline outline-1 outline-offset-[-1px] outline-white/50 flex justify-start items-center gap-3 transition-all cursor-pointer shadow-2xs hover:shadow-xs"
           >
-            <FileSpreadsheet className="w-4 h-4 text-blue-600" />
-            <span className="hidden sm:inline">Import</span>
+            <FileSpreadsheet className="w-4 h-4 text-slate-900 shrink-0" />
+            <span className="text-center justify-center text-slate-900 text-base font-semibold font-['Inter'] leading-6">
+              Import Patients
+            </span>
           </button>
 
           {/* Add Patient Button */}
@@ -275,10 +307,12 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                 setIsAddPageOpen(true);
               }
             }}
-            className="flex items-center space-x-2 px-5 py-2.5 bg-[#0F4C81] hover:bg-blue-800 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
+            className="pl-5 pr-7 py-2.5 bg-[#003D9B] hover:bg-[#002d73] rounded-[48px] flex justify-start items-center gap-3 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg"
           >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Add Patient</span>
+            <Plus className="w-4 h-4 text-white stroke-[2.5] shrink-0" />
+            <span className="text-center justify-center text-white text-base font-semibold font-['Inter'] leading-6">
+              Add Patient
+            </span>
           </button>
         </div>
       </div>
@@ -325,11 +359,10 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
             <div className="flex items-center bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
               <button
                 onClick={() => setFilters((f) => ({ ...f, viewMode: 'table' }))}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  filters.viewMode === 'table'
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filters.viewMode === 'table'
                     ? 'bg-white text-blue-600 shadow-xs'
                     : 'text-slate-500 hover:text-slate-800'
-                }`}
+                  }`}
               >
                 <TableIcon className="w-4 h-4" />
                 <span>Table</span>
@@ -337,11 +370,10 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
 
               <button
                 onClick={() => setFilters((f) => ({ ...f, viewMode: 'cards' }))}
-                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  filters.viewMode === 'cards'
+                className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${filters.viewMode === 'cards'
                     ? 'bg-white text-blue-600 shadow-xs'
                     : 'text-slate-500 hover:text-slate-800'
-                }`}
+                  }`}
               >
                 <LayoutGrid className="w-4 h-4" />
                 <span>Cards</span>
@@ -489,25 +521,33 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
         </div>
       ) : filters.viewMode === 'table' ? (
         /* TABLE VIEW */
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[1000px]">
+        <div className="self-stretch pt-2 bg-white/70 rounded-3xl shadow-[0px_4px_24px_-1px_rgba(0,61,155,0.05)] outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] flex flex-col justify-start items-start overflow-hidden border border-slate-200/50">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[1050px]">
               <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="py-4 px-6">PATIENT</th>
-                  <th className="py-4 px-4">PATIENT ID</th>
-                  <th className="py-4 px-4">CONDITION</th>
-                  <th className="py-4 px-4">ASSIGNED THERAPIST</th>
-                  <th className="py-4 px-4">NEXT APPOINTMENT</th>
-                  <th className="py-4 px-4">RECOVERY SCORE</th>
-                  <th className="py-4 px-4">STATUS</th>
-                  <th className="py-4 px-6 text-right">ACTIONS</th>
+                <tr className="bg-indigo-50/50 border-b border-slate-300/30 text-gray-700 text-xs font-bold font-['Inter'] uppercase leading-4 tracking-wide">
+                  <th className="px-6 py-4 text-left font-bold tracking-wide">PATIENT</th>
+                  <th className="px-6 py-4 text-left font-bold tracking-wide">PATIENT ID</th>
+                  <th className="px-6 py-4 text-left font-bold tracking-wide">CONDITION</th>
+                  <th className="px-6 py-4 text-left font-bold tracking-wide">
+                    ASSIGNED<br />THERAPIST
+                  </th>
+                  <th className="px-6 py-4 text-left font-bold tracking-wide">
+                    NEXT<br />APPOINTMENT
+                  </th>
+                  <th className="px-6 py-4 text-left font-bold tracking-wide">
+                    RECOVERY<br />SCORE
+                  </th>
+                  <th className="px-6 py-4 text-left font-bold tracking-wide">STATUS</th>
+                  <th className="px-6 py-4 text-right font-bold tracking-wide">ACTIONS</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100/70 text-sm font-medium">
+              <tbody className="divide-y divide-slate-300/20 text-sm font-medium">
                 {paginatedPatients.length > 0 ? (
                   paginatedPatients.map((patient) => {
                     const statusStyle = getStatusStyle(patient.status);
+                    const therapistInitials = getTherapistInitials(patient.therapistName);
+                    const therapistBadgeStyle = getTherapistBadgeStyle(therapistInitials);
                     return (
                       <tr
                         key={patient.id}
@@ -515,94 +555,115 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                         className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                       >
                         {/* Patient Info */}
-                        <td className="py-4 px-6">
-                          <div className="flex items-center space-x-3.5">
-                            <InitialsAvatar name={patient.name} className="w-10 h-10 text-xs font-bold shrink-0" />
-                            <div>
-                              <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-4">
+                            {patient.avatarUrl ? (
+                              <img
+                                src={patient.avatarUrl}
+                                alt={patient.name}
+                                className="w-10 h-10 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <InitialsAvatar
+                                name={patient.name}
+                                className="w-10 h-10 bg-violet-100 text-slate-900 text-xs font-bold shrink-0 rounded-full overflow-hidden"
+                              />
+                            )}
+                            <div className="flex flex-col justify-start items-start">
+                              <div className="text-slate-900 text-sm font-semibold font-['Inter'] leading-5 group-hover:text-blue-900 transition-colors">
                                 {patient.name}
                               </div>
-                              <div className="text-xs text-slate-400 font-medium">
-                                {patient.age} yrs, {patient.gender}
+                              <div className="text-gray-700 text-xs font-normal font-['Inter'] leading-4">
+                                {patient.age}, {patient.gender}
                               </div>
                             </div>
                           </div>
                         </td>
 
                         {/* Patient ID */}
-                        <td className="py-4 px-4">
-                          <span className="inline-block px-2.5 py-1 bg-blue-50/90 text-blue-600 rounded-lg text-xs font-bold font-mono border border-blue-100/60">
-                            {patient.patientId}
-                          </span>
+                        <td className="px-6 py-4">
+                          <div className="inline-flex px-2.5 py-1 bg-blue-900/5 rounded-2xl">
+                            <span className="text-blue-900 text-xs font-normal font-['Inter'] leading-4">
+                              {patient.patientId.startsWith('#') ? patient.patientId : `#${patient.patientId}`}
+                            </span>
+                          </div>
                         </td>
 
                         {/* Condition */}
-                        <td className="py-4 px-4">
-                          <span
-                            className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${getConditionStyle(
+                        <td className="px-6 py-4">
+                          <div
+                            className={`inline-flex px-3 py-[2.5px] rounded-full outline outline-1 outline-offset-[-1px] ${getConditionStyle(
                               patient.condition
                             )}`}
                           >
-                            {patient.condition}
-                          </span>
+                            <span className="text-xs font-bold font-['Inter'] leading-4">
+                              {patient.condition}
+                            </span>
+                          </div>
                         </td>
 
                         {/* Assigned Therapist */}
-                        <td className="py-4 px-4">
-                          <div className="flex items-center space-x-2">
-                            <InitialsAvatar name={patient.therapistName} className="w-6 h-6 text-[10px] font-bold shrink-0" />
-                            <span className="text-xs font-bold text-slate-800">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`px-2 py-0.5 rounded-full flex justify-center items-center shrink-0 ${therapistBadgeStyle}`}
+                            >
+                              <span className="text-center text-[10px] font-bold font-['Inter'] leading-4">
+                                {therapistInitials}
+                              </span>
+                            </div>
+                            <span className="text-slate-900 text-xs font-medium font-['Inter'] leading-4">
                               {patient.therapistName}
                             </span>
                           </div>
                         </td>
 
                         {/* Next Appointment */}
-                        <td className="py-4 px-4">
-                          <div>
-                            <div className="font-bold text-xs text-slate-900">
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col justify-start items-start">
+                            <div className="text-slate-900 text-xs font-bold font-['Inter'] leading-4">
                               {patient.nextAppointmentDate}
                             </div>
-                            <div className="text-[11px] text-slate-400 font-medium">
+                            <div className="text-gray-700 text-[10px] font-normal font-['Inter'] leading-4">
                               {patient.nextAppointmentTime}
                             </div>
                           </div>
                         </td>
 
                         {/* Recovery Score Bar */}
-                        <td className="py-4 px-4">
-                          <div className="flex items-center space-x-3 max-w-[150px]">
-                            <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3 min-w-[110px] max-w-[150px]">
+                            <div className="flex-1 h-1.5 relative bg-violet-100 rounded-full overflow-hidden">
                               <div
-                                className="bg-blue-600 h-full rounded-full transition-all duration-300"
+                                className="h-1.5 left-0 top-0 absolute bg-blue-900 rounded-full transition-all duration-300"
                                 style={{ width: `${patient.recoveryScore}%` }}
                               />
                             </div>
-                            <span className="text-xs font-extrabold text-slate-800 w-8">
+                            <span className="text-blue-900 text-xs font-bold font-['Inter'] leading-4">
                               {patient.recoveryScore}%
                             </span>
                           </div>
                         </td>
 
                         {/* Status */}
-                        <td className="py-4 px-4">
-                          <span
-                            className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${statusStyle.bg}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
-                            <span>{patient.status}</span>
-                          </span>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-1.5">
+                            <div className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
+                            <span className={`text-[10px] font-bold font-['Inter'] leading-4 ${statusStyle.text}`}>
+                              {patient.status}
+                            </span>
+                          </div>
                         </td>
 
                         {/* Actions Dropdown */}
-                        <td className="py-4 px-6 text-right relative" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-6 py-4 text-right relative" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() =>
                               setActiveMenuId(activeMenuId === patient.id ? null : patient.id)
                             }
-                            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                            className="p-2 rounded-[32px] text-gray-700 hover:bg-slate-100 transition-colors cursor-pointer inline-flex justify-center items-center"
                           >
-                            <MoreVertical className="w-4 h-4" />
+                            <MoreVertical className="w-4 h-4 text-gray-700" />
                           </button>
 
                           {activeMenuId === patient.id && (
@@ -672,30 +733,34 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
           </div>
 
           {/* Table Footer Pagination */}
-          <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white">
-            <p className="text-xs font-semibold text-slate-500">
-              Showing <span className="text-slate-900 font-bold">{paginatedPatients.length}</span> of{' '}
-              <span className="text-slate-900 font-bold">{filteredPatients.length}</span> patients
-            </p>
+          <div className="self-stretch px-6 py-5 bg-indigo-50/30 border-t border-slate-300/20 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div className="text-gray-700 text-xs font-medium font-['Inter'] leading-4">
+              <span>Showing </span>
+              <span className="text-slate-900 font-medium">
+                {filteredPatients.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} - {Math.min(currentPage * itemsPerPage, filteredPatients.length)}
+              </span>
+              <span> of </span>
+              <span className="text-slate-900 font-medium">{filteredPatients.length}</span>
+              <span> patients</span>
+            </div>
 
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center gap-1">
               <button
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="p-2 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 rounded-lg"
+                className="w-8 h-8 rounded-[32px] flex justify-center items-center text-gray-700 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all cursor-pointer"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-4 h-4 text-gray-700" />
               </button>
 
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <button
                   key={page}
                   onClick={() => setCurrentPage(page)}
-                  className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center transition-all ${
-                    currentPage === page
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
+                  className={`w-8 h-8 py-2 rounded-[32px] text-xs font-bold font-['Inter'] leading-4 flex justify-center items-center transition-all cursor-pointer ${currentPage === page
+                      ? 'bg-blue-900 text-white shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)]'
+                      : 'text-gray-700 hover:bg-slate-100'
+                    }`}
                 >
                   {page}
                 </button>
@@ -704,9 +769,9 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
               <button
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                className="p-2 text-slate-400 hover:text-slate-700 disabled:opacity-30 disabled:hover:text-slate-400 rounded-lg"
+                className="w-8 h-8 rounded-[32px] flex justify-center items-center text-gray-700 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent transition-all cursor-pointer"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4 text-gray-700" />
               </button>
             </div>
           </div>

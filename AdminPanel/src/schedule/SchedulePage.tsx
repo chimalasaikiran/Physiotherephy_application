@@ -8,6 +8,8 @@ import { PendingConfirmations } from './components/PendingConfirmations';
 import { QuickActions } from './components/QuickActions';
 import { subscribeToSchedules, updateScheduleStatusRecord } from '@/services/scheduleService';
 
+import { isDateInTimelineFilter, parseAppointmentDateTime } from '@/utils/dateUtils';
+
 interface SchedulePageProps {
   onOpenNewAppointment?: () => void;
   onOpenSessionDetails?: (appointment?: AppointmentItem) => void;
@@ -20,9 +22,10 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
   onOpenReschedule,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTimeframe, setSelectedTimeframe] = useState('This Week');
+  const [selectedTimeframe, setSelectedTimeframe] = useState('All');
   const [selectedTherapist, setSelectedTherapist] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [currentPage, setCurrentPage] = useState(1);
   const [appointmentsList, setAppointmentsList] = useState<AppointmentItem[]>([]);
@@ -37,7 +40,7 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
     return () => unsub();
   }, []);
 
-  // Filtering appointments based on search & filter dropdowns
+  // Filtering appointments based on search, timeline & filter dropdowns
   const filteredAppointments = useMemo(() => {
     return appointmentsList.filter((item) => {
       const matchesSearch =
@@ -50,9 +53,23 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
 
       const matchesType = selectedType === 'All' || item.type === selectedType;
 
-      return matchesSearch && matchesTherapist && matchesType;
+      const matchesStatus =
+        selectedStatus === 'All' ||
+        item.status === selectedStatus ||
+        (selectedStatus === 'Confirmed' && (item.status === 'Confirmed' || item.status === 'Scheduled'));
+
+      let matchesTimeline = true;
+      if (selectedTimeframe !== 'All') {
+        const raw = rawDocsList.find((r) => r.id === item.id);
+        const apptDate = parseAppointmentDateTime(raw?.fullDate || raw?.date || item.date, raw?.timeSlot || item.time);
+        if (apptDate) {
+          matchesTimeline = isDateInTimelineFilter(apptDate, selectedTimeframe);
+        }
+      }
+
+      return matchesSearch && matchesTherapist && matchesType && matchesStatus && matchesTimeline;
     });
-  }, [appointmentsList, searchTerm, selectedTherapist, selectedType]);
+  }, [appointmentsList, rawDocsList, searchTerm, selectedTherapist, selectedType, selectedStatus, selectedTimeframe]);
 
   const handleStatusChange = async (item: AppointmentItem, newStatus: AppointmentItem['status']) => {
     try {
@@ -112,6 +129,8 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
             onTherapistChange={setSelectedTherapist}
             selectedType={selectedType}
             onTypeChange={setSelectedType}
+            selectedStatus={selectedStatus}
+            onStatusChangeFilter={setSelectedStatus}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
           />
