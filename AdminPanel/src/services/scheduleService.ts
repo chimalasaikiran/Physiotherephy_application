@@ -590,9 +590,14 @@ export const markCashAsPaidRecord = async (
   }
 
   const apptData = apptSnap.data();
-  const paymentId = apptData.paymentId;
+  const paymentId = apptData.paymentId || `pay-${appointmentId}`;
+  const amount = Number(apptData.pricing?.totalAmount || apptData.amount || apptData.numericFee || 800);
+  const patientId = apptData.patientId || apptData.userId || '';
+  const patientName = apptData.patientName || apptData.userName || 'Patient';
+  const therapistId = apptData.therapistId || apptData.doctorId || '';
+  const therapistName = apptData.therapistName || apptData.doctorName || apptData.doctor || '';
 
-  // Update Appointment document
+  // 1. Update Appointment document
   await updateDoc(apptRef, {
     paymentStatus: 'PAID',
     paidAt: nowIso,
@@ -600,25 +605,90 @@ export const markCashAsPaidRecord = async (
     updatedAt: nowIso,
   });
 
-  // Update Payment document if available
-  if (paymentId) {
+  // 2. Update or create Payment document in main payments collection
+  try {
+    const paymentRef = doc(db, PAYMENTS_COLLECTION, paymentId);
+    const payPayload = {
+      id: paymentId,
+      paymentId,
+      appointmentId,
+      bookingId: appointmentId,
+      patientId,
+      userId: patientId,
+      patientName,
+      therapistId,
+      therapistName,
+      doctor: therapistName,
+      doctorId: therapistId,
+      amount,
+      numericAmount: amount,
+      currency: 'INR',
+      paymentMethod: 'Cash',
+      paymentMethodName: 'Cash',
+      paymentStatus: 'Paid',
+      status: 'PAID',
+      paymentMode: 'clinic',
+      title: apptData.serviceTitle || apptData.patientSubtitle || 'Physiotherapy Session',
+      paidAt: nowIso,
+      collectedBy,
+      updatedAt: nowIso,
+    };
+    await setDoc(paymentRef, payPayload, { merge: true });
+
+    // 3. Mirror to user subcollection if patientId exists
+    if (patientId) {
+      try {
+        const userPayRef = doc(db, 'users', patientId, 'payments', paymentId);
+        await setDoc(userPayRef, payPayload, { merge: true });
+      } catch (subErr) {
+        console.warn('Mirror cash payment to user subcollection warning:', subErr);
+      }
+    }
+  } catch (e) {
+    console.warn('Payment document update error:', e);
+  }
+
+  // 4. Create Transaction record in transactions collection
+  try {
+    const txnId = `TXN-CASH-${Date.now().toString(36).toUpperCase()}`;
+    await addDoc(collection(db, 'transactions'), {
+      transactionId: txnId,
+      type: 'Payment',
+      patientId,
+      patientName,
+      therapistId,
+      therapistName,
+      appointmentId,
+      paymentId,
+      amount,
+      currency: 'INR',
+      method: 'Cash',
+      status: 'Completed',
+      description: `Cash payment of ₹${amount.toLocaleString('en-IN')} collected by ${collectedBy}`,
+      timestamp: nowIso,
+      createdAt: nowIso,
+    });
+  } catch (txnErr) {
+    console.warn('Transaction record logging warning:', txnErr);
+  }
+
+  // 5. Update linked invoice if invoice exists
+  if (apptData.invoiceId) {
     try {
-      const paymentRef = doc(db, PAYMENTS_COLLECTION, paymentId);
-      await updateDoc(paymentRef, {
-        paymentStatus: 'PAID',
+      await updateDoc(doc(db, 'invoices', apptData.invoiceId), {
         status: 'Paid',
-        paidAt: nowIso,
-        collectedBy,
+        paymentMethod: 'Cash',
+        paidDate: nowIso,
         updatedAt: nowIso,
       });
-    } catch (e) {
-      console.warn('Payment document update warning:', e);
+    } catch (invErr) {
+      console.warn('Invoice status update warning:', invErr);
     }
   }
 
-  // Audit trail
+  // 6. Audit trail
   await recordAuditLog('CASH_MARKED_PAID', appointmentId, collectedBy, {
-    amount: apptData.pricing?.totalAmount || apptData.amount || 0,
+    amount,
     paidAt: nowIso,
   });
 };

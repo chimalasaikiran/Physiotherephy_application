@@ -26,6 +26,9 @@ import { DateTimeSelectorModal } from '@/features/appointments';
 import { PaymentSelectionModal, BookingDetails } from '@/features/appointments';
 import { BookingSuccessModal } from '@/features/appointments';
 import { EmptyStateView } from '@/components';
+import { createAppointmentViaBackend } from '@/api/appointmentApi';
+import { mobileRealtimeSync } from '@/api/syncApi';
+import { auth } from '@/config/firebase';
 import { subscribeToTherapists } from '@/api/therapistService';
 
 export const TherapistDetailsScreen: React.FC = () => {
@@ -208,7 +211,7 @@ export const TherapistDetailsScreen: React.FC = () => {
     setIsPaymentModalVisible(true);
   };
 
-  const handleConfirmPayment = (finalBooking: {
+  const handleConfirmPayment = async (finalBooking: {
     bookingDetails: BookingDetails;
     paymentMode: 'online' | 'clinic';
     paymentMethodId: string;
@@ -220,24 +223,120 @@ export const TherapistDetailsScreen: React.FC = () => {
       netbanking: 'Net Banking',
       wallet: 'Digital Wallet',
     };
-    router.push({
-      pathname: '/payment-processing' as any,
-      params: {
-        doctorId: finalBooking.bookingDetails.doctor.id,
-        doctorName: finalBooking.bookingDetails.doctor.name,
-        doctorSpecialty: finalBooking.bookingDetails.doctor.specialty,
-        clinicName: finalBooking.bookingDetails.doctor.clinicName,
-        clinicAddress: finalBooking.bookingDetails.doctor.clinicAddress,
-        serviceTitle: serviceTitle || 'Physiotherapy Session',
-        fullDate: finalBooking.bookingDetails.fullDate,
-        timeSlot: finalBooking.bookingDetails.timeSlot,
-        feeStr: finalBooking.bookingDetails.feeStr,
-        numericFee: String(finalBooking.bookingDetails.numericFee),
-        paymentMode: finalBooking.paymentMode,
-        paymentMethodId: finalBooking.paymentMethodId,
-        paymentMethodName: methodNames[finalBooking.paymentMethodId] || 'Online Payment',
-      },
-    });
+    const paymentMethodName = finalBooking.paymentMode === 'clinic'
+      ? 'Pay at Clinic'
+      : (methodNames[finalBooking.paymentMethodId] || 'Online Payment');
+
+    if (finalBooking.paymentMode === 'clinic') {
+      // Immediate confirmation for Pay at Clinic - no processing animation screen!
+      const currentUid = auth.currentUser?.uid || 'user_demo_123';
+      const currentUserName = auth.currentUser?.displayName || 'Patient';
+      const bookingId = `OPT-${Math.floor(100000 + Math.random() * 900000)}`;
+      const transactionId = `TXN-${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+
+      try {
+        const createdId = await createAppointmentViaBackend({
+          id: bookingId,
+          doctorId: finalBooking.bookingDetails.doctor.id,
+          doctorName: finalBooking.bookingDetails.doctor.name,
+          doctorSpecialty: finalBooking.bookingDetails.doctor.specialty,
+          clinicName: finalBooking.bookingDetails.doctor.clinicName,
+          clinicAddress: finalBooking.bookingDetails.doctor.clinicAddress,
+          serviceTitle: serviceTitle || 'Physiotherapy Session',
+          placeId: finalBooking.bookingDetails.placeId || 'clinic',
+          placeTitle: 'In-Clinic Visit',
+          fullDate: finalBooking.bookingDetails.fullDate,
+          timeSlot: finalBooking.bookingDetails.timeSlot,
+          feeStr: finalBooking.bookingDetails.feeStr,
+          numericFee: finalBooking.bookingDetails.numericFee,
+          paymentMode: 'clinic',
+          paymentMethodName: 'Pay at Clinic',
+          userId: currentUid,
+          userName: currentUserName,
+        });
+
+        await mobileRealtimeSync.processPayment({
+          id: transactionId,
+          bookingId: createdId || bookingId,
+          userId: currentUid,
+          patientName: currentUserName,
+          doctorId: finalBooking.bookingDetails.doctor.id,
+          therapistId: finalBooking.bookingDetails.doctor.id,
+          doctor: finalBooking.bookingDetails.doctor.name,
+          title: serviceTitle || 'Physiotherapy Session',
+          amount: finalBooking.bookingDetails.numericFee || 800,
+          invoiceNumber: `INV-${transactionId.slice(-6)}`,
+          status: 'Pending',
+          paymentMethod: 'Pay at Clinic',
+        });
+
+        router.replace({
+          pathname: '/appointment-confirmed' as any,
+          params: {
+            bookingId: createdId || bookingId,
+            doctorId: finalBooking.bookingDetails.doctor.id,
+            doctorName: finalBooking.bookingDetails.doctor.name,
+            doctorSpecialty: finalBooking.bookingDetails.doctor.specialty,
+            clinicName: finalBooking.bookingDetails.doctor.clinicName,
+            clinicAddress: finalBooking.bookingDetails.doctor.clinicAddress,
+            serviceTitle: serviceTitle || 'Physiotherapy Session',
+            placeTitle: 'In-Clinic Visit',
+            fullDate: finalBooking.bookingDetails.fullDate,
+            timeSlot: finalBooking.bookingDetails.timeSlot,
+            feeStr: finalBooking.bookingDetails.feeStr,
+            paymentMode: 'clinic',
+            paymentMethodName: 'Pay at Clinic',
+            transactionId: transactionId,
+          },
+        });
+      } catch (error: any) {
+        if (error?.message === 'SLOT_ALREADY_BOOKED') {
+          Alert.alert(
+            'Slot Unavailable',
+            'This time slot has already been booked by another user. Please select another slot.'
+          );
+        } else {
+          router.replace({
+            pathname: '/appointment-confirmed' as any,
+            params: {
+              bookingId: bookingId,
+              doctorId: finalBooking.bookingDetails.doctor.id,
+              doctorName: finalBooking.bookingDetails.doctor.name,
+              doctorSpecialty: finalBooking.bookingDetails.doctor.specialty,
+              clinicName: finalBooking.bookingDetails.doctor.clinicName,
+              clinicAddress: finalBooking.bookingDetails.doctor.clinicAddress,
+              serviceTitle: serviceTitle || 'Physiotherapy Session',
+              placeTitle: 'In-Clinic Visit',
+              fullDate: finalBooking.bookingDetails.fullDate,
+              timeSlot: finalBooking.bookingDetails.timeSlot,
+              feeStr: finalBooking.bookingDetails.feeStr,
+              paymentMode: 'clinic',
+              paymentMethodName: 'Pay at Clinic',
+              transactionId: transactionId,
+            },
+          });
+        }
+      }
+    } else {
+      router.push({
+        pathname: '/payment-processing' as any,
+        params: {
+          doctorId: finalBooking.bookingDetails.doctor.id,
+          doctorName: finalBooking.bookingDetails.doctor.name,
+          doctorSpecialty: finalBooking.bookingDetails.doctor.specialty,
+          clinicName: finalBooking.bookingDetails.doctor.clinicName,
+          clinicAddress: finalBooking.bookingDetails.doctor.clinicAddress,
+          serviceTitle: serviceTitle || 'Physiotherapy Session',
+          fullDate: finalBooking.bookingDetails.fullDate,
+          timeSlot: finalBooking.bookingDetails.timeSlot,
+          feeStr: finalBooking.bookingDetails.feeStr,
+          numericFee: String(finalBooking.bookingDetails.numericFee),
+          paymentMode: finalBooking.paymentMode,
+          paymentMethodId: finalBooking.paymentMethodId,
+          paymentMethodName: paymentMethodName,
+        },
+      });
+    }
   };
 
   const handleBookingDone = () => {

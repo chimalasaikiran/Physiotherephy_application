@@ -27,9 +27,11 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
   });
 
   const handleMarkPaid = async (id: string) => {
+    const isCash = window.confirm('Click OK to mark payment as Cash (Received at Clinic), or Cancel to mark as Online/UPI.');
+    const method = isCash ? 'Cash' : 'UPI';
     setActionLoadingId(id);
     try {
-      await markInvoiceAsPaid(id, 'UPI');
+      await markInvoiceAsPaid(id, method);
     } catch (err) {
       console.error('Error marking invoice paid:', err);
     } finally {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
-import { Calendar as CalendarIcon, Clock, MoreVertical, Eye, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, MoreVertical, Eye, Trash2, Banknote } from 'lucide-react';
 import { formatAppointmentTypeLabel } from '@/utils/appointmentUtils';
 
 export interface AppointmentItem {
@@ -212,7 +212,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
                         </button>
 
                         {activeMenuId === item.id && (
-                          <div className="absolute right-4 mt-1 w-44 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-30 text-left text-xs font-semibold text-slate-700 animate-in fade-in zoom-in-95 duration-150">
+                          <div className="absolute right-4 mt-1 w-48 bg-white rounded-2xl shadow-xl border border-slate-100 py-1.5 z-30 text-left text-xs font-semibold text-slate-700 animate-in fade-in zoom-in-95 duration-150">
                             <button
                               onClick={() => {
                                 setActiveMenuId(null);
@@ -223,6 +223,20 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
                               <Eye className="w-4 h-4 text-blue-600" />
                               <span>View Details</span>
                             </button>
+                            {String(item.paymentStatus || '').toUpperCase() !== 'PAID' && (
+                              <button
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  if (confirm(`Mark cash payment of ₹${item.amount || 800} as Paid for ${item.patientName}?`)) {
+                                    onMarkCashPaid?.(item);
+                                  }
+                                }}
+                                className="w-full flex items-center space-x-2 px-3.5 py-2 hover:bg-emerald-50 text-emerald-700 font-bold cursor-pointer"
+                              >
+                                <Banknote className="w-4 h-4 text-emerald-600" />
+                                <span>Mark Cash Paid</span>
+                              </button>
+                            )}
                             <div className="my-1 border-t border-slate-100" />
                             <button
                               onClick={() => {

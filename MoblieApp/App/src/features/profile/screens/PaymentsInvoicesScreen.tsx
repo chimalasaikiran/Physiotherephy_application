@@ -595,7 +595,7 @@ export const PaymentsInvoicesScreen: React.FC = () => {
                               color="#64748B"
                               style={{ marginRight: 4 }}
                             />
-                            <Text style={styles.metaPaymentText}>
+                            <Text style={styles.metaPaymentText} numberOfLines={1} ellipsizeMode="tail">
                               {invoice.paymentMethod}
                             </Text>
                           </View>
@@ -981,13 +981,17 @@ const styles = StyleSheet.create({
     borderTopColor: '#F8FAFC',
   },
   footerLeftGroup: {
+    flex: 1,
+    flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    paddingRight: 6,
   },
   metaSubItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
   },
   metaDateText: {
     fontSize: 11,
@@ -998,10 +1002,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: Typography.fontWeight.bold,
     color: '#64748B',
+    flexShrink: 1,
   },
   footerRightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
   },
   payNowButton: {
     backgroundColor: '#003D9B',
