@@ -115,21 +115,6 @@ export const TodaysSchedule: React.FC<TodaysScheduleProps> = ({
                     <div className="justify-center text-slate-900 text-base font-normal font-['Inter'] leading-6">
                       {item.title}
                     </div>
-                    {item.status && (
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          item.status === 'Expired'
-                            ? 'bg-amber-200/60 text-amber-900 border border-amber-300'
-                            : item.status === 'Active / Today'
-                            ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                            : item.status === 'Completed'
-                            ? 'bg-blue-100 text-blue-900 border border-blue-300'
-                            : 'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    )}
                   </div>
                   <div className="self-stretch flex flex-col justify-start items-start">
                     <div className="self-stretch justify-center text-gray-700 text-xs font-normal font-['Inter'] leading-4">

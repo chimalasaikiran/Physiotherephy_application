@@ -1,0 +1,12 @@
+{
+  "framework": "vite",
+  "buildCommand": "cd AdminPanel && npm run build",
+  "installCommand": "cd AdminPanel && npm install",
+  "outputDirectory": "AdminPanel/dist",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
