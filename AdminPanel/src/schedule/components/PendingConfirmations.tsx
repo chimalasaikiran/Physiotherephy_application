@@ -11,47 +11,48 @@ export const PendingConfirmations: React.FC<PendingConfirmationsProps> = ({
   appointments = [],
   onConfirm,
 }) => {
-  const pendingItems = appointments.filter((a) => a.status === 'Scheduled');
+  const pendingItems = appointments.filter((a) => a.status === 'Scheduled' || a.status === 'Pending');
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs space-y-4">
+    <div className="self-stretch p-6 bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] flex flex-col justify-start items-start gap-4 shadow-[0px_4px_24px_-1px_rgba(0,104,123,0.05)]">
       {/* Widget Header */}
-      <h3 className="text-xs font-bold text-slate-400 tracking-wider uppercase">
-        PENDING CONFIRMATIONS ({pendingItems.length})
-      </h3>
+      <div className="self-stretch flex flex-col justify-start items-start">
+        <div className="justify-center text-gray-500 text-sm font-extrabold font-['Inter'] uppercase leading-5 tracking-wider">
+          PENDING CONFIRMATIONS
+        </div>
+      </div>
 
       {/* Confirmation List */}
-      <div className="space-y-3">
+      <div className="self-stretch flex flex-col justify-start items-start gap-3">
         {pendingItems.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-2 font-medium">
+          <p className="text-xs text-gray-500 text-center py-2 font-normal font-['Inter'] w-full">
             No pending confirmations.
           </p>
         ) : (
           pendingItems.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between p-3 rounded-xl border border-slate-100/80 bg-slate-50/40 hover:bg-slate-50 transition-colors"
+              className="self-stretch p-3 bg-white/50 rounded-[48px] outline outline-1 outline-offset-[-1px] outline-slate-300/20 flex items-center justify-between gap-3"
             >
-              <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <Bell className="w-4 h-4" />
+              <div className="w-10 h-10 bg-red-700/10 rounded-full flex justify-center items-center shrink-0">
+                <Bell className="w-4 h-4 text-red-700" />
+              </div>
+
+              <div className="flex-1 flex flex-col justify-start items-start">
+                <div className="justify-center text-slate-900 text-xs font-bold font-['Inter'] leading-4">
+                  {item.patientName}
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900 leading-tight">
-                    {item.patientName}
-                  </h4>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">
-                    {item.date} • {item.time}
-                  </p>
+                <div className="justify-center text-gray-500 text-[10px] font-normal font-['Inter'] leading-4">
+                  {item.type} · {item.date}
                 </div>
               </div>
 
               <button
                 onClick={() => onConfirm?.(item)}
-                className="p-1 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                className="p-1.5 hover:bg-emerald-50 rounded-full transition-colors text-slate-400 hover:text-emerald-600 cursor-pointer shrink-0"
                 title="Confirm Appointment"
               >
-                <CheckCircle2 className="w-5 h-5 text-slate-300 hover:text-emerald-600" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
               </button>
             </div>
           ))

@@ -16,18 +16,18 @@ export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [
     const minsA = tA.hours * 60 + tA.minutes;
     const minsB = tB.hours * 60 + tB.minutes;
     return minsA - minsB;
-  }).slice(0, 6);
+  }).slice(0, 5);
 
   return (
-    <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs space-y-4">
+    <div className="self-stretch p-6 bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] flex flex-col justify-start items-start gap-6 shadow-[0px_4px_24px_-1px_rgba(0,104,123,0.05)]">
       {/* Widget Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-bold text-slate-400 tracking-wider uppercase">
+      <div className="self-stretch inline-flex justify-between items-center">
+        <div className="justify-center text-gray-500 text-sm font-extrabold font-['Inter'] uppercase leading-5 tracking-wider">
           TODAY'S TIMELINE
-        </h3>
+        </div>
         <button
           onClick={() => sortedItems[0] && onSelectSession?.(sortedItems[0])}
-          className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
+          className="text-center text-blue-900 text-xs font-bold font-['Inter'] leading-4 hover:underline cursor-pointer"
         >
           View All
         </button>
@@ -35,57 +35,41 @@ export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [
 
       {/* Timeline Items */}
       {sortedItems.length > 0 ? (
-        <div className="relative pl-5 space-y-5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
-          {sortedItems.map((item) => {
-            const statusColor =
-              item.status === 'Completed'
-                ? 'text-emerald-600'
-                : item.status === 'In Progress'
-                ? 'text-blue-600'
-                : item.status === 'Cancelled'
-                ? 'text-rose-600'
-                : (item.status as any) === 'Expired'
-                ? 'text-amber-700'
-                : 'text-sky-600';
-
-            const dotColor =
-              item.status === 'Completed'
-                ? 'bg-emerald-500 ring-emerald-100'
-                : item.status === 'In Progress'
-                ? 'bg-blue-600 ring-blue-100 animate-pulse'
-                : item.status === 'Cancelled'
-                ? 'bg-rose-500 ring-rose-100'
-                : (item.status as any) === 'Expired'
-                ? 'bg-amber-600 ring-amber-100'
-                : 'bg-sky-500 ring-sky-100';
+        <div className="self-stretch relative flex flex-col justify-start items-start gap-6">
+          <div className="w-0.5 bottom-2 left-[7px] top-[8px] absolute bg-slate-300/30" />
+          {sortedItems.map((item, idx) => {
+            const isFirstActive = idx === 0 || item.status === 'In Progress';
+            const dotBorder = isFirstActive ? 'border-blue-900' : 'border-slate-300';
+            const tagColor = isFirstActive ? 'text-blue-900' : 'text-gray-500';
+            const tagLabel = item.status === 'In Progress' ? 'Ongoing' : item.status === 'Completed' ? 'Done' : item.status;
 
             return (
               <div
                 key={item.id}
                 onClick={() => onSelectSession?.(item)}
-                className="relative flex items-start justify-between cursor-pointer hover:opacity-80 transition-opacity"
+                className="self-stretch pl-6 relative flex flex-col justify-start items-start cursor-pointer hover:opacity-85 transition-opacity"
               >
-                {/* Timeline Dot */}
-                <div className={`absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full ring-4 ring-white ${dotColor}`} />
-
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900 leading-tight">
-                    {item.time} • {item.patientName}
-                  </h4>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    {formatAppointmentTypeLabel(item.type)}
-                  </p>
+                <div className="self-stretch inline-flex justify-between items-start">
+                  <div className="flex flex-col justify-start items-start">
+                    <div className="justify-center text-slate-900 text-xs font-bold font-['Inter'] leading-5">
+                      {item.patientName}
+                    </div>
+                    <div className="justify-center text-gray-500 text-xs font-normal font-['Inter'] leading-4">
+                      {item.time} · {formatAppointmentTypeLabel(item.type)}
+                    </div>
+                  </div>
+                  <div className={`justify-center text-[10px] font-bold font-['Inter'] leading-4 ${tagColor}`}>
+                    {tagLabel}
+                  </div>
                 </div>
-
-                <span className={`text-xs font-extrabold ${statusColor}`}>
-                  {item.status}
-                </span>
+                {/* Timeline Dot */}
+                <div className={`w-3.5 h-3.5 left-0 top-[4px] absolute bg-white rounded-full border-2 ${dotBorder}`} />
               </div>
             );
           })}
         </div>
       ) : (
-        <p className="text-xs text-slate-400 text-center py-4 font-medium">
+        <p className="text-xs text-gray-500 text-center py-4 font-normal font-['Inter'] w-full">
           No appointments scheduled for today
         </p>
       )}

@@ -39,18 +39,18 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
   onViewModeChange,
 }) => {
   return (
-    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs">
+    <div className="px-4 py-3.5 bg-white/70 rounded-2xl shadow-[0px_4px_24px_-1px_rgba(0,104,123,0.05)] outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] flex flex-wrap items-center justify-between gap-3 overflow-hidden">
       {/* Left side: Search & Filter Dropdowns */}
-      <div className="flex flex-1 flex-wrap items-center gap-2.5 min-w-0">
+      <div className="flex flex-1 flex-wrap items-center gap-3 min-w-0">
         {/* Search input */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+        <div className="flex-1 min-w-[240px] px-3.5 py-2 bg-white rounded-[48px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] outline outline-1 outline-offset-[-1px] outline-slate-300/30 flex items-center gap-2">
+          <Search className="w-4 h-4 text-gray-500 shrink-0" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search patient, therapist..."
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200/80 focus:bg-white focus:border-blue-500 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 outline-hidden transition-all"
+            placeholder="Filter list..."
+            className="w-full bg-transparent text-slate-900 placeholder-gray-500 text-xs font-normal font-['Inter'] outline-none"
           />
         </div>
 
@@ -59,7 +59,7 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
           <select
             value={selectedTimeframe}
             onChange={(e) => onTimeframeChange(e.target.value)}
-            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+            className="appearance-none bg-white rounded-[48px] outline outline-1 outline-offset-[-1px] outline-slate-300/30 text-slate-900 text-xs font-semibold font-['Inter'] pl-9 pr-8 py-2 cursor-pointer transition-colors"
           >
             <option value="All">All Dates</option>
             <option value="Today">Today</option>
@@ -68,8 +68,41 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
             <option value="This Month">This Month</option>
             <option value="This Year">This Year</option>
           </select>
-          <Calendar className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <Calendar className="w-3.5 h-3.5 text-slate-900 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* Therapist Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={selectedTherapist}
+            onChange={(e) => onTherapistChange(e.target.value)}
+            className="appearance-none bg-white rounded-[48px] outline outline-1 outline-offset-[-1px] outline-slate-300/30 text-slate-900 text-xs font-semibold font-['Inter'] pl-9 pr-8 py-2 cursor-pointer transition-colors"
+          >
+            <option value="All">Therapist</option>
+            <option value="Dr. Priya Sharma">Dr. Priya Sharma</option>
+            <option value="Dr. Rohan Gupta">Dr. Rohan Gupta</option>
+            <option value="Dr. Ananya Roy">Dr. Ananya Roy</option>
+            <option value="Dr. Arjun Mehta">Dr. Arjun Mehta</option>
+          </select>
+          <User className="w-3.5 h-3.5 text-slate-900 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* Appointment Type Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={selectedType}
+            onChange={(e) => onTypeChange(e.target.value)}
+            className="appearance-none bg-white rounded-[48px] outline outline-1 outline-offset-[-1px] outline-slate-300/30 text-slate-900 text-xs font-semibold font-['Inter'] pl-9 pr-8 py-2 cursor-pointer transition-colors"
+          >
+            <option value="All">Type</option>
+            <option value="Clinic Visit">Clinic Visit</option>
+            <option value="Online">Online</option>
+            <option value="Home Visit">Home Visit</option>
+          </select>
+          <Tag className="w-3.5 h-3.5 text-slate-900 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
         {/* Appointment Status Filter Dropdown */}
@@ -78,116 +111,46 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
             <select
               value={selectedStatus}
               onChange={(e) => onStatusChangeFilter(e.target.value)}
-              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+              className="appearance-none bg-white rounded-[48px] outline outline-1 outline-offset-[-1px] outline-slate-300/30 text-slate-900 text-xs font-semibold font-['Inter'] pl-9 pr-8 py-2 cursor-pointer transition-colors"
             >
-              <option value="All">All Statuses</option>
+              <option value="All">Status</option>
               <option value="Confirmed">Confirmed</option>
-              <option value="Pending">Pending</option>
               <option value="Scheduled">Scheduled</option>
+              <option value="Pending">Pending</option>
               <option value="In Progress">In Progress</option>
               <option value="Completed">Completed</option>
               <option value="Cancelled">Cancelled</option>
-              <option value="No Show">No Show</option>
             </select>
-            <CheckCircle2 className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-slate-900 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         )}
-
-        {/* Appointment Type Filter Dropdown */}
-        <div className="relative">
-          <select
-            value={selectedType}
-            onChange={(e) => onTypeChange(e.target.value)}
-            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
-          >
-            <option value="All">All Types</option>
-            <option value="Home Visit">Home Visit</option>
-            <option value="Clinic Visit">Clinic Visit</option>
-            <option value="Online">Online</option>
-          </select>
-          <Tag className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
-
-        {/* Payment Method Filter Dropdown */}
-        {onPaymentMethodChange && (
-          <div className="relative">
-            <select
-              value={selectedPaymentMethod}
-              onChange={(e) => onPaymentMethodChange(e.target.value)}
-              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
-            >
-              <option value="All">All Methods</option>
-              <option value="Online">Online</option>
-              <option value="Cash">Cash</option>
-            </select>
-            <CreditCard className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-        )}
-
-        {/* Payment Status Filter Dropdown */}
-        {onPaymentStatusChange && (
-          <div className="relative">
-            <select
-              value={selectedPaymentStatus}
-              onChange={(e) => onPaymentStatusChange(e.target.value)}
-              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
-            >
-              <option value="All">All Payment Statuses</option>
-              <option value="Pending">Pending</option>
-              <option value="Paid">Paid</option>
-              <option value="Failed">Failed</option>
-              <option value="Refunded">Refunded</option>
-              <option value="Partial">Partial</option>
-            </select>
-            <DollarSign className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-        )}
-
-        {/* Therapist Filter Dropdown */}
-        <div className="relative">
-          <select
-            value={selectedTherapist}
-            onChange={(e) => onTherapistChange(e.target.value)}
-            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
-          >
-            <option value="All">All Therapists</option>
-            <option value="Dr. Arjun Mehta">Dr. Arjun Mehta</option>
-            <option value="Dr. Ananya Iyer">Dr. Ananya Iyer</option>
-            <option value="Dr. Rajesh Sharma">Dr. Rajesh Sharma</option>
-          </select>
-          <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
       </div>
 
       {/* Right side: View Mode Toggle */}
-      <div className="flex items-center justify-end border-t lg:border-t-0 pt-2 lg:pt-0 border-slate-100 gap-1">
-        <div className="bg-slate-100 p-1 rounded-xl flex items-center gap-1">
+      <div className="flex items-center justify-end">
+        <div className="p-1 bg-indigo-50 rounded-[48px] outline outline-1 outline-offset-[-1px] outline-slate-300/30 inline-flex items-center gap-1">
           <button
             onClick={() => onViewModeChange('list')}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 rounded-[32px] inline-flex items-center justify-center transition-all cursor-pointer ${
               viewMode === 'list'
-                ? 'bg-white text-blue-600 shadow-xs'
+                ? 'bg-white shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-blue-900'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
             title="List View"
           >
-            <List className="w-4 h-4" />
+            <List className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => onViewModeChange('grid')}
-            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+            className={`px-3 py-1.5 rounded-[32px] inline-flex items-center justify-center transition-all cursor-pointer ${
               viewMode === 'grid'
-                ? 'bg-white text-blue-600 shadow-xs'
+                ? 'bg-white shadow-[0px_1px_2px_0px_rgba(0,0,0,0.05)] text-blue-900'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
             title="Grid View"
           >
-            <LayoutGrid className="w-4 h-4" />
+            <LayoutGrid className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
