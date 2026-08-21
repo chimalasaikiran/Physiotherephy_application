@@ -19,6 +19,7 @@ import {
   Trash2,
   FileSpreadsheet,
   Check,
+  Shapes,
 } from 'lucide-react';
 import { InitialsAvatar } from '../components/ui/InitialsAvatar';
 
@@ -144,23 +145,29 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
     setMetrics(calculated);
   }, [patients, payments, reports, exportsArchive]);
 
-  // Convert FirestoreReportRecord to RecentReport for UI view
-  const recentReports: RecentReport[] = reports.map((r) => ({
-    id: r.id,
-    title: r.title,
-    category: r.category,
-    date: r.date,
-    status: r.status,
-    author: r.author,
-    iconType: r.iconType || 'document',
-    patientId: r.patientId,
-    patientName: r.patientName,
-    therapistId: r.therapistId,
-    therapistName: r.therapistName,
-    summaryText: r.summaryText,
-    fileFormat: r.fileFormat,
-    isPinned: r.isPinned,
-  }));
+  // Deduplicate and convert FirestoreReportRecord to RecentReport for UI view
+  const recentReportsMap = new Map<string, RecentReport>();
+  reports.forEach((r) => {
+    if (!recentReportsMap.has(r.id)) {
+      recentReportsMap.set(r.id, {
+        id: r.id,
+        title: r.title,
+        category: r.category,
+        date: r.date,
+        status: r.status,
+        author: r.author,
+        iconType: r.iconType || 'document',
+        patientId: r.patientId,
+        patientName: r.patientName,
+        therapistId: r.therapistId,
+        therapistName: r.therapistName,
+        summaryText: r.summaryText,
+        fileFormat: r.fileFormat,
+        isPinned: r.isPinned,
+      });
+    }
+  });
+  const recentReports = Array.from(recentReportsMap.values());
 
   // Filtered recent reports logic
   const filteredRecentReports = recentReports.filter((report) => {
@@ -203,6 +210,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
   });
 
   const pinnedReports = recentReports.filter((r) => r.isPinned);
+  const unpinnedRecentReports = filteredRecentReports.filter((r) => !r.isPinned);
+  const displayRecentReports = pinnedReports.length > 0 ? unpinnedRecentReports : filteredRecentReports;
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
@@ -563,7 +572,6 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
           <div className="self-stretch pb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {/* Card 1: Reports Generated */}
             <div className="flex-1 p-6 relative bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-slate-200 backdrop-blur-[10px] inline-flex flex-col justify-start items-start gap-2 shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow">
-              <div className="w-64 h-48 left-0 top-0 absolute bg-white/0 rounded-3xl shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] pointer-events-none"></div>
               <div className="w-10 h-12 pb-2 flex flex-col justify-start items-start">
                 <div className="size-10 bg-teal-500/10 rounded-full inline-flex justify-center items-center">
                   <FileText className="w-5 h-5 text-blue-900" />
@@ -591,7 +599,6 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
 
             {/* Card 2: Monthly Exports */}
             <div className="flex-1 p-6 relative bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-slate-200 backdrop-blur-[10px] inline-flex flex-col justify-start items-start gap-2 shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow">
-              <div className="w-64 h-48 left-0 top-0 absolute bg-white/0 rounded-3xl shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] pointer-events-none"></div>
               <div className="w-10 h-12 pb-2 flex flex-col justify-start items-start">
                 <div className="size-10 bg-blue-900/10 rounded-full inline-flex justify-center items-center">
                   <Download className="w-5 h-5 text-blue-900" />
@@ -616,7 +623,6 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
 
             {/* Card 3: Scheduled Reports */}
             <div className="flex-1 p-6 relative bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-slate-200 backdrop-blur-[10px] inline-flex flex-col justify-start items-start gap-2 shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow">
-              <div className="w-64 h-48 left-0 top-0 absolute bg-white/0 rounded-3xl shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] pointer-events-none"></div>
               <div className="w-10 h-12 pb-2 flex flex-col justify-start items-start">
                 <div className="size-10 bg-indigo-800/10 rounded-full inline-flex justify-center items-center">
                   <Clock className="w-5 h-5 text-indigo-800" />
@@ -641,7 +647,6 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
 
             {/* Card 4: Storage Used */}
             <div className="flex-1 px-6 pt-6 pb-8 relative bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-slate-200 backdrop-blur-[10px] inline-flex flex-col justify-start items-start gap-2 shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] hover:shadow-md transition-shadow">
-              <div className="w-64 h-48 left-0 top-0 absolute bg-white/0 rounded-3xl shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] pointer-events-none"></div>
               <div className="w-10 h-12 pb-2 flex flex-col justify-start items-start">
                 <div className="size-10 bg-sky-800/10 rounded-full inline-flex justify-center items-center">
                   <HardDrive className="w-5 h-5 text-sky-800" />
@@ -670,37 +675,31 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
             </div>
           </div>
 
-          {/* Search & Filter Bar Container (Figma Glassmorphism Node) */}
-          <div className="self-stretch p-4 relative bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-slate-200 backdrop-blur-[10px] shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] flex flex-wrap lg:flex-nowrap items-center justify-between gap-4">
-            {/* Search Input Box */}
-            <div className="w-full lg:w-96 relative">
-              <div className="w-full pl-10 pr-4 py-3 bg-indigo-50 rounded-2xl flex items-center overflow-hidden border border-transparent focus-within:border-blue-500 focus-within:bg-white transition-all">
-                <Search className="w-4 h-4 text-gray-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          {/* Search & Filter Bar Container (Single Horizontal Row - No Wrapping) */}
+          <div className="w-full max-w-[1088px] h-36 p-6 relative bg-white rounded-3xl shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] flex items-start justify-between gap-3 overflow-x-auto no-scrollbar">
+            {/* Search Input Pill */}
+            <div className="w-72 lg:w-[340px] shrink-0 relative">
+              <div className="w-full pl-10 pr-4 py-2.5 bg-[#F2F4FD] hover:bg-[#E8EDFD] rounded-2xl flex items-center overflow-hidden transition-all">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search reports, authors, or categories..."
-                  className="w-full bg-transparent text-sm text-gray-500 font-['Inter'] focus:outline-none"
+                  className="w-full bg-transparent text-sm text-slate-700 placeholder-slate-400 font-['Inter'] focus:outline-none"
                 />
               </div>
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
-              <button
-                type="button"
-                className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 rounded-2xl inline-flex justify-start items-center gap-2 text-gray-700 text-base font-normal font-['Inter'] leading-6 transition-colors cursor-pointer"
-              >
-                <Calendar className="w-3.5 h-3.5 text-gray-700" />
-                <span>Date Range</span>
-              </button>
-
-              <div className="relative">
+            {/* Filter & Action Pills Row (Single Line) */}
+            <div className="flex items-center gap-2.5 shrink-0 flex-nowrap">
+              {/* Report Type Filter Pill */}
+              <div className="relative inline-flex items-center gap-2 bg-[#F2F4FD] hover:bg-[#E8EDFD] rounded-2xl px-4 py-2.5 transition-colors cursor-pointer shrink-0">
+                <Shapes className="w-4 h-4 text-slate-600 shrink-0 pointer-events-none" />
                 <select
                   value={reportTypeFilter}
                   onChange={(e) => setReportTypeFilter(e.target.value)}
-                  className="appearance-none bg-indigo-50 hover:bg-indigo-100 rounded-2xl px-4 py-2.5 pr-8 text-base font-normal text-gray-700 font-['Inter'] leading-6 focus:outline-none cursor-pointer transition-colors"
+                  className="appearance-none bg-transparent pr-1 text-sm font-medium text-slate-700 font-['Inter'] focus:outline-none cursor-pointer"
                 >
                   <option value="All">Report Type</option>
                   <option value="Clinical">Clinical Analysis</option>
@@ -709,14 +708,15 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                   <option value="Financial">Financial</option>
                   <option value="Patient Care">Patient Care</option>
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 text-gray-700 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
-              <div className="relative">
+              {/* Created By Filter Pill */}
+              <div className="relative inline-flex items-center gap-2 bg-[#F2F4FD] hover:bg-[#E8EDFD] rounded-2xl px-4 py-2.5 transition-colors cursor-pointer shrink-0">
+                <User className="w-4 h-4 text-slate-600 shrink-0 pointer-events-none" />
                 <select
                   value={therapistFilter}
                   onChange={(e) => setTherapistFilter(e.target.value)}
-                  className="appearance-none bg-indigo-50 hover:bg-indigo-100 rounded-2xl px-4 py-2.5 pr-8 text-base font-normal text-gray-700 font-['Inter'] leading-6 focus:outline-none cursor-pointer transition-colors"
+                  className="appearance-none bg-transparent pr-1 text-sm font-medium text-slate-700 font-['Inter'] focus:outline-none cursor-pointer"
                 >
                   <option value="All">Created By</option>
                   {therapists.map((t) => (
@@ -725,29 +725,30 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                     </option>
                   ))}
                 </select>
-                <User className="w-3.5 h-3.5 text-gray-700 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
-              <div className="relative">
+              {/* Status Filter Pill */}
+              <div className="relative inline-flex items-center gap-2 bg-[#F2F4FD] hover:bg-[#E8EDFD] rounded-2xl px-4 py-2.5 transition-colors cursor-pointer shrink-0">
+                <ShieldCheck className="w-4 h-4 text-slate-600 shrink-0 pointer-events-none" />
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="appearance-none bg-indigo-50 hover:bg-indigo-100 rounded-2xl px-4 py-2.5 pr-8 text-base font-normal text-gray-700 font-['Inter'] leading-6 focus:outline-none cursor-pointer transition-colors"
+                  className="appearance-none bg-transparent pr-1 text-sm font-medium text-slate-700 font-['Inter'] focus:outline-none cursor-pointer"
                 >
                   <option value="All">Status</option>
                   <option value="Verified">Ready / Verified</option>
                   <option value="Needs Review">Needs Review</option>
                   <option value="Draft">Draft</option>
                 </select>
-                <ShieldCheck className="w-3.5 h-3.5 text-gray-700 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
+              {/* Sort By Button */}
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="px-4 py-2.5 rounded-2xl border border-slate-300 hover:bg-slate-50 inline-flex justify-start items-center gap-2 text-gray-700 text-base font-normal font-['Inter'] leading-6 transition-colors cursor-pointer"
+                className="px-3.5 py-2.5 rounded-2xl hover:bg-[#F2F4FD] inline-flex justify-start items-center gap-2 text-slate-700 text-sm font-medium font-['Inter'] transition-colors cursor-pointer shrink-0"
               >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-gray-700" />
+                <SlidersHorizontal className="w-4 h-4 text-slate-600" />
                 <span>Sort By</span>
               </button>
             </div>
@@ -877,8 +878,8 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                 </div>
 
                 <div className="self-stretch bg-white/70 rounded-3xl shadow-[0px_2px_4px_-1px_rgba(0,0,0,0.03)] shadow-[0px_4px_6px_-1px_rgba(0,0,0,0.05)] outline outline-1 outline-offset-[-1px] outline-slate-200 backdrop-blur-[10px] flex flex-col justify-start items-start overflow-hidden divide-y divide-slate-300/30">
-                  {filteredRecentReports.length > 0 ? (
-                    filteredRecentReports.map((report) => {
+                  {displayRecentReports.length > 0 ? (
+                    displayRecentReports.map((report) => {
                       const authorName =
                         typeof report.author === 'string'
                           ? report.author
