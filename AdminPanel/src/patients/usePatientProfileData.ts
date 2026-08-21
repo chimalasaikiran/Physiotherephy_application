@@ -15,7 +15,17 @@ import type { ProgramAssignment } from '@/programs/types';
 import type { PaymentRecord, InvoiceDocument } from '@/payments/types';
 import { mapDocToAssignment, assignPatientToProgram } from '@/services/programService';
 import { mapDocToPayment, mapDocToInvoice } from '@/services/paymentService';
-import { updatePatientRecord } from '@/services/patientService';
+import {
+  subscribeToPatientActivityLogs,
+  subscribeToPatientProgress,
+  subscribeToPatientMedicalHistory,
+  subscribeToPatientNotes,
+  saveClinicalNote,
+  deleteClinicalNote,
+  saveMedicalHistoryRecord,
+  addProgressRecord,
+  addPatientActivityLog,
+} from '@/services/patientService';
 
 export interface PatientReportItem extends PatientReport {
   name?: string;
@@ -37,6 +47,10 @@ export function usePatientProfileData(patient: Patient) {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [invoices, setInvoices] = useState<InvoiceDocument[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [progressRecords, setProgressRecords] = useState<any[]>([]);
+  const [medicalHistoryList, setMedicalHistoryList] = useState<any[]>([]);
+  const [clinicalNotesList, setClinicalNotesList] = useState<any[]>([]);
   const [patientDocData, setPatientDocData] = useState<Partial<Patient>>({});
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -301,6 +315,23 @@ export function usePatientProfileData(patient: Patient) {
     }
   }, [patientId]);
 
+  // 6. Listen to patient activity logs, progress, medical history, clinical notes
+  useEffect(() => {
+    if (!patientId) return;
+
+    const unsubLogs = subscribeToPatientActivityLogs(patientId, setActivityLogs);
+    const unsubProgress = subscribeToPatientProgress(patientId, setProgressRecords);
+    const unsubHistory = subscribeToPatientMedicalHistory(patientId, setMedicalHistoryList);
+    const unsubNotes = subscribeToPatientNotes(patientId, setClinicalNotesList);
+
+    return () => {
+      unsubLogs();
+      unsubProgress();
+      unsubHistory();
+      unsubNotes();
+    };
+  }, [patientId]);
+
   // Action Helpers
 
   /**
@@ -335,6 +366,13 @@ export function usePatientProfileData(patient: Patient) {
         createdAt: now,
         updatedAt: now,
       });
+
+      await addPatientActivityLog(patientId, {
+        action: 'Report created',
+        description: `Uploaded document: ${fileData.name}`,
+        performedBy: 'Admin',
+      });
+
       return docRef.id;
     },
     [patientId, patient.name]
@@ -345,7 +383,7 @@ export function usePatientProfileData(patient: Patient) {
    */
   const assignProgram = useCallback(
     async (programId: string, programTitle: string, totalWeeks = 8) => {
-      return await assignPatientToProgram(
+      const res = await assignPatientToProgram(
         programId,
         programTitle,
         {
@@ -358,6 +396,14 @@ export function usePatientProfileData(patient: Patient) {
         },
         totalWeeks
       );
+
+      await addPatientActivityLog(patientId, {
+        action: 'Program assigned',
+        description: `Assigned program "${programTitle}"`,
+        performedBy: 'Admin',
+      });
+
+      return res;
     },
     [patientId, patient]
   );
@@ -384,10 +430,10 @@ export function usePatientProfileData(patient: Patient) {
     );
 
     const totalSessionsFromPrograms = assignedPrograms.reduce(
-      (acc, p) => acc + (p.totalSessions || 16),
+      (acc, p) => acc + (p.totalSessions || 0),
       0
     );
-    const sessionsTotal = totalSessionsFromPrograms > 0 ? totalSessionsFromPrograms : (patient.sessionsTotal || 16);
+    const sessionsTotal = totalSessionsFromPrograms > 0 ? totalSessionsFromPrograms : (patient.sessionsTotal || 0);
 
     // Active Programs Count & Progress
     const activePrograms = assignedPrograms.filter((p) => p.status === 'active');
@@ -402,6 +448,8 @@ export function usePatientProfileData(patient: Patient) {
       avgProgramProgress = Math.round(
         assignedPrograms.reduce((acc, p) => acc + (p.progressPercent || 0), 0) / assignedPrograms.length
       );
+    } else if (progressRecords.length > 0) {
+      avgProgramProgress = Number(progressRecords[0].assessmentScore) || 0;
     } else {
       avgProgramProgress = Number(patient.recoveryScore) || 0;
     }
@@ -427,7 +475,7 @@ export function usePatientProfileData(patient: Patient) {
     });
 
     // Total Reports
-    const totalReportsCount = reports.length > 0 ? reports.length : (patient.reports ? patient.reports.length : 0);
+    const totalReportsCount = reports.length;
 
     return {
       totalAppointments,
@@ -439,7 +487,7 @@ export function usePatientProfileData(patient: Patient) {
       pendingAmount,
       totalReportsCount,
     };
-  }, [appointments, assignedPrograms, payments, invoices, reports, patient]);
+  }, [appointments, assignedPrograms, payments, invoices, reports, progressRecords, patient]);
 
   // Combined Merged Patient Data
   const mergedPatient: Patient = useMemo(() => {
@@ -450,7 +498,7 @@ export function usePatientProfileData(patient: Patient) {
       sessionsTotal: computedMetrics.sessionsTotal,
       programsAssignedCount: computedMetrics.programsCount,
       recoveryScore: computedMetrics.avgProgramProgress,
-      reports: reports.length > 0 ? (reports as any) : patient.reports,
+      reports: reports as any,
     };
   }, [patient, patientDocData, computedMetrics, reports]);
 
@@ -461,10 +509,20 @@ export function usePatientProfileData(patient: Patient) {
     payments,
     invoices,
     appointments,
+    activityLogs,
+    progressRecords,
+    medicalHistoryList,
+    clinicalNotesList,
     computedMetrics,
     isLoading,
     error,
     uploadReport,
     assignProgram,
+    addClinicalNote: (noteData: any) => saveClinicalNote(patientId, noteData),
+    removeClinicalNote: (noteId: string) => deleteClinicalNote(noteId, patientId),
+    addProgress: (progressData: any) => addProgressRecord(patientId, progressData),
+    addMedicalHistory: (medData: any) => saveMedicalHistoryRecord(patientId, medData),
+    logActivity: (logData: any) => addPatientActivityLog(patientId, logData),
   };
 }
+

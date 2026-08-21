@@ -343,7 +343,7 @@ export function useDashboardData() {
         if (dynamicStatus === 'Confirmed') {
           dotColor = 'bg-[#006A6B]';
           statusColor = 'text-[#051A3E]';
-        } else if (dynamicStatus === 'In Progress') {
+        } else if ((dynamicStatus as string) === 'In Progress') {
           dotColor = 'bg-[#003D9B]';
           statusColor = 'text-[#051A3E]';
         } else if (dynamicStatus === 'Completed') {

@@ -8,24 +8,23 @@ import {
   ExternalLink,
   Plus,
   Download,
-  MoreVertical,
   CheckCircle2,
   Circle,
   FileText,
   UserPlus,
   UploadCloud,
   CreditCard,
-  Flag,
   TrendingUp,
   Zap,
   ClipboardList,
   CheckCircle,
-  Video,
   ArrowLeft,
   Trash2,
+  Edit,
+  X,
 } from 'lucide-react';
-import type { Patient, PatientGoal } from './types';
-import { addGoalToPatient, toggleGoalStatus, addClinicalNoteToPatient, deletePatientRecord } from '@/services/patientService';
+import type { Patient } from './types';
+import { addGoalToPatient, toggleGoalStatus, deletePatientRecord, updatePatientRecord } from '@/services/patientService';
 import { usePatientProfileData } from './usePatientProfileData';
 import { MedicalHistoryTab } from './MedicalHistoryTab';
 import { ProgramsTab } from './ProgramsTab';
@@ -34,6 +33,8 @@ import { ReportsTab } from './ReportsTab';
 import { PaymentsTab } from './PaymentsTab';
 import { NotesTab } from './NotesTab';
 import { HistoryTab } from './HistoryTab';
+import { collection, addDoc } from 'firebase/firestore';
+import { db } from '@/auth/config/firebase';
 
 interface PatientProfilePageProps {
   patient: Patient;
@@ -53,17 +54,24 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
     reports,
     payments,
     invoices,
+    appointments,
+    activityLogs,
+    progressRecords,
+    medicalHistoryList,
+    clinicalNotesList,
     computedMetrics,
     uploadReport,
     assignProgram,
+    addClinicalNote,
+    removeClinicalNote,
+    addProgress,
+    addMedicalHistory,
+    logActivity,
   } = usePatientProfileData(initialPatient);
 
   const patientName = (patient.name && patient.name !== 'Unnamed Patient') ? patient.name : `Patient (${patient.patientId || patient.id.slice(0, 6)})`;
   const patientAge = patient.age || 30;
-  const patientGender = patient.gender || 'Male';
-  const patientAvatar =
-    patient.avatarUrl ||
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80';
+  const patientGender = patient.gender || 'Not specified';
   const patientCondition = patient.condition || 'General Rehab';
   const patientStatus = patient.status || 'Active Treatment';
   const therapistName = patient.therapistName || 'No therapist assigned';
@@ -80,10 +88,30 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
   // Active sub-tab state
   const [activeTab, setActiveTab] = useState(defaultTab);
 
-  // New goal input modal state
+  // Modal states
   const [isAddGoalModalOpen, setIsAddGoalModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
+  const [isBookApptModalOpen, setIsBookApptModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Edit Profile Form state
+  const [editName, setEditName] = useState(patient.name || '');
+  const [editPhone, setEditPhone] = useState(patient.phone || '');
+  const [editEmail, setEditEmail] = useState(patient.email || '');
+  const [editCondition, setEditCondition] = useState(patient.condition || '');
+  const [editTherapist, setEditTherapist] = useState(patient.therapistName || '');
+  const [editGender, setEditGender] = useState(patient.gender || 'Male');
+  const [editAddress, setEditAddress] = useState(patient.address || '');
+
+  // Book Appointment Form state
+  const [apptDate, setApptDate] = useState('');
+  const [apptTime, setApptTime] = useState('10:00 AM');
+  const [apptTherapist, setApptTherapist] = useState(therapistName);
+  const [apptType, setApptType] = useState('Physiotherapy Session');
+
+  // New goal input modal state
   const [newGoalText, setNewGoalText] = useState('');
   const [newGoalCategory, setNewGoalCategory] = useState<'SHORT TERM' | 'LONG TERM'>('SHORT TERM');
 
@@ -121,6 +149,82 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
     }
   };
 
+  const handleEditProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      await updatePatientRecord(patient.id, {
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        email: editEmail.trim(),
+        condition: editCondition.trim(),
+        therapistName: editTherapist.trim(),
+        gender: editGender as any,
+        address: editAddress.trim(),
+      });
+
+      await logActivity({
+        action: 'Profile updated',
+        description: 'Admin updated patient profile information',
+        performedBy: 'Admin',
+      });
+
+      setIsEditProfileModalOpen(false);
+      showToast('Patient profile updated successfully!');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update patient profile');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBookAppointmentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!apptDate) {
+      showToast('Please select an appointment date');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const apptColRef = collection(db, 'appointments');
+      await addDoc(apptColRef, {
+        userId: patient.id,
+        patientId: patient.id,
+        patientName: patientName,
+        patientPhone: patient.phone || '',
+        doctorName: apptTherapist || therapistName,
+        therapistName: apptTherapist || therapistName,
+        date: apptDate,
+        fullDate: apptDate,
+        timeSlot: apptTime,
+        time: apptTime,
+        type: apptType,
+        service: apptType,
+        status: 'Upcoming',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      await updatePatientRecord(patient.id, {
+        nextAppointmentDate: apptDate,
+        nextAppointmentTime: apptTime,
+      });
+
+      await logActivity({
+        action: 'Appointment created',
+        description: `Scheduled ${apptType} for ${apptDate} at ${apptTime}`,
+        performedBy: 'Admin',
+      });
+
+      setIsBookApptModalOpen(false);
+      showToast(`Appointment booked successfully for ${apptDate}!`);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to schedule appointment');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const tabs = [
     'Overview',
     'Medical History',
@@ -131,6 +235,11 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
     'Notes',
     'History',
   ];
+
+  // Upcoming appointments list
+  const upcomingAppointmentsList = appointments.filter(
+    (a) => (a.status || 'Upcoming').toLowerCase() === 'upcoming' || (a.status || '').toLowerCase() === 'scheduled'
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-200 pb-12">
@@ -200,10 +309,16 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                 <span>
                   {patientAge} years • {patientGender}
                 </span>
-                {patient.bloodGroup && (
+                {patient.phone && (
                   <>
                     <span className="text-slate-300">•</span>
-                    <span className="text-blue-600 font-bold">Blood Group: {patient.bloodGroup}</span>
+                    <span>{patient.phone}</span>
+                  </>
+                )}
+                {patient.email && (
+                  <>
+                    <span className="text-slate-300">•</span>
+                    <span>{patient.email}</span>
                   </>
                 )}
                 <span className="text-slate-300">•</span>
@@ -228,16 +343,27 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
           {/* Right Action Buttons */}
           <div className="flex items-center space-x-3 self-start lg:self-center flex-wrap gap-y-2">
             <button
-              onClick={() => showToast('Edit Profile dialog opened.')}
-              className="px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm font-bold rounded-2xl shadow-2xs hover:shadow-xs transition-all cursor-pointer"
+              onClick={() => {
+                setEditName(patient.name || '');
+                setEditPhone(patient.phone || '');
+                setEditEmail(patient.email || '');
+                setEditCondition(patient.condition || '');
+                setEditTherapist(patient.therapistName || '');
+                setEditGender(patient.gender || 'Male');
+                setEditAddress(patient.address || '');
+                setIsEditProfileModalOpen(true);
+              }}
+              className="px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs sm:text-sm font-bold rounded-2xl shadow-2xs hover:shadow-xs transition-all cursor-pointer flex items-center space-x-2"
             >
-              Edit Profile
+              <Edit className="w-4 h-4 text-slate-500" />
+              <span>Edit Profile</span>
             </button>
             <button
-              onClick={() => showToast('Book Appointment dialog opened.')}
-              className="px-6 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white text-xs sm:text-sm font-bold rounded-2xl shadow-md hover:shadow-lg transition-all cursor-pointer"
+              onClick={() => setIsBookApptModalOpen(true)}
+              className="px-6 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white text-xs sm:text-sm font-bold rounded-2xl shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center space-x-2"
             >
-              Book Appointment
+              <Calendar className="w-4 h-4" />
+              <span>Book Appointment</span>
             </button>
             <button
               onClick={() => setIsDeleteModalOpen(true)}
@@ -357,7 +483,7 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                   Current Treatment Plan
                 </h3>
                 <button
-                  onClick={() => showToast('Viewing treatment plan details')}
+                  onClick={() => setActiveTab('Programs')}
                   className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center space-x-1 cursor-pointer"
                 >
                   <span>View Details</span>
@@ -365,57 +491,65 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                 </button>
               </div>
 
-              {/* Treatment Plan Inner Banner */}
-              <div className="space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-3.5">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                      <TrendingUp className="w-5 h-5" />
+              {assignedPrograms.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-3.5">
+                      <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                        <TrendingUp className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="text-base font-extrabold text-slate-900">
+                          {assignedPrograms[0].programTitle}
+                        </h4>
+                        <p className="text-xs font-medium text-slate-500 mt-0.5">
+                          Assigned therapist: {(assignedPrograms[0] as any).therapistName || therapistName}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-base font-extrabold text-slate-900">
-                        {patient.treatmentPlan?.title || `${patientCondition} Protocol`}
-                      </h4>
-                      <p className="text-xs font-medium text-slate-500 mt-0.5">
-                        {patient.treatmentPlan?.subtitle ||
-                          'Targeted physical rehab and progressive mobility exercise program.'}
-                      </p>
+                    <span className="text-xs font-extrabold text-blue-600 whitespace-nowrap">
+                      {assignedPrograms[0].progressPercent || 0}% Progress
+                    </span>
+                  </div>
+
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${assignedPrograms[0].progressPercent || 0}%` }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                    <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                        STATUS
+                      </span>
+                      <span className="text-sm sm:text-base font-extrabold text-slate-900 mt-1 block uppercase">
+                        {assignedPrograms[0].status || 'Active'}
+                      </span>
+                    </div>
+
+                    <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                        DURATION
+                      </span>
+                      <span className="text-sm sm:text-base font-extrabold text-slate-900 mt-1 block">
+                        {assignedPrograms[0].totalWeeks || 8} Weeks Plan
+                      </span>
                     </div>
                   </div>
-                  <span className="text-xs font-extrabold text-blue-600 whitespace-nowrap">
-                    {patient.treatmentPlan?.progress || recoveryScore}% Progress
-                  </span>
                 </div>
-
-                {/* Progress Bar */}
-                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                  <div
-                    className="bg-blue-600 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${patient.treatmentPlan?.progress || recoveryScore}%` }}
-                  />
+              ) : (
+                <div className="p-6 text-center text-slate-400 space-y-2 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-xs font-bold text-slate-600">No active treatment plan assigned.</p>
+                  <button
+                    onClick={() => setActiveTab('Programs')}
+                    className="text-xs text-blue-600 hover:underline font-bold"
+                  >
+                    + Assign Program
+                  </button>
                 </div>
-
-                {/* Two Pill Details Boxes */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      FREQUENCY
-                    </span>
-                    <span className="text-sm sm:text-base font-extrabold text-slate-900 mt-1 block">
-                      {patient.treatmentPlan?.frequency || '3x per week'}
-                    </span>
-                  </div>
-
-                  <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      DURATION
-                    </span>
-                    <span className="text-sm sm:text-base font-extrabold text-slate-900 mt-1 block">
-                      {patient.treatmentPlan?.duration || '8 Weeks Plan'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* 2. Recovery Goals Card */}
@@ -489,22 +623,22 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
               </div>
 
               <div className="space-y-3">
-                {patient.reports && patient.reports.length > 0 ? (
-                  patient.reports.map((rep) => (
+                {reports.length > 0 ? (
+                  reports.slice(0, 3).map((rep) => (
                     <div key={rep.id} className="flex items-center justify-between p-4 bg-slate-50/60 rounded-2xl border border-slate-100">
                       <div className="flex items-center space-x-3.5">
                         <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
                           <FileText className="w-5 h-5" />
                         </div>
                         <div>
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-900">{rep.title}</h4>
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900">{rep.title || rep.name}</h4>
                           <p className="text-[11px] text-slate-400 font-medium">
                             {rep.date} • {rep.size}
                           </p>
                         </div>
                       </div>
                       <button
-                        onClick={() => showToast(`Downloading ${rep.title}...`)}
+                        onClick={() => showToast(`Downloading ${rep.title || rep.name}...`)}
                         className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer"
                         title="Download Report"
                       >
@@ -513,7 +647,7 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-slate-400 italic">No reports uploaded yet.</p>
+                  <p className="text-xs text-slate-400 italic">No reports available.</p>
                 )}
               </div>
             </div>
@@ -523,76 +657,47 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
           <div className="space-y-6">
             {/* 1. Upcoming Appointments Card */}
             <div className="self-stretch p-6 relative bg-white/70 rounded-3xl outline outline-1 outline-offset-[-1px] outline-white/40 backdrop-blur-[10px] flex flex-col justify-start items-start gap-4 shadow-[0px_4px_24px_-1px_rgba(0,0,0,0.03)]">
-              <div className="self-stretch flex flex-col justify-start items-start">
-                <div className="self-stretch justify-center text-slate-900 text-base font-bold font-['Inter'] leading-6">
+              <div className="self-stretch flex items-center justify-between">
+                <div className="text-slate-900 text-base font-bold font-['Inter'] leading-6">
                   Upcoming Appointments
                 </div>
+                <button
+                  onClick={() => setIsBookApptModalOpen(true)}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
+                >
+                  + Book
+                </button>
               </div>
               <div className="self-stretch flex flex-col justify-start items-start gap-4">
-                {/* Active Next Session Card */}
-                <div className="self-stretch p-4 relative bg-blue-900 rounded-2xl flex flex-col justify-start items-start gap-1 shadow-[0px_4px_6px_-4px_rgba(0,61,155,0.20),0px_10px_15px_-3px_rgba(0,61,155,0.20)]">
-                  <div className="self-stretch inline-flex justify-between items-start">
-                    <div className="opacity-80 justify-center text-white text-xs font-bold font-['Inter'] uppercase leading-4 tracking-wider">
-                      NEXT SESSION
-                    </div>
-                    <button
-                      onClick={() => showToast('Appointment options')}
-                      className="p-0.5 opacity-80 hover:opacity-100 transition-opacity cursor-pointer"
+                {upcomingAppointmentsList.length > 0 ? (
+                  upcomingAppointmentsList.map((appt, idx) => (
+                    <div
+                      key={appt.id || idx}
+                      className={`self-stretch p-4 relative rounded-2xl flex flex-col justify-start items-start gap-1 shadow-xs ${
+                        idx === 0 ? 'bg-blue-900 text-white' : 'bg-indigo-50/70 border border-slate-200 text-slate-900'
+                      }`}
                     >
-                      <MoreVertical className="w-4 h-4 text-white" />
-                    </button>
-                  </div>
-                  <div className="self-stretch pt-3 flex flex-col justify-start items-start">
-                    <div className="self-stretch justify-center text-white text-base font-bold font-['Inter'] leading-6">
-                      {nextApptDate}
-                    </div>
-                  </div>
-                  <div className="self-stretch pb-3 inline-flex justify-start items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-white shrink-0" />
-                    <div className="justify-center text-white text-base font-normal font-['Inter'] leading-6">
-                      {nextApptTime}
-                    </div>
-                  </div>
-                  <div className="self-stretch pt-4 border-t border-white/20 inline-flex justify-start items-center gap-3">
-                    <div className="size-8 rounded-full outline outline-1 outline-offset-[-1px] outline-white/40 inline-flex flex-col justify-center items-center overflow-hidden bg-white/10 shrink-0">
-                      <InitialsAvatar name={therapistName} className="w-8 h-8 text-xs font-bold text-white border border-white/30 shrink-0" />
-                    </div>
-                    <div className="inline-flex flex-col justify-start items-start">
-                      <div className="justify-center text-white text-base font-medium font-['Inter'] leading-6">
-                        {therapistName}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Upcoming Session Card */}
-                <div
-                  onClick={() => showToast('Upcoming session details')}
-                  className="self-stretch p-4 bg-indigo-50 rounded-2xl outline outline-1 outline-offset-[-1px] outline-slate-300/10 flex flex-col justify-start items-start gap-2 hover:bg-indigo-100/70 transition-colors cursor-pointer group"
-                >
-                  <div className="self-stretch flex flex-col justify-start items-start">
-                    <div className="self-stretch justify-center text-gray-700/60 text-base font-normal font-['Inter'] uppercase leading-6">
-                      UPCOMING
-                    </div>
-                  </div>
-                  <div className="self-stretch inline-flex justify-between items-center">
-                    <div className="inline-flex flex-col justify-start items-start">
-                      <div className="self-stretch flex flex-col justify-start items-start">
-                        <div className="justify-center text-slate-900 text-base font-bold font-['Inter'] leading-6 group-hover:text-blue-900 transition-colors">
-                          March 02
+                      <div className="self-stretch inline-flex justify-between items-start">
+                        <div className={`text-xs font-bold uppercase tracking-wider ${idx === 0 ? 'opacity-80 text-white' : 'text-indigo-900'}`}>
+                          {idx === 0 ? 'NEXT SESSION' : 'UPCOMING'}
                         </div>
                       </div>
-                      <div className="self-stretch flex flex-col justify-start items-start">
-                        <div className="justify-center text-gray-700 text-xs font-normal font-['Inter'] leading-4">
-                          02:15 PM • Video Call
+                      <div className="self-stretch pt-2 flex flex-col justify-start items-start">
+                        <div className={`text-base font-bold leading-6 ${idx === 0 ? 'text-white' : 'text-slate-900'}`}>
+                          {appt.fullDate || appt.date}
+                        </div>
+                      </div>
+                      <div className="self-stretch pb-2 inline-flex justify-start items-center gap-1.5">
+                        <Clock className={`w-3.5 h-3.5 ${idx === 0 ? 'text-white' : 'text-slate-500'}`} />
+                        <div className={`text-xs font-normal leading-4 ${idx === 0 ? 'text-white' : 'text-slate-600'}`}>
+                          {appt.timeSlot || appt.time} • {appt.service || appt.type || 'Session'}
                         </div>
                       </div>
                     </div>
-                    <div className="inline-flex flex-col justify-start items-start">
-                      <ChevronRight className="w-4 h-4 text-gray-700 group-hover:translate-x-0.5 transition-transform" />
-                    </div>
-                  </div>
-                </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No upcoming appointments scheduled.</p>
+                )}
               </div>
             </div>
 
@@ -603,23 +708,23 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                   Clinical Notes
                 </h3>
                 <button
-                  onClick={() => showToast('Add note dialog opened.')}
+                  onClick={() => setActiveTab('Notes')}
                   className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
                 >
-                  Add Note
+                  View All
                 </button>
               </div>
 
               <div className="space-y-4">
-                {patient.clinicalNotes && patient.clinicalNotes.length > 0 ? (
-                  patient.clinicalNotes.map((cn) => (
+                {clinicalNotesList.length > 0 ? (
+                  clinicalNotesList.slice(0, 2).map((cn) => (
                     <div key={cn.id} className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-3">
                       <p className="text-xs italic text-slate-700 font-medium leading-relaxed">
-                        "{cn.text}"
+                        "{cn.content || cn.text}"
                       </p>
                       <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400">
                         <span>{cn.date}</span>
-                        <span>{cn.doctorName}</span>
+                        <span>{cn.author || cn.doctorName}</span>
                       </div>
                     </div>
                   ))
@@ -635,7 +740,7 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
 
               <div className="space-y-2">
                 <button
-                  onClick={() => showToast('Assign Program clicked')}
+                  onClick={() => setActiveTab('Programs')}
                   className="w-full flex items-center space-x-3 p-3.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-xs sm:text-sm font-bold text-slate-800 transition-all cursor-pointer text-left"
                 >
                   <UserPlus className="w-4 h-4 text-slate-500" />
@@ -643,7 +748,7 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                 </button>
 
                 <button
-                  onClick={() => showToast('Upload Report clicked')}
+                  onClick={() => setActiveTab('Reports')}
                   className="w-full flex items-center space-x-3 p-3.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-xs sm:text-sm font-bold text-slate-800 transition-all cursor-pointer text-left"
                 >
                   <UploadCloud className="w-4 h-4 text-slate-500" />
@@ -651,18 +756,23 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                 </button>
 
                 <button
-                  onClick={() => showToast('New Bill clicked')}
+                  onClick={() => setActiveTab('Payments')}
                   className="w-full flex items-center space-x-3 p-3.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-xs sm:text-sm font-bold text-slate-800 transition-all cursor-pointer text-left"
                 >
                   <CreditCard className="w-4 h-4 text-slate-500" />
-                  <span>New Bill</span>
+                  <span>Payments & Billing</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
       ) : activeTab === 'Medical History' ? (
-        <MedicalHistoryTab patientName={patientName} patient={patient} />
+        <MedicalHistoryTab
+          patientName={patientName}
+          patient={patient}
+          medicalHistoryList={medicalHistoryList}
+          onAddMedicalHistory={addMedicalHistory}
+        />
       ) : activeTab === 'Programs' ? (
         <ProgramsTab
           patientName={patientName}
@@ -677,6 +787,8 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
           therapistName={therapistName}
           patient={patient}
           assignedPrograms={assignedPrograms}
+          progressRecords={progressRecords}
+          onAddProgress={addProgress}
         />
       ) : activeTab === 'Reports' ? (
         <ReportsTab
@@ -695,10 +807,205 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
           invoices={invoices}
         />
       ) : activeTab === 'Notes' ? (
-        <NotesTab patientName={patientName} therapistName={therapistName} patient={patient} />
+        <NotesTab
+          patientName={patientName}
+          therapistName={therapistName}
+          patient={patient}
+          notesList={clinicalNotesList}
+          onAddNote={addClinicalNote}
+          onDeleteNote={removeClinicalNote}
+        />
       ) : activeTab === 'History' ? (
-        <HistoryTab patientName={patientName} therapistName={therapistName} patient={patient} />
+        <HistoryTab
+          patientName={patientName}
+          therapistName={therapistName}
+          patient={patient}
+          activityLogs={activityLogs}
+          onAddActivityLog={logActivity}
+        />
       ) : null}
+
+      {/* Edit Patient Profile Modal */}
+      {isEditProfileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-extrabold text-slate-900">Edit Patient Profile</h3>
+              <button onClick={() => setIsEditProfileModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditProfileSubmit} className="space-y-4 text-left">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Gender</label>
+                  <select
+                    value={editGender}
+                    onChange={(e) => setEditGender(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Primary Condition</label>
+                <input
+                  type="text"
+                  value={editCondition}
+                  onChange={(e) => setEditCondition(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Assigned Therapist</label>
+                <input
+                  type="text"
+                  value={editTherapist}
+                  onChange={(e) => setEditTherapist(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsEditProfileModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl cursor-pointer disabled:opacity-50"
+                >
+                  {isSaving ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Book Appointment Modal */}
+      {isBookApptModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-extrabold text-slate-900">Schedule Appointment</h3>
+              <button onClick={() => setIsBookApptModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleBookAppointmentSubmit} className="space-y-4 text-left">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Appointment Date *</label>
+                <input
+                  type="date"
+                  value={apptDate}
+                  onChange={(e) => setApptDate(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Time Slot</label>
+                  <select
+                    value={apptTime}
+                    onChange={(e) => setApptTime(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="09:00 AM">09:00 AM</option>
+                    <option value="10:00 AM">10:00 AM</option>
+                    <option value="11:30 AM">11:30 AM</option>
+                    <option value="02:00 PM">02:00 PM</option>
+                    <option value="04:15 PM">04:15 PM</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Service Type</label>
+                  <select
+                    value={apptType}
+                    onChange={(e) => setApptType(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Physiotherapy Session">Physiotherapy Session</option>
+                    <option value="Rehab Evaluation">Rehab Evaluation</option>
+                    <option value="Video Call Consult">Video Call Consult</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Therapist Name</label>
+                <input
+                  type="text"
+                  value={apptTherapist}
+                  onChange={(e) => setApptTherapist(e.target.value)}
+                  placeholder="e.g. Dr. Ananya Iyer"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsBookApptModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#0C3E6D] hover:bg-[#092e52] rounded-xl cursor-pointer disabled:opacity-50 shadow-md"
+                >
+                  {isSaving ? 'Scheduling...' : 'Save Appointment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add Goal Modal */}
       {isAddGoalModalOpen && (
@@ -756,6 +1063,7 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
           </div>
         </div>
       )}
+
       {/* Delete Patient Confirmation Modal */}
       {isDeleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">

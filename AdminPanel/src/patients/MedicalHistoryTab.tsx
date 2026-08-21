@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Patient } from './types';
 import { updatePatientRecord } from '@/services/patientService';
 import {
@@ -19,9 +19,11 @@ import {
   Sparkles,
   Stethoscope,
   X,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 
-interface PrimaryDiagnosis {
+export interface PrimaryDiagnosis {
   id: string;
   title: string;
   description: string;
@@ -39,7 +41,7 @@ interface TimelineItem {
   isRecent?: boolean;
 }
 
-interface SurgeryRecord {
+export interface SurgeryRecord {
   id: string;
   year: string;
   title: string;
@@ -49,21 +51,21 @@ interface SurgeryRecord {
   completed?: boolean;
 }
 
-interface FamilyHistoryItem {
+export interface FamilyHistoryItem {
   id: string;
   relation: 'PATERNAL' | 'MATERNAL';
   gender: 'male' | 'female';
   condition: string;
 }
 
-interface AllergyItem {
+export interface AllergyItem {
   id: string;
   name: string;
   severity: 'SEVERE' | 'MILD' | 'MODERATE';
   description: string;
 }
 
-interface MedicationItem {
+export interface MedicationItem {
   id: string;
   name: string;
   dosage: string;
@@ -73,11 +75,15 @@ interface MedicationItem {
 interface MedicalHistoryTabProps {
   patientName?: string;
   patient?: Patient;
+  medicalHistoryList?: any[];
+  onAddMedicalHistory?: (data: any) => Promise<string>;
 }
 
 export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
-  patientName = 'Sanya Malhotra',
+  patientName = 'Patient',
   patient,
+  medicalHistoryList = [],
+  onAddMedicalHistory,
 }) => {
   // Toast notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -87,137 +93,94 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // Extract medical history from patient if present
-  const medHistory = patient?.medicalHistory;
+  // Derive records dynamically from Firestore real-time list or patient document
+  const patientMedHistoryDoc = (patient?.medicalHistory as any) || {};
+  const latestMedRecord = medicalHistoryList.length > 0 ? medicalHistoryList[0] : patientMedHistoryDoc;
 
-  // Primary Diagnoses state initialized dynamically
-  const [diagnoses, setDiagnoses] = useState<PrimaryDiagnosis[]>(() => {
-    if (medHistory?.primaryDiagnosis) {
+  // Primary Diagnoses
+  const diagnosesList: PrimaryDiagnosis[] = useMemo(() => {
+    if (medicalHistoryList.length > 0) {
+      return medicalHistoryList.map((item, idx) => ({
+        id: item.id || `diag-${idx}`,
+        title: item.primaryDiagnosis || item.title || patient?.condition || 'Diagnosis Record',
+        description: item.description || 'Clinical observation recorded.',
+        diagnosedDate: item.diagnosedDate || (item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).toUpperCase() : 'RECENT'),
+        status: (item.status === 'PAST' ? 'PAST' : 'CURRENT') as 'CURRENT' | 'PAST',
+        statusColor: item.status === 'PAST' ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-amber-50 text-amber-700 border-amber-200/80',
+      }));
+    }
+    if (patientMedHistoryDoc?.primaryDiagnosis) {
       return [
         {
-          id: 'diag-main',
-          title: medHistory.primaryDiagnosis,
-          description: `Primary condition: ${medHistory.severity || 'Moderate'} severity.`,
-          diagnosedDate: 'AUG 2026',
+          id: 'diag-doc',
+          title: patientMedHistoryDoc.primaryDiagnosis,
+          description: patientMedHistoryDoc.description || `Severity: ${patientMedHistoryDoc.severity || 'Moderate'}`,
+          diagnosedDate: 'RECENT',
           status: 'CURRENT',
           statusColor: 'bg-amber-50 text-amber-700 border-amber-200/80',
         },
       ];
     }
-    return [
-      {
-        id: 'diag-1',
-        title: patient?.condition || 'Lumbar Spondylosis',
-        description: 'Degenerative changes and physical rehab evaluation.',
-        diagnosedDate: 'JAN 2026',
-        status: 'CURRENT',
-        statusColor: 'bg-amber-50 text-amber-700 border-amber-200/80',
-      },
-    ];
-  });
+    if (patient?.condition && patient.condition !== 'General Rehab' && patient.condition !== 'Physiotherapy Evaluation') {
+      return [
+        {
+          id: 'diag-cond',
+          title: patient.condition,
+          description: 'Primary evaluation and rehabilitation protocol.',
+          diagnosedDate: 'RECENT',
+          status: 'CURRENT',
+          statusColor: 'bg-amber-50 text-amber-700 border-amber-200/80',
+        },
+      ];
+    }
+    return [];
+  }, [medicalHistoryList, patientMedHistoryDoc, patient?.condition]);
 
-  // Timeline state
-  const [timeline, setTimeline] = useState<TimelineItem[]>([
-    {
-      id: 'time-1',
-      title: 'Pain Reduced',
-      description: 'Reported 20% reduction in morning stiffness.',
-      date: '05 Nov 2023',
-      isRecent: true,
-    },
-    {
-      id: 'time-2',
-      title: 'Program Modified',
-      description: 'Integrated lumbar stabilization exercises.',
-      date: '30 Oct 2023',
-    },
-    {
-      id: 'time-3',
-      title: 'Treatment Started',
-      description: 'Bi-weekly physiotherapy sessions initiated.',
-      date: '16 Oct 2023',
-    },
-    {
-      id: 'time-4',
-      title: 'MRI Report Uploaded',
-      description: '',
-      attachmentName: 'mri_scan_lumbar.pdf',
-      date: '14 Oct 2023',
-    },
-    {
-      id: 'time-5',
-      title: 'Initial Consultation',
-      description: 'Evaluated by Dr. Mehta. Initial diagnosis: Disc Bulge L4-L5.',
-      date: '12 Oct 2023',
-    },
-  ]);
+  // Surgeries
+  const surgeriesList: SurgeryRecord[] = useMemo(() => {
+    if (latestMedRecord?.surgeries && Array.isArray(latestMedRecord.surgeries)) {
+      return latestMedRecord.surgeries;
+    }
+    return [];
+  }, [latestMedRecord]);
 
-  // Surgical History state
-  const [surgeries] = useState<SurgeryRecord[]>([
-    {
-      id: 'surg-1',
-      year: 'JUNE 2022',
-      title: 'Left Knee ACL Reconstruction',
-      description: 'Successful reconstruction using hamstring autograft.',
-      doctorName: 'Dr. Vikram Mehta',
-      completed: true,
-    },
-    {
-      id: 'surg-2',
-      year: 'YEAR 2015',
-      title: 'Appendectomy',
-      description: 'Laparoscopic procedure with no complications.',
-      hospitalName: "St. Jude's Hospital",
-    },
-  ]);
+  // Family History
+  const familyHistoryList: FamilyHistoryItem[] = useMemo(() => {
+    if (latestMedRecord?.familyHistory && Array.isArray(latestMedRecord.familyHistory)) {
+      return latestMedRecord.familyHistory;
+    }
+    return [];
+  }, [latestMedRecord]);
 
-  // Family History state
-  const [familyHistory] = useState<FamilyHistoryItem[]>([
-    {
-      id: 'fam-1',
-      relation: 'PATERNAL',
-      gender: 'male',
-      condition: 'Type 2 Diabetes',
-    },
-    {
-      id: 'fam-2',
-      relation: 'MATERNAL',
-      gender: 'female',
-      condition: 'Hypertension',
-    },
-  ]);
+  // Allergies
+  const allergiesList: AllergyItem[] = useMemo(() => {
+    if (latestMedRecord?.allergies && Array.isArray(latestMedRecord.allergies)) {
+      return latestMedRecord.allergies;
+    }
+    return [];
+  }, [latestMedRecord]);
 
-  // Allergies state
-  const [allergies] = useState<AllergyItem[]>([
-    {
-      id: 'alg-1',
-      name: 'Penicillin',
-      severity: 'SEVERE',
-      description: 'Anaphylactic response documented in childhood records.',
-    },
-    {
-      id: 'alg-2',
-      name: 'NSAIDs',
-      severity: 'MILD',
-      description: 'Mild gastric sensitivity. Use with caution or prefer alternatives.',
-    },
-  ]);
+  // Medications
+  const medicationsList: MedicationItem[] = useMemo(() => {
+    if (latestMedRecord?.medications && Array.isArray(latestMedRecord.medications)) {
+      return latestMedRecord.medications;
+    }
+    return [];
+  }, [latestMedRecord]);
 
-  // Medications state
-  const [medications, setMedications] = useState<MedicationItem[]>([
-    {
-      id: 'med-1',
-      name: 'Etoricoxib',
-      dosage: '60mg',
-      schedule: 'Once Daily',
-    },
-    {
-      id: 'med-2',
-      name: 'Pantoprazole',
-      dosage: '40mg',
-      schedule: 'Before Breakfast',
-    },
-  ]);
+  // Timeline
+  const timelineList: TimelineItem[] = useMemo(() => {
+    if (medicalHistoryList.length > 0) {
+      return medicalHistoryList.map((item, idx) => ({
+        id: item.id || `time-${idx}`,
+        title: item.title || item.primaryDiagnosis || 'Medical Record Logged',
+        description: item.description || '',
+        date: item.diagnosedDate || (item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recent'),
+        isRecent: idx === 0,
+      }));
+    }
+    return [];
+  }, [medicalHistoryList]);
 
   // Modal states
   const [isAddRecordModalOpen, setIsAddRecordModalOpen] = useState(false);
@@ -227,7 +190,7 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
   // Form input states for new Diagnosis Record
   const [newDiagTitle, setNewDiagTitle] = useState('');
   const [newDiagDesc, setNewDiagDesc] = useState('');
-  const [newDiagDate, setNewDiagDate] = useState('JAN 2024');
+  const [newDiagDate, setNewDiagDate] = useState('JAN 2026');
   const [newDiagStatus, setNewDiagStatus] = useState<'CURRENT' | 'PAST'>('CURRENT');
 
   // Form input state for medication update
@@ -235,55 +198,63 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
   const [newMedDosage, setNewMedDosage] = useState('');
   const [newMedSchedule, setNewMedSchedule] = useState('Once Daily');
 
-  const handleCreateDiagnosis = (e: React.FormEvent) => {
+  const handleCreateDiagnosis = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDiagTitle.trim()) return;
 
-    const newDiag: PrimaryDiagnosis = {
-      id: `diag-${Date.now()}`,
-      title: newDiagTitle.trim(),
+    const newRecordData = {
+      primaryDiagnosis: newDiagTitle.trim(),
       description: newDiagDesc.trim() || 'No additional notes provided.',
       diagnosedDate: newDiagDate.toUpperCase(),
       status: newDiagStatus,
-      statusColor:
-        newDiagStatus === 'CURRENT'
-          ? 'bg-amber-50 text-amber-700 border-amber-200/80'
-          : 'bg-slate-100 text-slate-600 border-slate-200',
     };
 
-    setDiagnoses([newDiag, ...diagnoses]);
-    setTimeline((prev) => [
-      {
-        id: `time-${Date.now()}`,
-        title: `Diagnosis: ${newDiagTitle.trim()}`,
-        description: newDiagDesc.trim() || 'New primary diagnosis record logged.',
-        date: 'Just now',
-        isRecent: true,
-      },
-      ...prev,
-    ]);
+    if (onAddMedicalHistory && patient) {
+      try {
+        await onAddMedicalHistory(newRecordData);
+        showToast('New primary diagnosis record saved to Firestore!');
+      } catch (err: any) {
+        showToast('Failed to save medical record');
+      }
+    } else {
+      showToast('Medical history saved successfully!');
+    }
+
     setNewDiagTitle('');
     setNewDiagDesc('');
     setIsAddRecordModalOpen(false);
-    showToast('New primary diagnosis record added successfully!');
   };
 
-  const handleAddMedication = (e: React.FormEvent) => {
+  const handleAddMedication = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMedName.trim()) return;
 
-    const newMed: MedicationItem = {
+    const newMedObj = {
       id: `med-${Date.now()}`,
       name: newMedName.trim(),
       dosage: newMedDosage.trim() || 'Standard Dose',
       schedule: newMedSchedule,
     };
 
-    setMedications([...medications, newMed]);
+    const updatedMedications = [...medicationsList, newMedObj];
+
+    if (onAddMedicalHistory && patient) {
+      try {
+        await onAddMedicalHistory({
+          ...latestMedRecord,
+          medications: updatedMedications,
+        });
+        showToast('Medication regimen updated in Firestore!');
+      } catch (err: any) {
+        showToast('Failed to update medication regimen');
+      }
+    } else {
+      showToast('Medication regimen updated successfully!');
+    }
+
     setNewMedName('');
     setNewMedDosage('');
     setIsUpdateRegimenModalOpen(false);
-    showToast('Medication regimen updated successfully!');
   };
 
   const handleDownloadFile = (fileName: string) => {
@@ -305,11 +276,11 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
         {/* ================= LEFT COLUMN ================= */}
         <div className="lg:col-span-2 space-y-6">
           {/* 1. PRIMARY DIAGNOSES CARD */}
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-2xs space-y-5">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-2xs space-y-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Stethoscope className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <FileText className="w-5 h-5" />
                 </div>
                 <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">
                   Primary Diagnoses
@@ -317,50 +288,57 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
               </div>
               <button
                 onClick={() => setIsAddRecordModalOpen(true)}
-                className="flex items-center space-x-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50/70 hover:bg-blue-100/80 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer flex items-center space-x-1.5"
               >
-                <Plus className="w-4 h-4 stroke-[2.5]" />
+                <Plus className="w-4 h-4" />
                 <span>Add Record</span>
               </button>
             </div>
 
+            {/* List of Diagnoses */}
             <div className="space-y-4">
-              {diagnoses.map((diag) => (
-                <div
-                  key={diag.id}
-                  className="p-5 rounded-2xl border border-slate-100 bg-slate-50/40 hover:bg-slate-50 transition-colors space-y-3"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        {diag.status === 'CURRENT' ? (
-                          <FileText className="w-5 h-5" />
-                        ) : (
-                          <History className="w-5 h-5" />
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="text-base font-extrabold text-slate-900">{diag.title}</h4>
-                        <p className="text-xs font-medium text-slate-500 mt-1 leading-relaxed">
-                          {diag.description}
-                        </p>
+              {diagnosesList.length > 0 ? (
+                diagnosesList.map((diag) => (
+                  <div
+                    key={diag.id}
+                    className="p-5 rounded-2xl border border-slate-100 bg-slate-50/40 hover:bg-slate-50 transition-colors space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start space-x-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {diag.status === 'CURRENT' ? (
+                            <FileText className="w-5 h-5" />
+                          ) : (
+                            <History className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div>
+                          <h4 className="text-base font-extrabold text-slate-900">{diag.title}</h4>
+                          <p className="text-xs font-medium text-slate-500 mt-1 leading-relaxed">
+                            {diag.description}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Status Badges */}
-                  <div className="flex items-center space-x-2 pt-1 pl-13">
-                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-extrabold rounded-md uppercase tracking-wider">
-                      DIAGNOSED {diag.diagnosedDate}
-                    </span>
-                    <span
-                      className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-md uppercase tracking-wider ${diag.statusColor}`}
-                    >
-                      {diag.status}
-                    </span>
+                    {/* Status Badges */}
+                    <div className="flex items-center space-x-2 pt-1 pl-13">
+                      <span className="px-2.5 py-0.5 bg-slate-100 text-slate-500 text-[10px] font-extrabold rounded-md uppercase tracking-wider">
+                        DIAGNOSED {diag.diagnosedDate}
+                      </span>
+                      <span
+                        className={`px-2.5 py-0.5 text-[10px] font-extrabold rounded-md uppercase tracking-wider ${diag.statusColor}`}
+                      >
+                        {diag.status}
+                      </span>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="p-6 text-center text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                  <p className="text-xs font-bold text-slate-600">No primary medical diagnoses recorded yet.</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -375,63 +353,58 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
                   Medical Timeline
                 </h3>
               </div>
-              <button
-                onClick={() => {
-                  setShowAllTimelineLogs(!showAllTimelineLogs);
-                  showToast(
-                    showAllTimelineLogs ? 'Showing key timeline logs' : 'Showing all timeline logs'
-                  );
-                }}
-                className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
-              >
-                {showAllTimelineLogs ? 'Show Main Logs' : 'View All Logs'}
-              </button>
             </div>
 
             {/* Vertical Step Timeline Container */}
-            <div className="relative pl-6 space-y-7 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-              {timeline.map((item) => (
-                <div key={item.id} className="relative flex items-start justify-between group">
-                  {/* Timeline Bullet Node */}
-                  <div
-                    className={`absolute -left-6 top-1 w-5 h-5 rounded-full border-2 bg-white flex items-center justify-center transition-all ${
-                      item.isRecent
-                        ? 'border-blue-600 ring-4 ring-blue-50'
-                        : 'border-slate-300 group-hover:border-slate-400'
-                    }`}
-                  >
-                    {item.isRecent && <div className="w-2 h-2 rounded-full bg-blue-600" />}
+            {timelineList.length > 0 ? (
+              <div className="relative pl-6 space-y-7 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
+                {timelineList.map((item) => (
+                  <div key={item.id} className="relative flex items-start justify-between group">
+                    {/* Timeline Bullet Node */}
+                    <div
+                      className={`absolute -left-6 top-1 w-5 h-5 rounded-full border-2 bg-white flex items-center justify-center transition-all ${
+                        item.isRecent
+                          ? 'border-blue-600 ring-4 ring-blue-50'
+                          : 'border-slate-300 group-hover:border-slate-400'
+                      }`}
+                    >
+                      {item.isRecent && <div className="w-2 h-2 rounded-full bg-blue-600" />}
+                    </div>
+
+                    {/* Content Details */}
+                    <div className="space-y-1 pr-4">
+                      <h4 className="text-sm font-extrabold text-slate-900">{item.title}</h4>
+                      {item.description && (
+                        <p className="text-xs font-medium text-slate-500 leading-relaxed">
+                          {item.description}
+                        </p>
+                      )}
+
+                      {/* PDF Attachment Link */}
+                      {item.attachmentName && (
+                        <button
+                          onClick={() => handleDownloadFile(item.attachmentName!)}
+                          className="inline-flex items-center space-x-2 px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 text-blue-700 border border-blue-100 rounded-xl text-xs font-bold transition-colors cursor-pointer mt-1"
+                        >
+                          <FileText className="w-3.5 h-3.5 text-blue-600" />
+                          <span>{item.attachmentName}</span>
+                          <FileDown className="w-3.5 h-3.5 text-blue-600" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Date Tag */}
+                    <span className="text-xs font-bold text-slate-400 whitespace-nowrap pt-0.5">
+                      {item.date}
+                    </span>
                   </div>
-
-                  {/* Content Details */}
-                  <div className="space-y-1 pr-4">
-                    <h4 className="text-sm font-extrabold text-slate-900">{item.title}</h4>
-                    {item.description && (
-                      <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                        {item.description}
-                      </p>
-                    )}
-
-                    {/* PDF Attachment Link */}
-                    {item.attachmentName && (
-                      <button
-                        onClick={() => handleDownloadFile(item.attachmentName!)}
-                        className="inline-flex items-center space-x-2 px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 text-blue-700 border border-blue-100 rounded-xl text-xs font-bold transition-colors cursor-pointer mt-1"
-                      >
-                        <FileText className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{item.attachmentName}</span>
-                        <FileDown className="w-3.5 h-3.5 text-blue-600" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Date Tag */}
-                  <span className="text-xs font-bold text-slate-400 whitespace-nowrap pt-0.5">
-                    {item.date}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                <p className="text-xs font-bold text-slate-600">No medical timeline events recorded.</p>
+              </div>
+            )}
           </div>
 
           {/* 3. SURGICAL HISTORY CARD */}
@@ -445,50 +418,56 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {surgeries.map((surg) => (
-                <div
-                  key={surg.id}
-                  className="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 space-y-3 flex flex-col justify-between"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold text-teal-600 tracking-wider uppercase">
-                        {surg.year}
-                      </span>
-                      {surg.completed && (
-                        <div className="w-5 h-5 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        </div>
-                      )}
+            {surgeriesList.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {surgeriesList.map((surg) => (
+                  <div
+                    key={surg.id}
+                    className="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 space-y-3 flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold text-teal-600 tracking-wider uppercase">
+                          {surg.year}
+                        </span>
+                        {surg.completed && (
+                          <div className="w-5 h-5 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-200">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </div>
+                        )}
+                      </div>
+                      <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
+                        {surg.title}
+                      </h4>
+                      <p className="text-xs font-medium text-slate-500 leading-relaxed">
+                        {surg.description}
+                      </p>
                     </div>
-                    <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
-                      {surg.title}
-                    </h4>
-                    <p className="text-xs font-medium text-slate-500 leading-relaxed">
-                      {surg.description}
-                    </p>
-                  </div>
 
-                  {/* Physician / Hospital Footer */}
-                  <div className="pt-2 flex items-center space-x-2 text-xs font-bold text-slate-700 border-t border-slate-200/50">
-                    {surg.doctorName ? (
-                      <>
-                        <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-extrabold">
-                          VM
-                        </div>
-                        <span className="text-slate-600">{surg.doctorName}</span>
-                      </>
-                    ) : surg.hospitalName ? (
-                      <>
-                        <Building2 className="w-4 h-4 text-slate-400" />
-                        <span className="text-slate-600">{surg.hospitalName}</span>
-                      </>
-                    ) : null}
+                    {/* Physician / Hospital Footer */}
+                    <div className="pt-2 flex items-center space-x-2 text-xs font-bold text-slate-700 border-t border-slate-200/50">
+                      {surg.doctorName ? (
+                        <>
+                          <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-extrabold">
+                            VM
+                          </div>
+                          <span className="text-slate-600">{surg.doctorName}</span>
+                        </>
+                      ) : surg.hospitalName ? (
+                        <>
+                          <Building2 className="w-4 h-4 text-slate-400" />
+                          <span className="text-slate-600">{surg.hospitalName}</span>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                <p className="text-xs font-bold text-slate-600">No surgical history recorded.</p>
+              </div>
+            )}
           </div>
 
           {/* 4. FAMILY MEDICAL HISTORY CARD */}
@@ -502,32 +481,38 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {familyHistory.map((fam) => (
-                <div
-                  key={fam.id}
-                  className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center space-x-4"
-                >
+            {familyHistoryList.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {familyHistoryList.map((fam) => (
                   <div
-                    className={`w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold flex-shrink-0 ${
-                      fam.gender === 'male'
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'bg-rose-50 text-rose-600'
-                    }`}
+                    key={fam.id}
+                    className="p-4 rounded-2xl border border-slate-100 bg-slate-50/50 flex items-center space-x-4"
                   >
-                    {fam.gender === 'male' ? '♂' : '♀'}
+                    <div
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center text-base font-bold flex-shrink-0 ${
+                        fam.gender === 'male'
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'bg-rose-50 text-rose-600'
+                      }`}
+                    >
+                      {fam.gender === 'male' ? '♂' : '♀'}
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-400 tracking-wider uppercase block">
+                        {fam.relation}
+                      </span>
+                      <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
+                        {fam.condition}
+                      </h4>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-[10px] font-extrabold text-slate-400 tracking-wider uppercase block">
-                      {fam.relation}
-                    </span>
-                    <h4 className="text-sm font-extrabold text-slate-900 mt-0.5">
-                      {fam.condition}
-                    </h4>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                <p className="text-xs font-bold text-slate-600">No family medical history recorded.</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -542,34 +527,40 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
               <h3 className="text-lg font-extrabold text-slate-900 tracking-tight">Allergies</h3>
             </div>
 
-            <div className="space-y-3">
-              {allergies.map((alg) => (
-                <div
-                  key={alg.id}
-                  className={`p-4 rounded-2xl border space-y-2 ${
-                    alg.severity === 'SEVERE'
-                      ? 'bg-rose-50/60 border-rose-100'
-                      : 'bg-amber-50/60 border-amber-100'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-extrabold text-slate-900">{alg.name}</h4>
-                    <span
-                      className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
-                        alg.severity === 'SEVERE'
-                          ? 'bg-rose-600 text-white'
-                          : 'bg-amber-500 text-white'
-                      }`}
-                    >
-                      {alg.severity}
-                    </span>
+            {allergiesList.length > 0 ? (
+              <div className="space-y-3">
+                {allergiesList.map((alg) => (
+                  <div
+                    key={alg.id}
+                    className={`p-4 rounded-2xl border space-y-2 ${
+                      alg.severity === 'SEVERE'
+                        ? 'bg-rose-50/60 border-rose-100'
+                        : 'bg-amber-50/60 border-amber-100'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-extrabold text-slate-900">{alg.name}</h4>
+                      <span
+                        className={`text-[9px] font-extrabold px-2.5 py-0.5 rounded-full uppercase tracking-wider ${
+                          alg.severity === 'SEVERE'
+                            ? 'bg-rose-600 text-white'
+                            : 'bg-amber-500 text-white'
+                        }`}
+                      >
+                        {alg.severity}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-600 leading-relaxed">
+                      {alg.description}
+                    </p>
                   </div>
-                  <p className="text-xs font-medium text-slate-600 leading-relaxed">
-                    {alg.description}
-                  </p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 text-center text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                <p className="text-xs font-bold text-slate-600">No known allergies recorded.</p>
+              </div>
+            )}
           </div>
 
           {/* 2. MEDICATIONS CARD */}
@@ -583,17 +574,23 @@ export const MedicalHistoryTab: React.FC<MedicalHistoryTabProps> = ({
               </h3>
             </div>
 
-            <div className="space-y-4 divide-y divide-slate-100">
-              {medications.map((med) => (
-                <div key={med.id} className="pt-3 first:pt-0 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-extrabold text-slate-900">{med.name}</h4>
-                    <span className="text-xs font-extrabold text-slate-800">{med.schedule}</span>
+            {medicationsList.length > 0 ? (
+              <div className="space-y-4 divide-y divide-slate-100">
+                {medicationsList.map((med) => (
+                  <div key={med.id} className="pt-3 first:pt-0 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-extrabold text-slate-900">{med.name}</h4>
+                      <span className="text-xs font-extrabold text-slate-800">{med.schedule}</span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-400">{med.dosage}</p>
                   </div>
-                  <p className="text-xs font-medium text-slate-400">{med.dosage}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 text-center text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                <p className="text-xs font-bold text-slate-600">No active medications recorded.</p>
+              </div>
+            )}
 
             <button
               onClick={() => setIsUpdateRegimenModalOpen(true)}

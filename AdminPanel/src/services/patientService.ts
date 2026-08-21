@@ -7,6 +7,7 @@ import {
   deleteDoc,
   getDocs,
   query,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/auth/config/firebase';
@@ -659,3 +660,318 @@ export const fetchPatientById = async (id: string): Promise<Patient | null> => {
     return null;
   }
 };
+
+/**
+ * Add an activity log event for a patient to Firestore 'patient_activity_logs'
+ */
+export const addPatientActivityLog = async (
+  patientId: string,
+  logData: {
+    action: string;
+    description: string;
+    performedBy?: string;
+    metadata?: any;
+  }
+): Promise<string> => {
+  try {
+    const colRef = collection(db, 'patient_activity_logs');
+    const docRef = await addDoc(colRef, {
+      patientId,
+      userId: patientId,
+      action: logData.action,
+      description: logData.description,
+      performedBy: logData.performedBy || 'Admin',
+      metadata: logData.metadata || {},
+      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    });
+    return docRef.id;
+  } catch (err) {
+    console.error('Error adding patient activity log:', err);
+    throw err;
+  }
+};
+
+/**
+ * Subscribe to real-time activity logs for a specific patient
+ */
+export const subscribeToPatientActivityLogs = (
+  patientId: string,
+  onData: (logs: any[]) => void
+): Unsubscribe => {
+  if (!patientId) return () => {};
+  try {
+    const colRef = collection(db, 'patient_activity_logs');
+    const q = query(colRef, where('patientId', '==', patientId));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        logs.sort((a: any, b: any) => new Date(b.timestamp || b.createdAt || 0).getTime() - new Date(a.timestamp || a.createdAt || 0).getTime());
+        onData(logs);
+      },
+      (err) => console.warn('Activity logs snapshot error:', err)
+    );
+  } catch (err) {
+    console.error('Failed to subscribe to activity logs:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Add a progress record for a patient to Firestore 'patient_progress'
+ */
+export const addProgressRecord = async (
+  patientId: string,
+  progressData: {
+    therapistId?: string;
+    therapistName?: string;
+    date?: string;
+    painLevel?: number | string;
+    mobility?: number | string;
+    strength?: string;
+    rangeOfMotion?: string;
+    assessmentScore?: number | string;
+    notes?: string;
+    metrics?: any;
+  }
+): Promise<string> => {
+  try {
+    const now = new Date().toISOString();
+    const colRef = collection(db, 'patient_progress');
+    const docRef = await addDoc(colRef, {
+      patientId,
+      userId: patientId,
+      therapistId: progressData.therapistId || '',
+      therapistName: progressData.therapistName || 'Attending Therapist',
+      date: progressData.date || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      painLevel: progressData.painLevel || 'Mild',
+      mobility: progressData.mobility || 'Normal',
+      strength: progressData.strength || 'Good',
+      rangeOfMotion: progressData.rangeOfMotion || '80%',
+      assessmentScore: progressData.assessmentScore || 80,
+      notes: progressData.notes || '',
+      metrics: progressData.metrics || {},
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Also update patient's top-level painLevel/recoveryScore in patient document
+    if (progressData.painLevel !== undefined || progressData.assessmentScore !== undefined) {
+      await updatePatientRecord(patientId, {
+        ...(progressData.painLevel !== undefined ? { painLevel: String(progressData.painLevel) as any } : {}),
+        ...(progressData.assessmentScore !== undefined ? { recoveryScore: Number(progressData.assessmentScore) } : {}),
+      });
+    }
+
+    // Log action
+    await addPatientActivityLog(patientId, {
+      action: 'Progress updated',
+      description: `New progress record logged (${progressData.notes || 'Assessment updated'}).`,
+      performedBy: progressData.therapistName || 'Admin/Therapist',
+    });
+
+    return docRef.id;
+  } catch (err) {
+    console.error('Error adding progress record:', err);
+    throw err;
+  }
+};
+
+/**
+ * Subscribe to real-time progress records for a patient
+ */
+export const subscribeToPatientProgress = (
+  patientId: string,
+  onData: (records: any[]) => void
+): Unsubscribe => {
+  if (!patientId) return () => {};
+  try {
+    const colRef = collection(db, 'patient_progress');
+    const q = query(colRef, where('patientId', '==', patientId));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        list.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        onData(list);
+      },
+      (err) => console.warn('Patient progress snapshot error:', err)
+    );
+  } catch (err) {
+    console.error('Failed to subscribe to progress records:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Save Medical History document/records for a patient in Firestore 'patient_medical_history'
+ */
+export const saveMedicalHistoryRecord = async (
+  patientId: string,
+  medicalData: {
+    primaryDiagnosis?: string;
+    description?: string;
+    diagnosedDate?: string;
+    status?: 'CURRENT' | 'PAST';
+    surgeries?: any[];
+    allergies?: any[];
+    medications?: any[];
+    timeline?: any[];
+    familyHistory?: any[];
+    vitalMetrics?: any;
+    notes?: string;
+  }
+): Promise<string> => {
+  try {
+    const now = new Date().toISOString();
+    const colRef = collection(db, 'patient_medical_history');
+    const docRef = await addDoc(colRef, {
+      patientId,
+      userId: patientId,
+      ...medicalData,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Sync to user/patient doc's medicalHistory field as well for quick view
+    await updatePatientRecord(patientId, {
+      medicalHistory: medicalData as any,
+    });
+
+    await addPatientActivityLog(patientId, {
+      action: 'Medical history added',
+      description: `Medical history updated: ${medicalData.primaryDiagnosis || 'New record'}`,
+      performedBy: 'Admin',
+    });
+
+    return docRef.id;
+  } catch (err) {
+    console.error('Error saving medical history record:', err);
+    throw err;
+  }
+};
+
+/**
+ * Subscribe to real-time medical history for a patient
+ */
+export const subscribeToPatientMedicalHistory = (
+  patientId: string,
+  onData: (historyItems: any[]) => void
+): Unsubscribe => {
+  if (!patientId) return () => {};
+  try {
+    const colRef = collection(db, 'patient_medical_history');
+    const q = query(colRef, where('patientId', '==', patientId));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        list.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        onData(list);
+      },
+      (err) => console.warn('Medical history snapshot error:', err)
+    );
+  } catch (err) {
+    console.error('Failed to subscribe to medical history records:', err);
+    return () => {};
+  }
+};
+
+/**
+ * Add a clinical note to Firestore 'patient_notes'
+ */
+export const saveClinicalNote = async (
+  patientId: string,
+  noteData: {
+    title: string;
+    category?: string;
+    content: string;
+    contentSecondary?: string;
+    isInternal?: boolean;
+    author?: string;
+    attachments?: any[];
+  }
+): Promise<string> => {
+  try {
+    const now = new Date().toISOString();
+    const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const colRef = collection(db, 'patient_notes');
+    const docRef = await addDoc(colRef, {
+      patientId,
+      userId: patientId,
+      title: noteData.title,
+      category: noteData.category || (noteData.isInternal ? 'INTERNAL' : 'SESSION NOTE'),
+      content: noteData.content,
+      contentSecondary: noteData.contentSecondary || '',
+      isInternal: !!noteData.isInternal,
+      author: noteData.author || 'Dr. Ananya Iyer',
+      date: dateStr,
+      time: timeStr,
+      attachments: noteData.attachments || [],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await addPatientActivityLog(patientId, {
+      action: 'Note added',
+      description: `Clinical note "${noteData.title}" recorded by ${noteData.author || 'Admin'}.`,
+      performedBy: noteData.author || 'Admin',
+    });
+
+    return docRef.id;
+  } catch (err) {
+    console.error('Error saving clinical note:', err);
+    throw err;
+  }
+};
+
+/**
+ * Delete a clinical note from Firestore 'patient_notes'
+ */
+export const deleteClinicalNote = async (noteId: string, patientId?: string): Promise<void> => {
+  try {
+    const docRef = doc(db, 'patient_notes', noteId);
+    await deleteDoc(docRef);
+
+    if (patientId) {
+      await addPatientActivityLog(patientId, {
+        action: 'Note deleted',
+        description: 'Clinical note was deleted.',
+        performedBy: 'Admin',
+      });
+    }
+  } catch (err) {
+    console.error('Error deleting clinical note:', err);
+    throw err;
+  }
+};
+
+/**
+ * Subscribe to real-time clinical notes for a patient
+ */
+export const subscribeToPatientNotes = (
+  patientId: string,
+  onData: (notes: any[]) => void
+): Unsubscribe => {
+  if (!patientId) return () => {};
+  try {
+    const colRef = collection(db, 'patient_notes');
+    const q = query(colRef, where('patientId', '==', patientId));
+    return onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        list.sort((a: any, b: any) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        onData(list);
+      },
+      (err) => console.warn('Clinical notes snapshot error:', err)
+    );
+  } catch (err) {
+    console.error('Failed to subscribe to clinical notes:', err);
+    return () => {};
+  }
+};
+

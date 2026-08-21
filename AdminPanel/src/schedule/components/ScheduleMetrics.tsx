@@ -8,7 +8,7 @@ interface ScheduleMetricsProps {
 export const ScheduleMetrics: React.FC<ScheduleMetricsProps> = ({ appointments = [] }) => {
   const activeCount = appointments.filter((a) => a.status === 'Confirmed' || a.status === 'Scheduled').length;
   const completedCount = appointments.filter((a) => a.status === 'Completed').length;
-  const expiredCount = appointments.filter((a) => a.status === 'Expired').length;
+  const expiredCount = appointments.filter((a) => (a.status as any) === 'Expired').length;
   const cancelledCount = appointments.filter((a) => a.status === 'Cancelled').length;
 
   // Calculate financial statistics dynamically from database records

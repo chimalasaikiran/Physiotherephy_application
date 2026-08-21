@@ -119,126 +119,119 @@ export const ProgramsTab: React.FC<ProgramsTabProps> = ({
                 </p>
               </div>
               <span className="self-start sm:self-auto px-3.5 py-1.5 bg-blue-50 text-blue-700 border border-blue-100 rounded-full text-xs font-bold">
-                1 Active Protocol
+                {assignedPrograms.length} Active Protocol{assignedPrograms.length !== 1 ? 's' : ''}
               </span>
             </div>
 
-            {/* Active Protocol Card (Figma Lumbar Spine Stabilization Card) */}
-            <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-2xs space-y-6 relative overflow-hidden">
-              {/* Card Header Row */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center space-x-3">
-                  <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-full text-[11px] font-extrabold tracking-wider uppercase">
-                    HIGH PRIORITY
-                  </span>
-                  <span className="text-xs font-semibold text-slate-500">
-                    Assigned by {therapistName}
-                  </span>
-                </div>
+            {/* Active Protocol Card(s) */}
+            {assignedPrograms.length > 0 ? (
+              assignedPrograms.map((prog) => (
+                <div key={prog.id} className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-2xs space-y-6 relative overflow-hidden">
+                  {/* Card Header Row */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3">
+                      <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-100 rounded-full text-[11px] font-extrabold tracking-wider uppercase">
+                        {prog.status || 'ACTIVE'}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        Assigned by {(prog as any).therapistName || therapistName}
+                      </span>
+                    </div>
 
-                {/* Compliance Percentage */}
-                <div className="text-right">
-                  <div className="flex items-baseline space-x-1">
-                    <span className="text-2xl sm:text-3xl font-extrabold text-blue-600">80%</span>
+                    {/* Compliance Percentage */}
+                    <div className="text-right">
+                      <div className="flex items-baseline space-x-1">
+                        <span className="text-2xl sm:text-3xl font-extrabold text-blue-600">
+                          {prog.progressPercent || 0}%
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
+                        Overall Compliance
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
-                    Overall Compliance
-                  </span>
-                </div>
-              </div>
 
-              {/* Program Title */}
-              <div>
-                <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                  Lumbar Spine Stabilization
-                </h3>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="space-y-1.5">
-                <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
-                  <div
-                    className="bg-blue-600 h-full rounded-full transition-all duration-500 shadow-xs"
-                    style={{ width: '80%' }}
-                  />
-                </div>
-              </div>
-
-              {/* Metadata Grid (Schedule, Duration, Exercises) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1 border-t border-slate-50">
-                {/* Metric 1: Schedule */}
-                <div className="flex items-center space-x-3 p-3 bg-slate-50/70 rounded-2xl border border-slate-100">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                    <Calendar className="w-4 h-4" />
-                  </div>
+                  {/* Program Title */}
                   <div>
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                      SCHEDULE
-                    </span>
-                    <span className="text-xs sm:text-sm font-extrabold text-slate-900">
-                      Mon, Wed, Fri
-                    </span>
+                    <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                      {prog.programTitle}
+                    </h3>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1.5">
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-full rounded-full transition-all duration-500 shadow-xs"
+                        style={{ width: `${prog.progressPercent || 0}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Metadata Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1 border-t border-slate-50">
+                    <div className="flex items-center space-x-3 p-3 bg-slate-50/70 rounded-2xl border border-slate-100">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                          SCHEDULE
+                        </span>
+                        <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                          {(prog as any).schedule || 'Mon, Wed, Fri'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 p-3 bg-slate-50/70 rounded-2xl border border-slate-100">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                          DURATION
+                        </span>
+                        <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                          Week {prog.currentWeek || 1} of {prog.totalWeeks || 8}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 p-3 bg-slate-50/70 rounded-2xl border border-slate-100">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                        <Activity className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
+                          EXERCISES
+                        </span>
+                        <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+                          {prog.completedSessions || 0} / {prog.totalSessions || 16} Completed
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {/* Metric 2: Duration */}
-                <div className="flex items-center space-x-3 p-3 bg-slate-50/70 rounded-2xl border border-slate-100">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                    <Clock className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                      DURATION
-                    </span>
-                    <span className="text-xs sm:text-sm font-extrabold text-slate-900">
-                      Week 9 of 12
-                    </span>
-                  </div>
+              ))
+            ) : (
+              <div className="bg-white rounded-3xl p-8 border border-dashed border-slate-200 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <Dumbbell className="w-6 h-6" />
                 </div>
-
-                {/* Metric 3: Exercises */}
-                <div className="flex items-center space-x-3 p-3 bg-slate-50/70 rounded-2xl border border-slate-100">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
-                    <Activity className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">
-                      EXERCISES
-                    </span>
-                    <span className="text-xs sm:text-sm font-extrabold text-slate-900">
-                      8 Routine Items
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons Row */}
-              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <h3 className="text-base font-extrabold text-slate-900">No programs assigned</h3>
+                <p className="text-xs text-slate-500 font-medium max-w-sm mx-auto">
+                  There are no active physical therapy programs assigned to {patientName}.
+                </p>
                 <button
-                  onClick={() => openVideo('Lumbar Spine Stabilization Tutorial')}
-                  className="flex items-center space-x-2 px-5 py-2.5 bg-[#0F4C81] hover:bg-blue-800 text-white text-xs sm:text-sm font-bold rounded-2xl shadow-md hover:shadow-lg transition-all cursor-pointer"
+                  onClick={() => setIsAssignModalOpen(true)}
+                  className="px-5 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white text-xs font-bold rounded-2xl shadow-md transition-all cursor-pointer inline-flex items-center space-x-2"
                 >
-                  <Play className="w-4 h-4 fill-white" />
-                  <span>Video Tutorial access</span>
-                </button>
-
-                <button
-                  onClick={() => setIsExerciseListModalOpen(true)}
-                  className="flex items-center space-x-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs sm:text-sm font-bold rounded-2xl transition-all cursor-pointer"
-                >
-                  <List className="w-4 h-4 text-slate-500" />
-                  <span>Exercise List</span>
-                </button>
-
-                <button
-                  onClick={() => showToast('Displaying compliance history analytics...')}
-                  className="p-2.5 bg-slate-100 hover:bg-slate-200/80 text-slate-600 rounded-2xl transition-all cursor-pointer"
-                  title="Compliance Analytics"
-                >
-                  <BarChart2 className="w-4 h-4" />
+                  <Plus className="w-4 h-4" />
+                  <span>Assign Program</span>
                 </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* 2. TODAY'S PRESCRIBED EXERCISES SECTION */}

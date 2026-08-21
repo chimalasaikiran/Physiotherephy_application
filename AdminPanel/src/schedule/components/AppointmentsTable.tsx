@@ -77,7 +77,7 @@ export const AppointmentsTable: React.FC<AppointmentsTableProps> = ({
         return 'bg-rose-50 text-rose-600 border-rose-100';
       case 'No Show':
         return 'bg-indigo-50 text-indigo-600 border-indigo-100';
-      case 'Expired':
+      case 'Expired' as any:
         return 'bg-amber-100/70 text-amber-900 border-amber-300';
       default:
         return 'bg-slate-50 text-slate-600 border-slate-100';

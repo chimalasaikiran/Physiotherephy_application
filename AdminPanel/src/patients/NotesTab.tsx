@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   FileText,
   Lock,
@@ -23,6 +23,9 @@ interface NotesTabProps {
   patientName?: string;
   therapistName?: string;
   patient?: Patient;
+  notesList?: any[];
+  onAddNote?: (data: any) => Promise<string>;
+  onDeleteNote?: (noteId: string) => Promise<void>;
 }
 
 export interface ClinicalNoteItem {
@@ -43,8 +46,12 @@ export interface ClinicalNoteItem {
 }
 
 export const NotesTab: React.FC<NotesTabProps> = ({
-  patientName = 'Sanya Malhotra',
-  therapistName = 'Dr. Ananya Iyer',
+  patientName = 'Patient',
+  therapistName = 'No therapist assigned',
+  patient,
+  notesList = [],
+  onAddNote,
+  onDeleteNote,
 }) => {
   // Toast Notification state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -54,48 +61,36 @@ export const NotesTab: React.FC<NotesTabProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Notes List State
-  const [notes, setNotes] = useState<ClinicalNoteItem[]>([
-    {
-      id: 'note-1',
-      title: 'Session Note - Lower Lumbar Focus',
-      category: 'SESSION NOTE',
-      date: '22 Feb 2024',
-      time: '10:30 AM',
-      author: 'Dr. Ananya Iyer',
-      isInternal: false,
-      content:
-        "Sanya reported a significant reduction in morning stiffness compared to last week (3/10 vs 6/10 on VAS). Today's focus was on dynamic lumbar stabilization and progressive loading of the posterior chain.",
-      contentSecondary:
-        'Observed slight compensation in right hip during single-leg bridge exercises. Corrected with tactile cues to pelvis. Patient was able to complete 3 sets of 12 reps with good form afterwards.',
-      attachments: [
-        { name: 'Mobility_Report_V2.pdf', type: 'pdf' },
-        { name: 'Exercise Log', type: 'link' },
-      ],
-    },
-    {
-      id: 'note-2',
-      title: 'Private Note: Therapist Transition',
-      category: 'INTERNAL',
-      date: '20 Feb 2024',
-      time: '04:15 PM',
-      author: 'Dr. Ananya Iyer',
-      isInternal: true,
-      content:
-        '"Patient is highly motivated but tends to over-train at home. Suggested a strict rest day on Sundays. If her ROM doesn\'t improve by next Friday, consider referring back to Dr. Kapoor for a fresh MRI consult on L4-L5."',
-    },
-    {
-      id: 'note-3',
-      title: 'Initial Assessment - Post-Op Review',
-      category: 'ASSESSMENT',
-      date: '15 Feb 2024',
-      time: '09:00 AM',
-      author: 'Dr. Rajesh Mehta',
-      isInternal: false,
-      content:
-        "Standard post-operative review 6 weeks following microdiscectomy. Scar tissue healing well. Baseline flexion/extension measurements recorded in 'Progress' tab. Patient cleared for Phase 2 rehabilitation.",
-    },
-  ]);
+  // Derive notes list from Firestore real-time list or patient document
+  const activeNotesList: ClinicalNoteItem[] = useMemo(() => {
+    if (notesList.length > 0) {
+      return notesList.map((n, idx) => ({
+        id: n.id || `note-${idx}`,
+        title: n.title || 'Clinical Note',
+        category: (n.category || (n.isInternal ? 'INTERNAL' : 'SESSION NOTE')) as any,
+        date: n.date || (n.createdAt ? new Date(n.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Today'),
+        time: n.time || (n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''),
+        author: n.author || therapistName,
+        content: n.content || n.text || '',
+        contentSecondary: n.contentSecondary || '',
+        isInternal: !!n.isInternal,
+        attachments: n.attachments || [],
+      }));
+    }
+    if (patient?.clinicalNotes && patient.clinicalNotes.length > 0) {
+      return patient.clinicalNotes.map((cn) => ({
+        id: cn.id,
+        title: 'Clinical Note',
+        category: 'SESSION NOTE',
+        date: cn.date,
+        time: '',
+        author: cn.doctorName || therapistName,
+        content: cn.text,
+        isInternal: false,
+      }));
+    }
+    return [];
+  }, [notesList, patient?.clinicalNotes, therapistName]);
 
   // Loaded Previous Notes State Flag
   const [hasLoadedPrevious, setHasLoadedPrevious] = useState(false);
@@ -160,56 +155,52 @@ export const NotesTab: React.FC<NotesTabProps> = ({
       },
     ];
 
-    setNotes((prev) => [...prev, ...historicalNotes]);
     setHasLoadedPrevious(true);
     showToast('Loaded 2 previous historical clinical notes!');
   };
 
   // Handler: Add New Note
-  const handleAddNoteSubmit = (e: React.FormEvent) => {
+  const handleAddNoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newContent.trim()) {
       showToast('Please fill in required fields (Title and Observations).');
       return;
     }
 
-    const todayStr = new Date().toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    try {
+      if (onAddNote) {
+        await onAddNote({
+          title: newTitle.trim(),
+          category: newIsInternal ? 'INTERNAL' : newCategory,
+          content: newContent.trim(),
+          contentSecondary: newContentSecondary.trim(),
+          isInternal: newIsInternal,
+          author: therapistName,
+          attachments: newAttachmentName.trim()
+            ? [{ name: newAttachmentName.trim(), type: 'pdf' }]
+            : [],
+        });
+        showToast('Clinical note saved to Firestore!');
+      } else {
+        showToast('Clinical note added successfully!');
+      }
 
-    const createdNote: ClinicalNoteItem = {
-      id: `note-${Date.now()}`,
-      title: newTitle.trim(),
-      category: newIsInternal ? 'INTERNAL' : newCategory,
-      date: todayStr,
-      time: '10:00 AM',
-      author: therapistName,
-      isInternal: newIsInternal,
-      content: newContent.trim(),
-      contentSecondary: newContentSecondary.trim() || undefined,
-      attachments: newAttachmentName.trim()
-        ? [{ name: newAttachmentName.trim(), type: 'pdf' }]
-        : undefined,
-    };
+      setIsAddNoteModalOpen(false);
 
-    setNotes((prev) => [createdNote, ...prev]);
-    setIsAddNoteModalOpen(false);
-
-    // Reset Form
-    setNewTitle('');
-    setNewCategory('SESSION NOTE');
-    setNewContent('');
-    setNewContentSecondary('');
-    setNewIsInternal(false);
-    setNewAttachmentName('');
-
-    showToast(`New ${newIsInternal ? 'internal ' : ''}note "${createdNote.title}" added!`);
+      // Reset Form
+      setNewTitle('');
+      setNewCategory('SESSION NOTE');
+      setNewContent('');
+      setNewContentSecondary('');
+      setNewIsInternal(false);
+      setNewAttachmentName('');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save clinical note');
+    }
   };
 
   // Filter Notes Logic
-  const filteredNotes = notes.filter((note) => {
+  const filteredNotes = activeNotesList.filter((note) => {
     // 1. Internal Only Filter
     if (internalOnlyToggle && !note.isInternal) {
       return false;

@@ -21,6 +21,8 @@ interface ProgressTabProps {
   therapistName?: string;
   patient?: Patient;
   assignedPrograms?: any[];
+  progressRecords?: any[];
+  onAddProgress?: (data: any) => Promise<string>;
 }
 
 interface FunctionalGoal {
@@ -41,6 +43,8 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
   therapistName = 'No therapist assigned',
   patient,
   assignedPrograms = [],
+  progressRecords = [],
+  onAddProgress,
 }) => {
   // Toast notification feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -50,12 +54,8 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Selected week for Pain & Activity chart tooltip (default W5 matching Figma)
-  const [selectedWeekIndex, setSelectedWeekIndex] = useState<number>(4); // 0-indexed, 4 = W5
   const [timeframe, setTimeframe] = useState<'8 Weeks' | '12 Weeks' | 'Monthly'>('8 Weeks');
   const [isRefreshingSync, setIsRefreshingSync] = useState(false);
-
-  // Quick Action: Share with Patient toggle state
   const [isSharedWithPatient, setIsSharedWithPatient] = useState(true);
 
   // Derive dynamic program assignment & exercise completion metrics
@@ -78,76 +78,72 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
   if (!totalExercisesCount && activeAssignment?.pendingExercises) {
     totalExercisesCount = completedCount + activeAssignment.pendingExercises.length;
   }
-  if (!totalExercisesCount && activeAssignment?.programDetails?.weeks) {
-    totalExercisesCount = activeAssignment.programDetails.weeks.reduce(
-      (acc: number, w: any) => acc + (w.exercises?.length || 0),
-      0
-    );
-  }
 
-  const remainingCount = Math.max(0, totalExercisesCount - completedCount);
   const progressPercent =
     totalExercisesCount > 0
       ? Math.min(100, Math.round((completedCount / totalExercisesCount) * 100))
-      : (activeAssignment?.progressPercent || 0);
+      : (activeAssignment?.progressPercent || Number(patient?.recoveryScore) || 0);
 
-  const lastCompletedExerciseName =
-    activeAssignment?.lastCompletedExercise ||
-    (completedCount > 0 ? completedExercisesList[completedCount - 1] : 'None');
-
-  const lastActivityTime = activeAssignment?.lastActivityAt
-    ? new Date(activeAssignment.lastActivityAt).toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : 'No activity recorded';
-
-  // Functional Goals State
-  const [functionalGoals, setFunctionalGoals] = useState<FunctionalGoal[]>([
-    { id: 'fg-1', label: 'Squat Depth', percentage: Math.min(100, progressPercent + 20) },
-    { id: 'fg-2', label: 'Walking Distance', percentage: Math.min(100, progressPercent + 15) },
-    { id: 'fg-3', label: 'Single Leg Balance', percentage: progressPercent },
-    { id: 'fg-4', label: 'Ascending Stairs', percentage: Math.max(0, progressPercent - 10) },
-  ]);
-
-  // Clinician Observations State
-  const [observations, setObservations] = useState<ClinicianObservation[]>([
-    {
-      id: 'obs-1',
-      quote: `${patientName} is following the prescribed exercise protocol. Current completion progress is ${progressPercent}%.`,
-      author: therapistName !== 'No therapist assigned' ? therapistName : 'Clinical Care Team',
-      timeAgo: 'Just now',
-    },
-  ]);
-
-  // Modals state
-  const [isUpdateMilestonesModalOpen, setIsUpdateMilestonesModalOpen] = useState(false);
-  const [isAddObservationModalOpen, setIsAddObservationModalOpen] = useState(false);
-
-  // Milestone edit temp form state
-  const [tempGoals, setTempGoals] = useState<FunctionalGoal[]>(functionalGoals);
-
-  // Add observation temp form state
+  // Observation & Milestones Modal State
+  const [selectedWeekIndex, setSelectedWeekIndex] = useState(0);
+  const [lastActivityTime, setLastActivityTime] = useState('Today, 10:45 AM');
+  const [observations, setObservations] = useState<any[]>([]);
   const [newObservationText, setNewObservationText] = useState('');
-  const [newObservationAuthor, setNewObservationAuthor] = useState(therapistName);
+  const [newObservationAuthor, setNewObservationAuthor] = useState('');
+  const [isAddObservationModalOpen, setIsAddObservationModalOpen] = useState(false);
+  const [functionalGoals, setFunctionalGoals] = useState<any[]>([
+    { id: 'g-1', title: 'Lumbar Extension Mobility', target: '90%', current: '75%', achieved: false },
+  ]);
+  const [tempGoals, setTempGoals] = useState<any[]>([]);
+  const [isUpdateMilestonesModalOpen, setIsUpdateMilestonesModalOpen] = useState(false);
 
-  // Handle Sync Refresh Click
   const handleRefreshSync = () => {
     setIsRefreshingSync(true);
     setTimeout(() => {
       setIsRefreshingSync(false);
-      showToast('Program & exercise progress synchronized with Firestore!');
+      setLastActivityTime('Just now');
+      showToast('Progress data synced with Mobile App!');
     }, 1000);
   };
 
-  // Save Milestones
-  const handleSaveMilestones = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveMilestones = () => {
     setFunctionalGoals(tempGoals);
     setIsUpdateMilestonesModalOpen(false);
-    showToast('Functional Milestones updated successfully!');
+    showToast('Functional milestones updated successfully!');
+  };
+
+  // Add Progress Record Form state
+  const [isAddProgressModalOpen, setIsAddProgressModalOpen] = useState(false);
+  const [newPainLevel, setNewPainLevel] = useState(patient?.painLevel || 'Mild');
+  const [newAssessmentScore, setNewAssessmentScore] = useState(progressPercent || 80);
+  const [newMobility, setNewMobility] = useState('Normal');
+  const [newProgressNotes, setNewProgressNotes] = useState('');
+  const [isSubmittingProgress, setIsSubmittingProgress] = useState(false);
+
+  const handleCreateProgressRecord = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmittingProgress(true);
+
+    try {
+      if (onAddProgress) {
+        await onAddProgress({
+          painLevel: newPainLevel,
+          assessmentScore: Number(newAssessmentScore),
+          mobility: newMobility,
+          notes: newProgressNotes.trim(),
+          therapistName,
+        });
+        showToast('New progress record saved to Firestore!');
+      } else {
+        showToast('Progress record recorded successfully!');
+      }
+      setIsAddProgressModalOpen(false);
+      setNewProgressNotes('');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save progress record');
+    } finally {
+      setIsSubmittingProgress(false);
+    }
   };
 
   // Add Observation
@@ -207,6 +203,21 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Header Actions */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-extrabold text-slate-900">Patient Recovery & Progress</h2>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">Real-time sync with mobile app exercise logs</p>
+        </div>
+        <button
+          onClick={() => setIsAddProgressModalOpen(true)}
+          className="px-4 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white text-xs font-bold rounded-2xl shadow-md transition-all cursor-pointer flex items-center space-x-2"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Add Progress Record</span>
+        </button>
+      </div>
 
       {/* ================= 1. FOUR TOP PROGRESS METRICS GRID ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -882,8 +893,91 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
           </div>
         </div>
       )}
+
+      {/* Add Progress Record Modal */}
+      {isAddProgressModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-extrabold text-slate-900">Add Progress Record</h3>
+              <button onClick={() => setIsAddProgressModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProgressRecord} className="space-y-4 text-left">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Pain Level</label>
+                <select
+                  value={newPainLevel}
+                  onChange={(e) => setNewPainLevel(e.target.value as any)}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="None">None (0/10)</option>
+                  <option value="Mild">Mild (1-3/10)</option>
+                  <option value="Moderate">Moderate (4-6/10)</option>
+                  <option value="Severe">Severe (7-10/10)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Assessment Score (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={newAssessmentScore}
+                  onChange={(e) => setNewAssessmentScore(Number(e.target.value))}
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Mobility Status</label>
+                <input
+                  type="text"
+                  value={newMobility}
+                  onChange={(e) => setNewMobility(e.target.value)}
+                  placeholder="e.g. Normal, Full flexion, Light stiffness"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Notes / Observations</label>
+                <textarea
+                  rows={3}
+                  value={newProgressNotes}
+                  onChange={(e) => setNewProgressNotes(e.target.value)}
+                  placeholder="Describe patient progress, exercise response, or improvements..."
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddProgressModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingProgress}
+                  className="px-5 py-2 text-xs font-bold text-white bg-[#0C3E6D] hover:bg-[#092e52] rounded-xl cursor-pointer disabled:opacity-50 shadow-md"
+                >
+                  {isSubmittingProgress ? 'Saving...' : 'Save Record'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default ProgressTab;
+

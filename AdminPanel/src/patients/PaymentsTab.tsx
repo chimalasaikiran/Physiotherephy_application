@@ -93,19 +93,6 @@ export const PaymentsTab: React.FC<PaymentsTabProps> = ({
       }
     });
 
-    if (items.length === 0) {
-      return [
-        {
-          id: '#INV-8854',
-          date: 'Oct 24, 2024',
-          description: 'Physiotherapy Session',
-          amount: 4000,
-          status: 'Paid',
-          items: [{ name: 'Lumbar Spine Rehabilitation & Manual Therapy', qty: 1, rate: 4000, total: 4000 }],
-        },
-      ];
-    }
-
     return items;
   }, [firestoreInvoices, payments]);
 

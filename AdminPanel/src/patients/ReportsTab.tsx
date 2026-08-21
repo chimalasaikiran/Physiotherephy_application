@@ -42,8 +42,8 @@ interface ReportItem {
 }
 
 export const ReportsTab: React.FC<ReportsTabProps> = ({
-  patientName = 'Sanya Malhotra',
-  therapistName = 'Dr. Ananya Iyer',
+  patientName = 'Patient',
+  therapistName = 'No therapist assigned',
   patient,
   reports = [],
   onUploadReport,
@@ -56,59 +56,10 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Hidden File Input Ref for Upload trigger
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Drag over dropzone state
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-
-  // Recent Reports State (4 main cards in top grid matching Figma)
-  const [recentReports, setRecentReports] = useState<ReportItem[]>([
-    {
-      id: 'rr-1',
-      name: 'MRI Lumbar Spine',
-      category: 'Imaging',
-      date: '24 Oct 2024',
-      size: '12.4 MB',
-      status: 'VERIFIED',
-      typeIcon: 'teal',
-      summaryText:
-        'Lumbar spine scan shows mild L4-L5 disc protrusion without spinal canal stenosis. Soft tissue alignment intact.',
-    },
-    {
-      id: 'rr-2',
-      name: 'Initial Assessment',
-      category: 'Assessment',
-      date: '18 Oct 2024',
-      size: '2.1 MB',
-      status: 'VERIFIED',
-      typeIcon: 'purple',
-      summaryText:
-        'Comprehensive baseline evaluation. Reduced lumbar range of motion (40%), acute pain index 6/10.',
-    },
-    {
-      id: 'rr-3',
-      name: 'Biomechanical Analysis',
-      category: 'Progress',
-      date: '02 Nov 2024',
-      size: '45.8 MB',
-      status: 'PENDING',
-      typeIcon: 'blue',
-      summaryText:
-        '3D Motion capture data for gait asymmetry and pelvic tilt during squat movement pattern.',
-    },
-    {
-      id: 'rr-4',
-      name: 'Progress Summary Q3',
-      category: 'Summary',
-      date: '30 Sep 2024',
-      size: '1.4 MB',
-      status: 'VERIFIED',
-      typeIcon: 'teal',
-      summaryText:
-        'Quarterly physical therapy outcomes summary demonstrating 38% overall functional recovery boost.',
-    },
-  ]);
+  const [selectedReportForView, setSelectedReportForView] = useState<any | null>(null);
+  const [recentReports, setRecentReports] = useState<any[]>([]);
 
   // Report History Table State ( matching lower table in Figma )
   const [historyReports] = useState<ReportItem[]>([
@@ -336,81 +287,76 @@ export const ReportsTab: React.FC<ReportsTabProps> = ({
               </button>
             </div>
 
-            {/* 2x2 Grid of Recent Report Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {(reports.length > 0 ? (reports as any[]) : recentReports).map((report) => (
-                <div
-                  key={report.id}
-                  className="bg-white rounded-3xl p-5 border border-slate-100 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4 group"
-                >
-                  {/* Top Bar: Icon + Status Badge */}
-                  <div className="flex items-center justify-between">
-                    {/* Category Icon Badge */}
-                    <div
-                      className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
-                        report.typeIcon === 'teal'
-                          ? 'bg-teal-50 text-teal-600'
-                          : report.typeIcon === 'purple'
-                          ? 'bg-purple-50 text-purple-600'
-                          : report.typeIcon === 'blue'
-                          ? 'bg-blue-50 text-blue-600'
-                          : 'bg-amber-50 text-amber-600'
-                      }`}
-                    >
-                      {report.category === 'Imaging' ? (
+            {/* Grid of Report Cards */}
+            {reports.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {reports.map((report) => (
+                  <div
+                    key={report.id}
+                    className="bg-white rounded-3xl p-5 border border-slate-100 shadow-2xs hover:shadow-xs transition-all flex flex-col justify-between space-y-4 group"
+                  >
+                    {/* Top Bar: Icon + Status Badge */}
+                    <div className="flex items-center justify-between">
+                      {/* Category Icon Badge */}
+                      <div className="w-11 h-11 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center">
                         <FileText className="w-5.5 h-5.5" />
-                      ) : report.category === 'Assessment' ? (
-                        <ClipboardList className="w-5.5 h-5.5" />
-                      ) : report.category === 'Progress' ? (
-                        <Activity className="w-5.5 h-5.5" />
-                      ) : (
-                        <FileCheck className="w-5.5 h-5.5" />
-                      )}
+                      </div>
+
+                      {/* Status Badge */}
+                      <span className="text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
+                        {report.status || 'VERIFIED'}
+                      </span>
                     </div>
 
-                    {/* Status Badge */}
-                    <span
-                      className={`text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider ${
-                        report.status === 'VERIFIED'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                          : 'bg-amber-50 text-amber-700 border border-amber-100'
-                      }`}
-                    >
-                      {report.status}
-                    </span>
-                  </div>
+                    {/* Title & Metadata */}
+                    <div className="space-y-1">
+                      <h4 className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                        {report.title || report.name}
+                      </h4>
+                      <p className="text-xs font-semibold text-slate-400">
+                        {report.date} • {report.size || '1.2 MB'}
+                      </p>
+                    </div>
 
-                  {/* Title & Metadata */}
-                  <div className="space-y-1">
-                    <h4 className="text-sm sm:text-base font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
-                      {report.name}
-                    </h4>
-                    <p className="text-xs font-semibold text-slate-400">
-                      {report.date} • {report.size}
-                    </p>
-                  </div>
+                    {/* Card Bottom Actions */}
+                    <div className="pt-2 border-t border-slate-50 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => setSelectedReportForView(report)}
+                        className="flex-1 py-2 px-4 bg-slate-50 hover:bg-slate-100/90 text-slate-700 text-xs font-extrabold rounded-xl flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-slate-500" />
+                        <span>View</span>
+                      </button>
 
-                  {/* Card Bottom Actions (View Button + Download Icon) */}
-                  <div className="pt-2 border-t border-slate-50 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => setSelectedReportModal(report)}
-                      className="flex-1 py-2 px-4 bg-slate-50 hover:bg-slate-100/90 text-slate-700 text-xs font-extrabold rounded-xl flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
-                    >
-                      <Eye className="w-3.5 h-3.5 text-slate-500" />
-                      <span>View</span>
-                    </button>
-
-                    <button
-                      onClick={() => handleDownloadReport(report)}
-                      className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-                      title="Download File"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
+                      <button
+                        onClick={() => showToast(`Downloading ${report.title || report.name}...`)}
+                        className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                        title="Download File"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-3xl p-8 border border-dashed border-slate-200 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                  <FileText className="w-6 h-6" />
                 </div>
-              ))}
-            </div>
+                <h3 className="text-base font-extrabold text-slate-900">No reports available</h3>
+                <p className="text-xs text-slate-500 font-medium max-w-sm mx-auto">
+                  No clinical reports, MRI scans, or lab results uploaded for {patientName} yet.
+                </p>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-5 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white text-xs font-bold rounded-2xl shadow-md transition-all cursor-pointer inline-flex items-center space-x-2"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>Upload Report</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* 3. REPORT HISTORY TABLE SECTION */}

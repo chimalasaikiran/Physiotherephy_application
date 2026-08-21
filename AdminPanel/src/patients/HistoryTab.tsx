@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Calendar,
   Clock,
@@ -25,6 +25,8 @@ interface HistoryTabProps {
   patientName?: string;
   therapistName?: string;
   patient?: Patient;
+  activityLogs?: any[];
+  onAddActivityLog?: (data: any) => Promise<string>;
 }
 
 export interface ActivityLogItem {
@@ -46,8 +48,11 @@ export interface ActivityLogItem {
 }
 
 export const HistoryTab: React.FC<HistoryTabProps> = ({
-  patientName = 'Sanya Malhotra',
-  therapistName = 'Dr. Ananya Iyer',
+  patientName = 'Patient',
+  therapistName = 'No therapist assigned',
+  patient,
+  activityLogs = [],
+  onAddActivityLog,
 }) => {
   // Toast notification feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -57,8 +62,50 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Derived activity items state from real-time Firestore activity logs
+  const activeLogsList: ActivityLogItem[] = useMemo(() => {
+    if (activityLogs.length > 0) {
+      return activityLogs.map((log, idx) => {
+        const timestamp = log.timestamp || log.createdAt;
+        const dateObj = timestamp ? new Date(timestamp) : new Date();
+        const dateGroup = dateObj.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+        const timeStr = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        let cat: 'CLINICAL UPDATE' | 'BILLING' | 'SCHEDULING' | 'DOCUMENTS' | 'CARE PLAN' = 'CLINICAL UPDATE';
+        let iconType: 'note' | 'billing' | 'calendar' | 'document' | 'program' = 'note';
+
+        const actionLower = (log.action || '').toLowerCase();
+        if (actionLower.includes('payment') || actionLower.includes('invoice') || actionLower.includes('billing')) {
+          cat = 'BILLING';
+          iconType = 'billing';
+        } else if (actionLower.includes('appointment') || actionLower.includes('schedule') || actionLower.includes('reschedule')) {
+          cat = 'SCHEDULING';
+          iconType = 'calendar';
+        } else if (actionLower.includes('report') || actionLower.includes('document')) {
+          cat = 'DOCUMENTS';
+          iconType = 'document';
+        } else if (actionLower.includes('program') || actionLower.includes('care')) {
+          cat = 'CARE PLAN';
+          iconType = 'program';
+        }
+
+        return {
+          id: log.id || `act-${idx}`,
+          dateGroup,
+          time: timeStr,
+          category: cat,
+          title: `${log.performedBy || 'Admin'}: ${log.action || 'Activity Event'}`,
+          author: log.performedBy || 'Admin',
+          quote: log.description || '',
+          iconType,
+        };
+      });
+    }
+    return [];
+  }, [activityLogs]);
+
   // Activity items state
-  const [activities, setActivities] = useState<ActivityLogItem[]>([
+  const [activities, setActivities] = useState<ActivityLogItem[]>(activeLogsList.length > 0 ? activeLogsList : [
     {
       id: 'act-1',
       dateGroup: 'Today, Oct 25',
@@ -183,42 +230,35 @@ export const HistoryTab: React.FC<HistoryTabProps> = ({
   };
 
   // Add new activity submission
-  const handleAddActivitySubmit = (e: React.FormEvent) => {
+  const handleAddActivitySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) {
       showToast('Please enter an action title.');
       return;
     }
 
-    const newAct: ActivityLogItem = {
-      id: `act-${Date.now()}`,
-      dateGroup: 'Today, Oct 25',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      category: newCategory,
-      title: newTitle.trim(),
-      author: newAuthor.trim() || therapistName,
-      quote: newQuote.trim() || undefined,
-      iconType:
-        newCategory === 'CLINICAL UPDATE'
-          ? 'note'
-          : newCategory === 'BILLING'
-          ? 'billing'
-          : newCategory === 'SCHEDULING'
-          ? 'calendar'
-          : newCategory === 'DOCUMENTS'
-          ? 'document'
-          : 'program',
-    };
+    try {
+      if (onAddActivityLog) {
+        await onAddActivityLog({
+          action: newTitle.trim(),
+          description: newQuote.trim() || 'Log entry created by admin.',
+          performedBy: newAuthor.trim() || therapistName || 'Admin',
+        });
+        showToast('Activity log entry saved to Firestore!');
+      } else {
+        showToast('Audit log entry created successfully!');
+      }
 
-    setActivities((prev) => [newAct, ...prev]);
-    setIsAddActivityModalOpen(false);
-    setNewTitle('');
-    setNewQuote('');
-    showToast(`New audit log entry "${newAct.title}" added successfully!`);
+      setIsAddActivityModalOpen(false);
+      setNewTitle('');
+      setNewQuote('');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to save activity log');
+    }
   };
 
   // Filter activities
-  const filteredActivities = activities.filter((item) => {
+  const filteredActivities = (activeLogsList.length > 0 ? activeLogsList : activities).filter((item) => {
     // Category Filter
     if (selectedCategory !== 'All Activities') {
       const matchCat =

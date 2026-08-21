@@ -44,7 +44,7 @@ export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [
                 ? 'text-blue-600'
                 : item.status === 'Cancelled'
                 ? 'text-rose-600'
-                : item.status === 'Expired'
+                : (item.status as any) === 'Expired'
                 ? 'text-amber-700'
                 : 'text-sky-600';
 
@@ -55,7 +55,7 @@ export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [
                 ? 'bg-blue-600 ring-blue-100 animate-pulse'
                 : item.status === 'Cancelled'
                 ? 'bg-rose-500 ring-rose-100'
-                : item.status === 'Expired'
+                : (item.status as any) === 'Expired'
                 ? 'bg-amber-600 ring-amber-100'
                 : 'bg-sky-500 ring-sky-100';
 
