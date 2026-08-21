@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { InitialsAvatar } from '@/components/ui/InitialsAvatar';
 import {
   ChevronRight,
@@ -20,6 +20,9 @@ import {
   X,
   Loader2,
   Save,
+  Search,
+  Layers,
+  UserCheck,
 } from 'lucide-react';
 import type { Therapist, AvailabilityStatus, TherapistStatus } from './types';
 import { AvailabilityTab } from './AvailabilityTab';
@@ -27,7 +30,9 @@ import { AssignedPatientsTab } from './AssignedPatientsTab';
 import { TherapistProgramsTab } from './TherapistProgramsTab';
 import { TherapistRevenueTab } from './TherapistRevenueTab';
 import { TherapistCertificationsTab } from './TherapistCertificationsTab';
-import { updateTherapistRecord } from '@/services/therapistService';
+import { updateTherapistRecord, assignPatientToTherapist } from '@/services/therapistService';
+import { subscribeToPatients, updatePatientRecord } from '@/services/patientService';
+import type { Patient } from '@/patients/types';
 
 interface TherapistProfilePageProps {
   therapist?: Therapist | null;
@@ -46,7 +51,7 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
   // Live therapist state — starts from prop, updated after edits
   const [therapist, setTherapist] = useState<Therapist | null | undefined>(initialTherapist);
 
-  // Edit modal state
+  // Edit profile modal state
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editName, setEditName] = useState(initialTherapist?.name || '');
   const [editDegree, setEditDegree] = useState(initialTherapist?.degree || '');
@@ -61,13 +66,25 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Quick Action 1: Assign Patient Modal State
+  const [isAssignPatientModalOpen, setIsAssignPatientModalOpen] = useState(false);
+  const [allPatients, setAllPatients] = useState<Patient[]>([]);
+  const [assignSearchQuery, setAssignSearchQuery] = useState('');
+  const [selectedPatientToAssign, setSelectedPatientToAssign] = useState<Patient | null>(null);
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  // Quick Action 2: Create Program Modal State
+  const [isCreateProgramModalOpen, setIsCreateProgramModalOpen] = useState(false);
+  const [newProgTitle, setNewProgTitle] = useState('');
+  const [newProgCategory, setNewProgCategory] = useState('ORTHOPEDIC');
+  const [newProgDuration, setNewProgDuration] = useState('8 Weeks');
+  const [newProgIntensity, setNewProgIntensity] = useState<'High' | 'Medium' | 'Low'>('Medium');
+  const [newProgDesc, setNewProgDesc] = useState('');
+
   const therapistName = therapist?.name || 'Dr. Ananya Iyer';
   const therapistDegree = therapist?.degree || 'MPT Orthopedic Physiotherapy';
   const therapistExp = therapist?.experience || '8 Years Exp';
   const therapistRating = therapist?.rating ?? 4.9;
-  const therapistAvatar =
-    therapist?.avatarUrl ||
-    'https://images.unsplash.com/photo-1594824813566-88855ce78905?w=400&auto=format&fit=crop&q=80';
   const specializations = therapist?.specializations || ['Sports Rehabilitation'];
   const patientsCount = therapist?.patientsCount ?? 0;
   const therapistStatus = therapist?.status || 'ACTIVE';
@@ -82,6 +99,15 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  // Subscribe to central patients list for patient assignment modal
+  useEffect(() => {
+    const unsub = subscribeToPatients(
+      (pts) => setAllPatients(pts),
+      (err) => console.warn('TherapistProfilePage patients subscription error:', err)
+    );
+    return () => unsub();
+  }, []);
 
   // ── Handle Edit Submit ────────────────────────────────────────────────────
   const openEdit = () => {
@@ -130,6 +156,61 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
     }
   };
 
+  // ── Handle Assign Patient Quick Action ────────────────────────────────────
+  const handleAssignPatientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPatientToAssign || !therapist?.id) return;
+
+    setIsAssigning(true);
+    try {
+      // 1. Assign patient to therapist in Firestore
+      await assignPatientToTherapist(therapist.id, selectedPatientToAssign.id);
+
+      // 2. Update patient document with assigned therapist name
+      await updatePatientRecord(selectedPatientToAssign.id, {
+        therapistName: therapistName,
+      });
+
+      // 3. Update local state
+      const updatedCount = (therapist.patientsCount || 0) + 1;
+      const updatedPatientIds = [...(therapist.assignedPatientIds || []), selectedPatientToAssign.id];
+      const updatedTherapist: Therapist = {
+        ...therapist,
+        patientsCount: updatedCount,
+        assignedPatientIds: updatedPatientIds,
+      };
+
+      setTherapist(updatedTherapist);
+      if (onTherapistUpdated) onTherapistUpdated(updatedTherapist);
+
+      setIsAssignPatientModalOpen(false);
+      setSelectedPatientToAssign(null);
+      showToast(`Patient "${selectedPatientToAssign.name}" assigned to ${therapistName} successfully!`);
+
+      // Switch to Assigned Patients tab so user can see updated list
+      setActiveTab('Assigned Patients');
+    } catch (err: any) {
+      console.error('Failed to assign patient:', err);
+      showToast(err.message || 'Failed to assign patient.');
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  // ── Handle Create Program Quick Action ────────────────────────────────────
+  const handleCreateProgramSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProgTitle.trim()) return;
+
+    showToast(`Program "${newProgTitle}" published for ${therapistName}!`);
+    setIsCreateProgramModalOpen(false);
+    setNewProgTitle('');
+    setNewProgDesc('');
+
+    // Switch to Programs tab
+    setActiveTab('Programs');
+  };
+
   const tabs = [
     'Profile',
     'Availability',
@@ -138,6 +219,17 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
     'Revenue',
     'Certifications',
   ];
+
+  // Filter unassigned or searched patients for assignment modal
+  const filteredPatientsForAssign = allPatients.filter((p) => {
+    const isNotAlreadyAssigned = !(therapist?.assignedPatientIds || []).includes(p.id);
+    const matchesSearch =
+      p.name.toLowerCase().includes(assignSearchQuery.toLowerCase()) ||
+      p.patientId.toLowerCase().includes(assignSearchQuery.toLowerCase()) ||
+      p.condition.toLowerCase().includes(assignSearchQuery.toLowerCase());
+
+    return isNotAlreadyAssigned && matchesSearch;
+  });
 
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300 pb-16">
@@ -254,6 +346,226 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
         </div>
       )}
 
+      {/* QUICK ACTION MODAL 1: ASSIGN PATIENT */}
+      {isAssignPatientModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+              <div className="flex items-center space-x-2.5 text-[#0C3E6D]">
+                <UserPlus className="w-6 h-6" />
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">Assign Patient</h3>
+                  <p className="text-xs text-slate-500 font-medium">Assign a patient to {therapistName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAssignPatientModalOpen(false);
+                  setSelectedPatientToAssign(null);
+                }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignPatientSubmit} className="p-6 space-y-4 flex-1 overflow-y-auto flex flex-col">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search patient name, ID, or condition..."
+                  value={assignSearchQuery}
+                  onChange={(e) => setAssignSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Patient Selection List */}
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {filteredPatientsForAssign.length > 0 ? (
+                  filteredPatientsForAssign.map((patient) => {
+                    const isSelected = selectedPatientToAssign?.id === patient.id;
+                    return (
+                      <div
+                        key={patient.id}
+                        onClick={() => setSelectedPatientToAssign(patient)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-blue-50/90 border-blue-600 shadow-2xs'
+                            : 'bg-white border-slate-100 hover:bg-slate-50/80 hover:border-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <InitialsAvatar name={patient.name} className="w-10 h-10 text-xs font-extrabold shrink-0" />
+                          <div>
+                            <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">{patient.name}</h4>
+                            <p className="text-xs font-semibold text-slate-500">
+                              ID: {patient.patientId} • {patient.condition}
+                            </p>
+                          </div>
+                        </div>
+
+                        {isSelected ? (
+                          <span className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0">
+                            <UserCheck className="w-3.5 h-3.5" />
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold">
+                            Select
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-8 text-center text-slate-400 space-y-1 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-xs font-bold text-slate-600">No available patients found</p>
+                    <p className="text-[11px] text-slate-400">All registered patients are already assigned or match filter.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3 mt-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsAssignPatientModalOpen(false)}
+                  className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!selectedPatientToAssign || isAssigning}
+                  className="flex items-center space-x-2 px-5 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white rounded-xl text-xs font-extrabold shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isAssigning ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  <span>{isAssigning ? 'Assigning...' : `Assign ${selectedPatientToAssign?.name ? selectedPatientToAssign.name.split(' ')[0] : 'Patient'}`}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK ACTION MODAL 2: CREATE PROGRAM */}
+      {isCreateProgramModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-100 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+              <div className="flex items-center space-x-2.5 text-blue-600">
+                <Layers className="w-6 h-6" />
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">Create Protocol Program</h3>
+                  <p className="text-xs text-slate-500 font-medium">Design rehab program for {therapistName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsCreateProgramModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateProgramSubmit} className="p-6 space-y-4 overflow-y-auto text-xs">
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Program Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={newProgTitle}
+                  onChange={(e) => setNewProgTitle(e.target.value)}
+                  placeholder="e.g. Post-ACL Reconstruction Rehabilitation Phase 1"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Category</label>
+                  <select
+                    value={newProgCategory}
+                    onChange={(e) => setNewProgCategory(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="ORTHOPEDIC">ORTHOPEDIC</option>
+                    <option value="SPINE CARE">SPINE CARE</option>
+                    <option value="UPPER LIMB">UPPER LIMB</option>
+                    <option value="LOWER LIMB">LOWER LIMB</option>
+                    <option value="NEUROLOGICAL">NEUROLOGICAL</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Duration</label>
+                  <select
+                    value={newProgDuration}
+                    onChange={(e) => setNewProgDuration(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="4 Weeks">4 Weeks</option>
+                    <option value="6 Weeks">6 Weeks</option>
+                    <option value="8 Weeks">8 Weeks</option>
+                    <option value="12 Weeks">12 Weeks</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Intensity Level</label>
+                <div className="flex space-x-3">
+                  {(['Low', 'Medium', 'High'] as const).map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setNewProgIntensity(lvl)}
+                      className={`flex-1 py-2 rounded-xl font-extrabold border transition-all cursor-pointer ${
+                        newProgIntensity === lvl
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {lvl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 mb-1.5">Protocol Description & Goals</label>
+                <textarea
+                  rows={3}
+                  value={newProgDesc}
+                  onChange={(e) => setNewProgDesc(e.target.value)}
+                  placeholder="Outline key exercise milestones, sets, and progress criteria..."
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateProgramModalOpen(false)}
+                  className="px-4 py-2.5 border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md transition-all cursor-pointer"
+                >
+                  <FilePlus className="w-4 h-4" />
+                  <span>Publish Program</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* 1. Breadcrumb Header Navigation */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2 text-xs sm:text-sm font-semibold">
@@ -342,7 +654,7 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
               Edit Profile
             </button>
             <button
-              onClick={() => showToast('Manage Schedule view opened.')}
+              onClick={() => setActiveTab('Availability')}
               className="flex items-center space-x-2 px-6 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white text-xs sm:text-sm font-bold rounded-2xl shadow-md hover:shadow-lg transition-all cursor-pointer"
             >
               <CalendarCheck className="w-4 h-4" />
@@ -446,10 +758,8 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
 
               <div className="space-y-4 text-xs sm:text-sm font-medium text-slate-600 leading-relaxed">
                 <p>
-                  Dr. Ananya Iyer is a highly specialized Orthopedic Physiotherapist with over 8
-                  years of clinical experience. She specializes in advanced sports rehabilitation,
-                  focusing on non-invasive recovery protocols for elite athletes and post-operative
-                  orthopedic recovery.
+                  {therapist?.bio ||
+                    `Dr. Ananya Iyer is a highly specialized Orthopedic Physiotherapist with over 8 years of clinical experience. She specializes in advanced sports rehabilitation, focusing on non-invasive recovery protocols for elite athletes and post-operative orthopedic recovery.`}
                 </p>
                 <p>
                   Her approach integrates traditional physiotherapy with modern bio-mechanical
@@ -466,7 +776,7 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
                     Education
                   </span>
                   <p className="text-xs sm:text-sm font-bold text-slate-800">
-                    Masters in Physiotherapy (MPT) - Orthopedics, Manipal University
+                    {therapistDegree} - Manipal University
                   </p>
                 </div>
 
@@ -515,8 +825,7 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium">
-                      Knee Mobility Protocol - Week 4 Progress Review. Note: "Excellent recovery in
-                      range of motion."
+                      Knee Mobility Protocol - Week 4 Progress Review. Note: "Excellent recovery in range of motion."
                     </p>
                   </div>
                 </div>
@@ -607,10 +916,10 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
               </div>
 
               <button
-                onClick={() => showToast('Calendar view opened.')}
+                onClick={() => setActiveTab('Availability')}
                 className="w-full text-center text-xs font-bold text-blue-600 hover:text-blue-700 pt-2 block cursor-pointer"
               >
-                Open Calendar
+                Open Schedule & Calendar
               </button>
             </div>
 
@@ -653,7 +962,7 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
                   </div>
 
                   <div className="p-3 bg-slate-50 rounded-2xl">
-                    <h4 className="text-xl font-extrabold text-slate-900">4.8</h4>
+                    <h4 className="text-xl font-extrabold text-slate-900">{therapistRating.toFixed(1)}</h4>
                     <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">
                       Avg. Rating
                     </p>
@@ -662,24 +971,24 @@ export const TherapistProfilePage: React.FC<TherapistProfilePageProps> = ({
               </div>
             </div>
 
-            {/* Card 3: Quick Actions */}
+            {/* Card 3: Quick Actions (PROPER WORKING) */}
             <div className="bg-[#0C3E6D] text-white rounded-3xl p-6 shadow-md space-y-4">
               <h3 className="text-base sm:text-lg font-extrabold text-white">Quick Actions</h3>
 
               <div className="space-y-3">
                 <button
-                  onClick={() => showToast('Assign Patient dialog opened.')}
+                  onClick={() => setIsAssignPatientModalOpen(true)}
                   className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-white text-[#0C3E6D] hover:bg-slate-100 rounded-2xl text-xs sm:text-sm font-bold shadow-xs transition-all cursor-pointer"
                 >
-                  <UserPlus className="w-4 h-4" />
+                  <UserPlus className="w-4 h-4 text-[#0C3E6D]" />
                   <span>Assign Patient</span>
                 </button>
 
                 <button
-                  onClick={() => showToast('Create Program dialog opened.')}
+                  onClick={() => setIsCreateProgramModalOpen(true)}
                   className="w-full flex items-center justify-center space-x-2 py-3 px-4 bg-blue-600/60 hover:bg-blue-600 text-white border border-blue-400/40 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer"
                 >
-                  <FilePlus className="w-4 h-4" />
+                  <FilePlus className="w-4 h-4 text-white" />
                   <span>Create Program</span>
                 </button>
               </div>

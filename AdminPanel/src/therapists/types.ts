@@ -2,6 +2,16 @@ export type AvailabilityStatus = 'Available Today' | 'Busy' | 'On Leave';
 
 export type TherapistStatus = 'ACTIVE' | 'INACTIVE';
 
+export interface ScheduleSlot {
+  id: string;
+  day: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+  startTime: string;
+  endTime: string;
+  type: 'clinic' | 'home' | 'online';
+  label: string;
+  locationDetails?: string;
+}
+
 export interface Therapist {
   id: string;
   name: string;
@@ -26,6 +36,7 @@ export interface Therapist {
   workingHours?: string;
   /** Firestore doc IDs of patients assigned to this therapist */
   assignedPatientIds?: string[];
+  weeklySchedule?: ScheduleSlot[];
   /** ISO timestamp — set by Firestore on create */
   createdAt?: string | null;
   /** ISO timestamp — updated on every write */

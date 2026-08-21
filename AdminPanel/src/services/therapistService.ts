@@ -52,6 +52,7 @@ export const mapDocToTherapist = (id: string, data: Record<string, any>): Therap
         .toUpperCase()
       : 'DR'),
   assignedPatientIds: Array.isArray(data.assignedPatientIds) ? data.assignedPatientIds : [],
+  weeklySchedule: Array.isArray(data.weeklySchedule) ? data.weeklySchedule : undefined,
   createdAt: data.createdAt || null,
   updatedAt: data.updatedAt || null,
 });
