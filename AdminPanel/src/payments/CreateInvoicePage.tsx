@@ -219,7 +219,7 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
         const mapped: PatientData[] = pts.map((p) => ({
           id: p.id,
           name: p.name,
-          patientCode: p.patientCode || `P-${p.id.slice(0, 5).toUpperCase()}`,
+          patientCode: p.patientId || `P-${p.id.slice(0, 5).toUpperCase()}`,
           initials: p.name
             ? p.name
                 .split(' ')
@@ -228,12 +228,12 @@ export const CreateInvoicePage: React.FC<CreateInvoicePageProps> = ({
                 .toUpperCase()
                 .slice(0, 2)
             : 'PT',
-          program: p.primaryCondition || p.treatmentPlan || 'ACL Recovery Program',
-          balance: p.balance ?? 0,
+          program: p.condition || p.treatmentPlan?.title || 'ACL Recovery Program',
+          balance: (p as any).balance ?? 0,
           phone: p.phone || '+91 98765 43210',
           email: p.email || 'patient@example.com',
           ageGender: `${p.age || '28'} Yrs / ${p.gender || 'Female'}`,
-          doctor: p.assignedTherapistName || p.therapistName || 'Dr. Arjun Mehta',
+          doctor: p.therapistName || 'Dr. Arjun Mehta',
           lastInvoice: 'INV-2026-00089',
           totalInvoices: 1,
           activeProgramTag: p.status || 'Active',

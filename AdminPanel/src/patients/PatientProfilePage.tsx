@@ -22,9 +22,10 @@ import {
   CheckCircle,
   Video,
   ArrowLeft,
+  Trash2,
 } from 'lucide-react';
 import type { Patient, PatientGoal } from './types';
-import { addGoalToPatient, toggleGoalStatus, addClinicalNoteToPatient } from '@/services/patientService';
+import { addGoalToPatient, toggleGoalStatus, addClinicalNoteToPatient, deletePatientRecord } from '@/services/patientService';
 import { usePatientProfileData } from './usePatientProfileData';
 import { MedicalHistoryTab } from './MedicalHistoryTab';
 import { ProgramsTab } from './ProgramsTab';
@@ -57,7 +58,7 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
     assignProgram,
   } = usePatientProfileData(initialPatient);
 
-  const patientName = patient.name || 'Unnamed Patient';
+  const patientName = (patient.name && patient.name !== 'Unnamed Patient') ? patient.name : `Patient (${patient.patientId || patient.id.slice(0, 6)})`;
   const patientAge = patient.age || 30;
   const patientGender = patient.gender || 'Male';
   const patientAvatar =
@@ -81,6 +82,8 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
 
   // New goal input modal state
   const [isAddGoalModalOpen, setIsAddGoalModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [newGoalText, setNewGoalText] = useState('');
   const [newGoalCategory, setNewGoalCategory] = useState<'SHORT TERM' | 'LONG TERM'>('SHORT TERM');
 
@@ -235,6 +238,14 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
               className="px-6 py-2.5 bg-[#0C3E6D] hover:bg-[#092e52] text-white text-xs sm:text-sm font-bold rounded-2xl shadow-md hover:shadow-lg transition-all cursor-pointer"
             >
               Book Appointment
+            </button>
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs sm:text-sm font-bold rounded-2xl transition-all cursor-pointer flex items-center space-x-2"
+              title="Delete Patient Record"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete Record</span>
             </button>
           </div>
         </div>
@@ -742,6 +753,51 @@ export const PatientProfilePage: React.FC<PatientProfilePageProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Delete Patient Confirmation Modal */}
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 border border-slate-100">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-900">Delete Patient Record?</h3>
+              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-1">
+                Are you sure you want to permanently delete the patient record for <strong className="text-slate-900">{patientName}</strong> ({patient.patientId})? This action cannot be undone.
+              </p>
+            </div>
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    await deletePatientRecord(patient.id);
+                    setIsDeleteModalOpen(false);
+                    if (onBack) onBack();
+                  } catch (e: any) {
+                    showToast(e.message || 'Failed to delete patient record.');
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? 'Deleting...' : 'Yes, Delete Record'}
+              </button>
+            </div>
           </div>
         </div>
       )}

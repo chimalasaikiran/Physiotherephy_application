@@ -345,12 +345,12 @@ export const MedicalInfoScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
       <View style={styles.container}>
         {/* HEADER BAR */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 4, height: 56 + insets.top }]}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={styles.headerIconButton}
@@ -686,7 +686,7 @@ export const MedicalInfoScreen: React.FC = () => {
         {/* BOTTOM NAVIGATION BAR */}
         <BottomNavBar activeTab="profile" onTabPress={handleTabPress} />
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 

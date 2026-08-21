@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Calendar, User, Tag, ChevronDown, List, LayoutGrid, CheckCircle2 } from 'lucide-react';
+import { Search, Calendar, User, Tag, ChevronDown, List, LayoutGrid, CheckCircle2, CreditCard, DollarSign } from 'lucide-react';
 
 interface ScheduleFiltersProps {
   searchTerm: string;
@@ -12,6 +12,10 @@ interface ScheduleFiltersProps {
   onTypeChange: (value: string) => void;
   selectedStatus?: string;
   onStatusChangeFilter?: (value: string) => void;
+  selectedPaymentMethod?: string;
+  onPaymentMethodChange?: (value: string) => void;
+  selectedPaymentStatus?: string;
+  onPaymentStatusChange?: (value: string) => void;
   viewMode: 'list' | 'grid';
   onViewModeChange: (mode: 'list' | 'grid') => void;
 }
@@ -27,11 +31,15 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
   onTypeChange,
   selectedStatus = 'All',
   onStatusChangeFilter,
+  selectedPaymentMethod = 'All',
+  onPaymentMethodChange,
+  selectedPaymentStatus = 'All',
+  onPaymentStatusChange,
   viewMode,
   onViewModeChange,
 }) => {
   return (
-    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-xs">
+    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs">
       {/* Left side: Search & Filter Dropdowns */}
       <div className="flex flex-1 flex-wrap items-center gap-2.5 min-w-0">
         {/* Search input */}
@@ -41,7 +49,7 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Filter list..."
+            placeholder="Search patient, therapist..."
             className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200/80 focus:bg-white focus:border-blue-500 rounded-xl text-sm font-medium text-slate-800 placeholder-slate-400 outline-hidden transition-all"
           />
         </div>
@@ -51,7 +59,7 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
           <select
             value={selectedTimeframe}
             onChange={(e) => onTimeframeChange(e.target.value)}
-            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
           >
             <option value="All">All Dates</option>
             <option value="Today">Today</option>
@@ -64,21 +72,77 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
           <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
 
-        {/* Status Filter Dropdown */}
+        {/* Appointment Status Filter Dropdown */}
         {onStatusChangeFilter && (
           <div className="relative">
             <select
               value={selectedStatus}
               onChange={(e) => onStatusChangeFilter(e.target.value)}
-              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
             >
               <option value="All">All Statuses</option>
-              <option value="Confirmed">Confirmed / Active</option>
+              <option value="Confirmed">Confirmed</option>
+              <option value="Pending">Pending</option>
+              <option value="Scheduled">Scheduled</option>
+              <option value="In Progress">In Progress</option>
               <option value="Completed">Completed</option>
-              <option value="Expired">Expired</option>
               <option value="Cancelled">Cancelled</option>
+              <option value="No Show">No Show</option>
             </select>
             <CheckCircle2 className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        )}
+
+        {/* Appointment Type Filter Dropdown */}
+        <div className="relative">
+          <select
+            value={selectedType}
+            onChange={(e) => onTypeChange(e.target.value)}
+            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+          >
+            <option value="All">All Types</option>
+            <option value="Home Visit">Home Visit</option>
+            <option value="Clinic Visit">Clinic Visit</option>
+            <option value="Online">Online</option>
+          </select>
+          <Tag className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+
+        {/* Payment Method Filter Dropdown */}
+        {onPaymentMethodChange && (
+          <div className="relative">
+            <select
+              value={selectedPaymentMethod}
+              onChange={(e) => onPaymentMethodChange(e.target.value)}
+              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+            >
+              <option value="All">All Methods</option>
+              <option value="Online">Online</option>
+              <option value="Cash">Cash</option>
+            </select>
+            <CreditCard className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+        )}
+
+        {/* Payment Status Filter Dropdown */}
+        {onPaymentStatusChange && (
+          <div className="relative">
+            <select
+              value={selectedPaymentStatus}
+              onChange={(e) => onPaymentStatusChange(e.target.value)}
+              className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+            >
+              <option value="All">All Payment Statuses</option>
+              <option value="Pending">Pending</option>
+              <option value="Paid">Paid</option>
+              <option value="Failed">Failed</option>
+              <option value="Refunded">Refunded</option>
+              <option value="Partial">Partial</option>
+            </select>
+            <DollarSign className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         )}
@@ -88,30 +152,14 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
           <select
             value={selectedTherapist}
             onChange={(e) => onTherapistChange(e.target.value)}
-            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
+            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-xs sm:text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
           >
             <option value="All">All Therapists</option>
-            <option value="Dr. PriyaSharma">Dr. PriyaSharma</option>
-            <option value="Dr. Rohan Gupta">Dr. Rohan Gupta</option>
-            <option value="Dr. Ananya Roy">Dr. Ananya Roy</option>
+            <option value="Dr. Arjun Mehta">Dr. Arjun Mehta</option>
+            <option value="Dr. Ananya Iyer">Dr. Ananya Iyer</option>
+            <option value="Dr. Rajesh Sharma">Dr. Rajesh Sharma</option>
           </select>
           <User className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-        </div>
-
-        {/* Type Filter Dropdown */}
-        <div className="relative">
-          <select
-            value={selectedType}
-            onChange={(e) => onTypeChange(e.target.value)}
-            className="appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 text-slate-700 text-sm font-semibold pl-9 pr-8 py-2 rounded-xl cursor-pointer transition-colors outline-hidden"
-          >
-            <option value="All">All Types</option>
-            <option value="Clinic Visit">Clinic Visit</option>
-            <option value="Online">Online</option>
-            <option value="Home Visit">Home Visit</option>
-          </select>
-          <Tag className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
       </div>
@@ -146,4 +194,3 @@ export const ScheduleFilters: React.FC<ScheduleFiltersProps> = ({
     </div>
   );
 };
-

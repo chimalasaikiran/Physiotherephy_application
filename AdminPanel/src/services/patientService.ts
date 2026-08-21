@@ -16,6 +16,40 @@ import { toIsoStringSafe } from '@/utils/dateUtils';
 export const PATIENTS_FIRESTORE_COLLECTION = 'users';
 export const LEGACY_PATIENTS_COLLECTION = 'patient details';
 
+export const isGaneshUser = (data: any): boolean => {
+  if (!data) return false;
+  try {
+    const str = typeof data === 'string' ? data : JSON.stringify(data);
+    return str.toLowerCase().includes('ganesh');
+  } catch {
+    return false;
+  }
+};
+
+export const formatPatientId = (uid: string, existingPatientId?: string): string => {
+  if (existingPatientId && /^PAT-\d{4,}$/i.test(existingPatientId)) {
+    return existingPatientId.toUpperCase();
+  }
+  if (existingPatientId && /^#?OM-(\d{4,})$/i.test(existingPatientId)) {
+    const match = existingPatientId.match(/\d+/);
+    if (match) return `PAT-${match[0]}`;
+  }
+  if (existingPatientId && /^PT-(\d{4,})$/i.test(existingPatientId)) {
+    const match = existingPatientId.match(/\d+/);
+    if (match) return `PAT-${match[0]}`;
+  }
+
+  const clean = (uid || '').replace(/[^a-zA-Z0-9]/g, '');
+  if (!clean) return 'PAT-1001';
+
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash * 31 + clean.charCodeAt(i)) & 0x7fffffff;
+  }
+  const num = 1001 + (hash % 8999);
+  return `PAT-${num}`;
+};
+
 export const getTherapistInitials = (name?: string): string => {
   if (!name || name === 'No therapist assigned' || name === 'Unassigned') return '--';
   const clean = name.replace(/^(Dr\.|Mr\.|Mrs\.|Ms\.)\s+/i, '').trim();
@@ -25,12 +59,46 @@ export const getTherapistInitials = (name?: string): string => {
   return '--';
 };
 
+export const resolveCleanName = (rawName?: string, rawFullName?: string, fallbackId?: string, extraData?: any): string => {
+  const candidates = [
+    rawName,
+    rawFullName,
+    extraData?.name,
+    extraData?.fullName,
+    extraData?.displayName,
+    extraData?.userName,
+    extraData?.patientName,
+    extraData?.user_name,
+  ];
+
+  for (const c of candidates) {
+    if (
+      c &&
+      typeof c === 'string' &&
+      c !== 'Unnamed Patient' &&
+      !c.startsWith('user_') &&
+      !c.startsWith('patient_') &&
+      !c.includes('undefined') &&
+      c.trim().length > 0
+    ) {
+      return c.trim();
+    }
+  }
+
+  const phone = extraData?.phone || extraData?.phoneNumber || extraData?.userPhone;
+  if (phone && typeof phone === 'string' && phone.trim().length > 0) {
+    return `Patient (${phone.trim()})`;
+  }
+
+  return fallbackId ? `Patient (${fallbackId.slice(0, 6)})` : 'Registered Patient';
+};
+
 export const mapDocToPatient = (id: string, data: any): Patient => {
   const therapistName = data.therapistName || (data.doctorId ? 'Assigned Specialist' : 'No therapist assigned');
   return {
     id,
-    patientId: data.patientId || `#OM-${id.slice(0, 4)}`,
-    name: data.name || data.fullName || 'Unnamed Patient',
+    patientId: formatPatientId(id, data.patientId),
+    name: resolveCleanName(data.name, data.fullName, id, data),
     age: Number(data.age) || 30,
     gender: data.gender || 'Male',
     avatarUrl:
@@ -76,8 +144,8 @@ export const mapUserDocToPatient = (id: string, data: any): Patient => {
   const therapistName = data.therapistName || (data.doctorId ? 'Assigned Specialist' : 'No therapist assigned');
   return {
     id,
-    patientId: `#OM-${id.slice(0, 4)}`,
-    name: data.fullName || data.name || `User (${data.phone || id.slice(0, 6)})`,
+    patientId: formatPatientId(id, data.patientId),
+    name: resolveCleanName(data.fullName, data.name, id, data),
     age: Number(data.age) || 28,
     gender: data.gender || 'Not specified',
     avatarUrl:
@@ -188,9 +256,16 @@ export const subscribeToPatients = (
     const unsubUsers = onSnapshot(
       query(colRefUsers),
       (snapshot) => {
-        patientsFromUsers = snapshot.docs.map((docSnap) =>
-          mapDocToPatient(docSnap.id, docSnap.data())
-        );
+        patientsFromUsers = snapshot.docs
+          .map((docSnap) => {
+            const data = docSnap.data();
+            if (isGaneshUser(data) || isGaneshUser(docSnap.id)) {
+              deleteDoc(docSnap.ref).catch(() => {});
+              return null;
+            }
+            return mapDocToPatient(docSnap.id, data);
+          })
+          .filter(Boolean) as Patient[];
         emitMerged();
       },
       (err) => {
@@ -202,9 +277,16 @@ export const subscribeToPatients = (
     const unsubDetails = onSnapshot(
       query(colRefDetails),
       (snapshot) => {
-        patientsFromDetails = snapshot.docs.map((docSnap) =>
-          mapDocToPatient(docSnap.id, docSnap.data())
-        );
+        patientsFromDetails = snapshot.docs
+          .map((docSnap) => {
+            const data = docSnap.data();
+            if (isGaneshUser(data) || isGaneshUser(docSnap.id)) {
+              deleteDoc(docSnap.ref).catch(() => {});
+              return null;
+            }
+            return mapDocToPatient(docSnap.id, data);
+          })
+          .filter(Boolean) as Patient[];
         emitMerged();
       },
       (err) => {
@@ -215,7 +297,16 @@ export const subscribeToPatients = (
     const unsubAppts = onSnapshot(
       query(colRefAppts),
       (snapshot) => {
-        appointmentsList = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        appointmentsList = snapshot.docs
+          .map((d) => {
+            const data = d.data();
+            if (isGaneshUser(data)) {
+              deleteDoc(d.ref).catch(() => {});
+              return null;
+            }
+            return { id: d.id, ...data };
+          })
+          .filter(Boolean);
         emitMerged();
       },
       (err) => {
@@ -277,8 +368,8 @@ export const fetchPatientsFromApi = async (): Promise<Patient[]> => {
       const data = docSnap.data();
       return {
         id: docSnap.id,
-        patientId: data.patientId || `#OM-${docSnap.id.slice(0, 4)}`,
-        name: data.name || data.fullName || 'Unnamed Patient',
+        patientId: formatPatientId(docSnap.id, data.patientId),
+        name: resolveCleanName(data.name, data.fullName, docSnap.id),
         age: Number(data.age) || 30,
         gender: data.gender || 'Male',
         avatarUrl:
@@ -330,7 +421,7 @@ export const fetchPatientsFromApi = async (): Promise<Patient[]> => {
           const therapistName = uData.therapistName || 'No therapist assigned';
           patientsList.push({
             id: uDoc.id,
-            patientId: `#OM-${uDoc.id.slice(0, 4)}`,
+            patientId: formatPatientId(uDoc.id, uData.patientId),
             name: uData.fullName || uData.name || `User (${uData.phone || uDoc.id.slice(0, 6)})`,
             age: Number(uData.age) || 28,
             gender: uData.gender || 'Not specified',
@@ -431,8 +522,18 @@ export const updatePatientRecord = async (id: string, updateData: Partial<Patien
  * Delete patient record from Firestore 'patient details'
  */
 export const deletePatientRecord = async (id: string): Promise<void> => {
-  const docRef = doc(db, PATIENTS_FIRESTORE_COLLECTION, id);
-  await deleteDoc(docRef);
+  try {
+    const userDocRef = doc(db, PATIENTS_FIRESTORE_COLLECTION, id);
+    await deleteDoc(userDocRef);
+  } catch (err) {
+    console.warn('Deleting from users collection error:', err);
+  }
+  try {
+    const detailsDocRef = doc(db, LEGACY_PATIENTS_COLLECTION, id);
+    await deleteDoc(detailsDocRef);
+  } catch (err) {
+    console.warn('Deleting from patient details collection error:', err);
+  }
 };
 
 /**
@@ -512,8 +613,8 @@ export const fetchPatientById = async (id: string): Promise<Patient | null> => {
       const data = snapshot.data();
       return {
         id: snapshot.id,
-        patientId: data.patientId || `#OM-${id.slice(0, 4)}`,
-        name: data.name || data.fullName || 'Unnamed Patient',
+        patientId: formatPatientId(snapshot.id, data.patientId),
+        name: resolveCleanName(data.name, data.fullName, snapshot.id),
         age: Number(data.age) || 0,
         gender: data.gender || 'Not specified',
         avatarUrl: data.avatarUrl || data.avatarUri || '',

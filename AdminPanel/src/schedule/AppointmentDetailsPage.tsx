@@ -18,12 +18,16 @@ import {
   ChevronRight,
   ArrowLeft,
   Share2,
+  DollarSign,
+  Video,
+  Home,
+  Building2,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react';
-
-import { updateScheduleStatusRecord } from '@/services/scheduleService';
-
+import { updateScheduleStatusRecord, markCashAsPaidRecord, deleteScheduleRecord } from '@/services/scheduleService';
 import { ProcessRefundModal, type ProcessRefundModalTarget } from '@/payments/components/ProcessRefundModal';
-import { RotateCcw } from 'lucide-react';
+import { formatAppointmentTypeLabel } from '@/utils/appointmentUtils';
 
 interface AppointmentDetailsPageProps {
   appointment?: any;
@@ -41,28 +45,32 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
   onNavigateToReschedule,
 }) => {
 
-  // Local states for interactivity
-  const [sessionStatus, setSessionStatus] = useState<'Confirmed' | 'In Progress' | 'Completed' | 'Cancelled'>(
-    appointment?.status || 'Confirmed'
+  const [sessionStatus, setSessionStatus] = useState<string>(
+    appointment?.status || appointment?.appointmentStatus || 'Confirmed'
+  );
+  const [paymentStatus, setPaymentStatus] = useState<string>(
+    appointment?.paymentStatus || (appointment?.paymentMethod === 'CASH' ? 'PENDING' : 'PAID')
   );
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Form states for reschedule
   const [newDate, setNewDate] = useState('2026-08-20');
   const [newTime, setNewTime] = useState('02:00 PM');
 
-  // Sync sessionStatus with appointment prop changes
   useEffect(() => {
-    if (appointment?.status) {
-      setSessionStatus(appointment.status);
+    if (appointment?.status || appointment?.appointmentStatus) {
+      setSessionStatus(appointment.status || appointment.appointmentStatus);
+    }
+    if (appointment?.paymentStatus) {
+      setPaymentStatus(appointment.paymentStatus);
     }
   }, [appointment]);
 
-  // Trigger toast helper
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -72,17 +80,28 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
 
   const handleStartSession = async () => {
     let newSt: 'In Progress' | 'Completed' = 'In Progress';
-    if (sessionStatus === 'Confirmed') {
+    if (sessionStatus === 'Confirmed' || sessionStatus === 'CONFIRMED' || sessionStatus === 'Scheduled') {
       newSt = 'In Progress';
       setSessionStatus('In Progress');
       triggerToast('Session started successfully! Timer is now active.');
-    } else if (sessionStatus === 'In Progress') {
+    } else if (sessionStatus === 'In Progress' || sessionStatus === 'IN_PROGRESS') {
       newSt = 'Completed';
       setSessionStatus('Completed');
       triggerToast('Session completed and recorded into patient history.');
     }
     if (appointment?.id) {
       await updateScheduleStatusRecord(appointment.id, newSt);
+    }
+  };
+
+  const handleMarkAsPaid = async () => {
+    if (!appointment?.id) return;
+    try {
+      await markCashAsPaidRecord(appointment.id, 'Clinic Admin');
+      setPaymentStatus('PAID');
+      triggerToast('Cash payment collected & marked as PAID successfully!');
+    } catch (err: any) {
+      triggerToast(err.message || 'Failed to mark cash payment as paid.');
     }
   };
 
@@ -95,7 +114,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
   const handleCancelConfirm = async () => {
     setSessionStatus('Cancelled');
     setShowCancelModal(false);
-    triggerToast('Appointment cancelled. You can now process a refund for this patient.');
+    triggerToast('Appointment cancelled. Audit trail updated.');
     if (appointment?.id) {
       await updateScheduleStatusRecord(
         appointment.id,
@@ -114,24 +133,36 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
     patientId: appointment?.patientId || appointment?.userId,
     patientName: appointment?.patientName || 'Sanya Malhotra',
     therapistName: appointment?.therapistName || 'Dr. Arjun Mehta',
-    appointmentDate: appointment?.date || appointment?.fullDate || 'Oct 23, 2024',
+    appointmentDate: appointment?.date || appointment?.fullDate || 'Oct 23, 2026',
     appointmentTime: appointment?.time || appointment?.timeSlot || '01:45 PM',
     sessionType: appointment?.type || 'Clinic Visit',
-    originalAmount: Number(appointment?.amount || appointment?.totalPayable || 1500),
+    originalAmount: Number(appointment?.amount || appointment?.pricing?.totalAmount || 1500),
     refundedAmount: Number(appointment?.refundedAmount || 0),
-    remainingRefundableAmount: Number(appointment?.remainingRefundableAmount ?? Number(appointment?.amount || appointment?.totalPayable || 1500)),
-    paymentMethod: appointment?.paymentMethod || 'UPI',
+    remainingRefundableAmount: Number(appointment?.remainingRefundableAmount ?? Number(appointment?.amount || appointment?.pricing?.totalAmount || 1500)),
+    paymentMethod: appointment?.paymentMethod || 'ONLINE',
     transactionId: appointment?.transactionId || `TXN-${appointment?.id?.slice(0, 6) || '1024'}`,
     cancellationReason: 'Patient requested cancellation',
   };
 
   const handleDownloadPdf = () => {
-    triggerToast('Downloading MRI_Scan_Knee_Oct.pdf...');
+    triggerToast('Downloading Medical_Report_Scan.pdf...');
   };
 
   const handleSendReminder = () => {
     triggerToast(`SMS and Email reminder sent to ${appointment?.patientName || 'Patient'}`);
   };
+
+  // Pricing values
+  const pricing = appointment?.pricing || {
+    baseAmount: appointment?.sessionFee || 1500,
+    visitFee: appointment?.facilityCharges || 0,
+    travelFee: 0,
+    discount: appointment?.insuranceCoverage || 0,
+    tax: 0,
+    totalAmount: appointment?.amount || appointment?.totalPayable || 1500,
+  };
+
+  const isCashPending = (appointment?.paymentMethod === 'CASH' || appointment?.paymentMode === 'clinic') && paymentStatus.toUpperCase() === 'PENDING';
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-16 relative">
@@ -167,39 +198,35 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
                 Appointment Details
               </h1>
-              {sessionStatus === 'Confirmed' && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-100/80 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200/60">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                  Confirmed
-                </span>
-              )}
-              {sessionStatus === 'In Progress' && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
-                  In Progress
-                </span>
-              )}
-              {sessionStatus === 'Completed' && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded-full border border-slate-200">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  Completed
-                </span>
-              )}
-              {sessionStatus === 'Cancelled' && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-rose-100 text-rose-700 text-xs font-bold rounded-full border border-rose-200">
-                  <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                  Cancelled
-                </span>
-              )}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-sky-100 text-sky-800 text-xs font-bold rounded-full border border-sky-200">
+                {sessionStatus}
+              </span>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border ${
+                paymentStatus.toUpperCase() === 'PAID'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-100 text-amber-800 border-amber-200'
+              }`}>
+                Payment: {appointment?.paymentMethod || 'CASH'} • {paymentStatus}
+              </span>
             </div>
             <p className="text-sm font-medium text-slate-500">
-              View booking information, session details and actions.
+              View booking information, session details, financial pricing breakdown, and quick actions.
             </p>
           </div>
 
           {/* Action Header Buttons */}
           <div className="flex items-center gap-3 flex-wrap">
-            {sessionStatus === 'Cancelled' && (
+            {isCashPending && (
+              <button
+                onClick={handleMarkAsPaid}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                <DollarSign className="w-4 h-4" />
+                Mark Cash as Paid
+              </button>
+            )}
+
+            {(sessionStatus === 'Cancelled' || sessionStatus === 'CANCELLED') && (
               <button
                 onClick={() => setShowRefundModal(true)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-xs transition-all cursor-pointer"
@@ -208,18 +235,29 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                 Process Refund
               </button>
             )}
+
             <button
               onClick={() => onNavigateToReschedule ? onNavigateToReschedule() : setShowRescheduleModal(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-xl border border-slate-200 shadow-2xs transition-all cursor-pointer"
             >
               Reschedule
             </button>
+
             <button
               onClick={() => setShowCancelModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50/80 text-sm font-semibold rounded-xl transition-all cursor-pointer"
+              className="inline-flex items-center gap-2 px-4 py-2 text-amber-700 hover:text-amber-800 hover:bg-amber-50/80 text-sm font-semibold rounded-xl transition-all cursor-pointer"
             >
               Cancel
             </button>
+
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-sm font-bold rounded-xl transition-all cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Record
+            </button>
+
             <button
               onClick={handleStartSession}
               disabled={sessionStatus === 'Cancelled' || sessionStatus === 'Completed'}
@@ -240,35 +278,31 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
 
       {/* Main Content 2-Column Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 items-start">
-        {/* Left Main Column (2 Spans) */}
+        {/* Left Main Column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Card 1: Appointment Information */}
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xs relative overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
+          {/* Card 1: Appointment & Location Information */}
+          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xs relative overflow-hidden space-y-6">
+            <div className="flex items-center justify-between">
               <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
                 Appointment Information
               </h2>
-              <button
-                onClick={() => triggerToast('Appointment details created on Oct 12, 2024 by Clinic Admin')}
-                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                title="Info"
-              >
-                <Info className="w-4 h-4" />
-              </button>
+              <span className="text-xs font-bold px-3 py-1 bg-slate-100 text-slate-700 rounded-full">
+                {formatAppointmentTypeLabel(appointment?.type)}
+              </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-6 gap-x-4">
               <div>
                 <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  ID
+                  APPOINTMENT ID
                 </span>
-                <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  {appointment ? `#APT-${appointment.id.slice(0, 6)}` : '#APT-1024'}
+                <span className="text-sm sm:text-base font-extrabold text-slate-900 font-mono">
+                  {appointment ? `#APT-${appointment.id.slice(0, 8)}` : '#APT-1024'}
                 </span>
               </div>
               <div>
                 <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  SESSION TYPE
+                  TYPE
                 </span>
                 <span className="text-sm sm:text-base font-extrabold text-slate-900">
                   {appointment?.type || 'Clinic Visit'}
@@ -276,295 +310,153 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
               </div>
               <div>
                 <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  DATE
+                  DATE & TIME
                 </span>
                 <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  {appointment?.date || 'Wednesday, Oct 23, 2024'}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  TIME
-                </span>
-                <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  {appointment?.time || '01:45 PM'}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  DURATION
-                </span>
-                <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  {appointment?.sessionDuration || '45 mins'}
-                </span>
-              </div>
-              <div>
-                <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  LOCATION
-                </span>
-                <span className="text-sm sm:text-base font-extrabold text-slate-900">
-                  One Medical Hub, MG Road
+                  {appointment?.date || 'Today'} • {appointment?.time || '10:00 AM'}
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* Card 2: Patient Information */}
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xs">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                Patient Information
-              </h2>
-              <button
-                onClick={onNavigateToPatient}
-                className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-              >
-                View Patient
-              </button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 sm:gap-6">
-              <InitialsAvatar
-                name={appointment?.patientName || 'Sanya Malhotra'}
-                className="w-20 h-20 text-xl font-bold shrink-0 shadow-sm border border-slate-100"
-              />
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-4 gap-x-6 flex-1 w-full">
-                <div>
-                  <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    NAME
-                  </span>
-                  <span className="text-base font-extrabold text-slate-900 block leading-tight">
-                    {appointment?.patientName || 'Sanya Malhotra'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    CONDITION
-                  </span>
-                  <span className="text-sm font-bold text-slate-900 block leading-tight">
-                    {appointment?.patientSubtitle || 'ACL Recovery'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    RECOVERSCORE
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-16 bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div
-                        className="bg-blue-600 h-full rounded-full"
-                        style={{ width: '78%' }}
-                      ></div>
-                    </div>
-                    <span className="text-sm font-extrabold text-slate-900">
-                      78%
-                    </span>
+            {/* LOCATION OR ONLINE MEETING BREAKDOWN */}
+            <div className="pt-4 border-t border-slate-100 space-y-2">
+              <span className="block text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+                LOCATION / SESSION LINK
+              </span>
+              {appointment?.type === 'Online' || appointment?.location?.type === 'ONLINE' ? (
+                <div className="p-4 rounded-2xl bg-purple-50/70 border border-purple-100 space-y-2">
+                  <div className="flex items-center space-x-2 text-purple-900 font-bold text-sm">
+                    <Video className="w-4 h-4 text-purple-700" />
+                    <span>Tele-Health Online Video Session</span>
+                  </div>
+                  <div className="text-xs text-purple-800 font-mono break-all">
+                    URL: <a href={appointment?.location?.meetingUrl || '#'} target="_blank" rel="noreferrer" className="underline font-bold">{appointment?.location?.meetingUrl || 'https://meet.physioadmin.com/room-session'}</a>
                   </div>
                 </div>
-
-                <div>
-                  <span className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                    CONTACT
-                  </span>
-                  <span className="text-sm font-bold text-slate-900 block leading-tight">
-                    +919876543210
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card Row 3: Two Cards (Therapist & Session Notes Preview) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Therapist Card */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-5">
-                  <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
-                    Therapist
-                  </h2>
-                  <button
-                    onClick={onNavigateToTherapist}
-                    className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
-                  >
-                    View
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-4 mb-6">
-                  <InitialsAvatar
-                    name={appointment?.therapistName || 'Dr. Arjun Mehta'}
-                    className="w-14 h-14 text-base font-bold shrink-0 border border-slate-100 shadow-2xs"
-                  />
-                  <div>
-                    <h3 className="text-base font-extrabold text-slate-900">
-                      {appointment?.therapistName || 'Dr. Arjun Mehta'}
-                    </h3>
-                    <p className="text-xs font-medium text-slate-500">
-                      {appointment?.therapistSubtitle || 'Orthopedic Physiotherapy'}
-                    </p>
+              ) : appointment?.type === 'Home Visit' || appointment?.location?.type === 'HOME_VISIT' ? (
+                <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-100 space-y-1">
+                  <div className="flex items-center space-x-2 text-teal-900 font-bold text-sm">
+                    <span>Patient Home Location</span>
                   </div>
-                </div>
-              </div>
-
-              {/* Status Indicator Bar */}
-              <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl py-2.5 px-4 text-xs font-bold text-emerald-800 flex items-center justify-between">
-                <span>Status: Available</span>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs"></span>
-              </div>
-            </div>
-
-            {/* Session Notes Preview Card */}
-            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs flex flex-col justify-between">
-              <div>
-                <h2 className="text-lg font-extrabold text-slate-900 tracking-tight mb-4">
-                  Session Notes Preview
-                </h2>
-
-                {/* Previous Summary Box */}
-                <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4 mb-3">
-                  <span className="block text-xs font-bold text-slate-500 mb-1">
-                    Previous Summary
-                  </span>
-                  <p className="text-xs sm:text-sm font-medium text-slate-700 line-clamp-2 leading-relaxed">
-                    Patient shows improved range of motion in left knee. Extension increased by 12 degrees.
+                  <p className="text-xs font-semibold text-teal-800">
+                    {appointment?.location?.address || '123 Primary Resident Address, Bengaluru'}
                   </p>
                 </div>
-
-                {/* PDF Attachment Item */}
-                <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-3 flex items-center justify-between group hover:border-slate-300 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100/80 text-blue-700 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <span className="block text-xs font-bold text-slate-900 truncate">
-                        MRI_Scan_Knee_Oct.pdf
-                      </span>
-                      <span className="block text-[11px] font-medium text-slate-400">
-                        2.4 MB • Uploaded Oct 16
-                      </span>
-                    </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-cyan-50/70 border border-cyan-100 space-y-1">
+                  <div className="flex items-center space-x-2 text-cyan-900 font-bold text-sm">
+                    <span>Spine & Wellness Center Clinic</span>
                   </div>
-
-                  <button
-                    onClick={handleDownloadPdf}
-                    className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 flex items-center justify-center transition-colors shrink-0 ml-2 cursor-pointer"
-                    title="Download PDF"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
+                  <p className="text-xs font-semibold text-cyan-800">
+                    One Medical Hub, Ground Floor, MG Road, Bengaluru
+                  </p>
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Card 2: Patient & Therapist Information */}
+          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xs space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-slate-900 tracking-tight">
+                Patient & Therapist
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="flex items-center space-x-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <InitialsAvatar name={appointment?.patientName || 'Patient'} className="w-12 h-12 text-sm font-bold shrink-0" />
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">{appointment?.patientName || 'Patient'}</h4>
+                  <p className="text-xs font-medium text-slate-500">{appointment?.patientSubtitle || 'General Rehab'}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <InitialsAvatar name={appointment?.therapistName || 'Dr. Arjun Mehta'} className="w-12 h-12 text-sm font-bold shrink-0" />
+                <div>
+                  <h4 className="font-extrabold text-slate-900 text-sm">{appointment?.therapistName || 'Dr. Arjun Mehta'}</h4>
+                  <p className="text-xs font-medium text-slate-500">{appointment?.therapistSubtitle || 'Physiotherapist'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Financial Pricing Breakdown */}
+          <div className="bg-blue-50/30 rounded-3xl p-6 sm:p-7 border border-blue-100/70 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-extrabold text-blue-950 tracking-wider uppercase">
+                FINANCIAL PRICING BREAKDOWN
+              </h3>
+              <span className={`text-xs font-extrabold px-3 py-1 rounded-full border ${
+                paymentStatus.toUpperCase() === 'PAID'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-100 text-amber-800 border-amber-200'
+              }`}>
+                {appointment?.paymentMethod || 'CASH'} • {paymentStatus}
+              </span>
+            </div>
+
+            <div className="space-y-3 pt-1">
+              <div className="flex justify-between items-center text-xs sm:text-sm font-semibold text-slate-600">
+                <span>Base Session Amount</span>
+                <span className="text-slate-900 font-extrabold">₹{Number(pricing.baseAmount || 1500).toLocaleString('en-IN')}</span>
+              </div>
+
+              {appointment?.type === 'Home Visit' && (
+                <>
+                  <div className="flex justify-between items-center text-xs sm:text-sm font-semibold text-slate-600">
+                    <span>Home Visit Fee</span>
+                    <span className="text-slate-900 font-extrabold">₹{Number(pricing.visitFee || 300).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs sm:text-sm font-semibold text-slate-600">
+                    <span>Travel / Distance Fee</span>
+                    <span className="text-slate-900 font-extrabold">₹{Number(pricing.travelFee || 200).toLocaleString('en-IN')}</span>
+                  </div>
+                </>
+              )}
+
+              {pricing.discount > 0 && (
+                <div className="flex justify-between items-center text-xs sm:text-sm font-semibold">
+                  <span className="text-slate-600">Discount</span>
+                  <span className="text-emerald-600 font-extrabold">-₹{Number(pricing.discount).toLocaleString('en-IN')}</span>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center text-xs sm:text-sm font-semibold text-slate-600">
+                <span>Tax</span>
+                <span className="text-slate-900 font-extrabold">₹{Number(pricing.tax || 0).toLocaleString('en-IN')}</span>
+              </div>
+
+              <div className="pt-3 border-t border-blue-100 flex justify-between items-center">
+                <span className="text-sm font-extrabold text-slate-900">Total Amount Payable</span>
+                <span className="text-lg sm:text-xl font-black text-blue-900 tracking-tight">
+                  ₹{Number(pricing.totalAmount || appointment?.amount || 1500).toLocaleString('en-IN')}
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Sidebar Column (1 Span) */}
+        {/* Right Sidebar Column */}
         <div className="space-y-6">
-          {/* Card 1: Appointment Status Timeline */}
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xs">
-            <h2 className="text-lg font-extrabold text-slate-900 tracking-tight mb-6">
-              Appointment Status
-            </h2>
-
-            <div className="relative pl-6 space-y-6 before:absolute before:left-[9px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100">
-              {/* Step 1: Booked */}
-              <div className="relative">
-                <span className="absolute -left-[24px] top-1 w-4 h-4 rounded-full bg-blue-600 border-2 border-white ring-4 ring-blue-50 shadow-xs"></span>
-                <div>
-                  <span className="block text-sm font-bold text-slate-900">
-                    Booked
-                  </span>
-                  <span className="block text-xs font-medium text-slate-400 mt-0.5">
-                    Oct 12, 10:30 AM
-                  </span>
-                </div>
-              </div>
-
-              {/* Step 2: Confirmed */}
-              <div className="relative">
-                <span className="absolute -left-[24px] top-1 w-4 h-4 rounded-full bg-blue-600 border-2 border-white ring-4 ring-blue-50 shadow-xs"></span>
-                <div>
-                  <span className="block text-sm font-bold text-slate-900">
-                    Confirmed
-                  </span>
-                  <span className="block text-xs font-medium text-slate-400 mt-0.5">
-                    Oct 12, 02:15 PM
-                  </span>
-                </div>
-              </div>
-
-              {/* Step 3: Reminder Sent */}
-              <div className="relative">
-                <span className="absolute -left-[24px] top-1 w-4 h-4 rounded-full bg-blue-600 border-2 border-white ring-4 ring-blue-50 shadow-xs"></span>
-                <div>
-                  <span className="block text-sm font-bold text-slate-900">
-                    Reminder Sent
-                  </span>
-                  <span className="block text-xs font-medium text-slate-400 mt-0.5">
-                    Oct 22, 09:00 AM
-                  </span>
-                </div>
-              </div>
-
-              {/* Step 4: Session Started */}
-              <div className="relative">
-                <span
-                  className={`absolute -left-[24px] top-1 w-4 h-4 rounded-full border-2 bg-white ${
-                    sessionStatus === 'In Progress' || sessionStatus === 'Completed'
-                      ? 'bg-blue-600 border-white ring-4 ring-blue-50'
-                      : 'border-slate-300'
-                  }`}
-                ></span>
-                <div>
-                  <span
-                    className={`block text-sm font-bold ${
-                      sessionStatus === 'In Progress' || sessionStatus === 'Completed'
-                        ? 'text-slate-900'
-                        : 'text-slate-400'
-                    }`}
-                  >
-                    Session Started
-                  </span>
-                  <span className="block text-xs font-medium text-slate-400 mt-0.5">
-                    Expected 01:45 PM
-                  </span>
-                </div>
-              </div>
-
-              {/* Step 5: Completed */}
-              <div className="relative">
-                <span
-                  className={`absolute -left-[24px] top-1 w-4 h-4 rounded-full border-2 bg-white ${
-                    sessionStatus === 'Completed'
-                      ? 'bg-blue-600 border-white ring-4 ring-blue-50'
-                      : 'border-slate-300'
-                  }`}
-                ></span>
-                <div>
-                  <span
-                    className={`block text-sm font-bold ${
-                      sessionStatus === 'Completed' ? 'text-slate-900' : 'text-slate-400'
-                    }`}
-                  >
-                    Completed
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: QUICK ACTIONS */}
+          {/* Card 1: QUICK ACTIONS */}
           <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xs">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
               QUICK ACTIONS
             </h3>
 
             <div className="space-y-3">
+              {isCashPending && (
+                <button
+                  onClick={handleMarkAsPaid}
+                  className="w-full flex items-center justify-start gap-3.5 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-all cursor-pointer shadow-md"
+                >
+                  <DollarSign className="w-4 h-4" />
+                  Mark Cash as Paid
+                </button>
+              )}
+
               <button
                 onClick={() => onNavigateToReschedule ? onNavigateToReschedule() : setShowRescheduleModal(true)}
                 className="w-full flex items-center justify-start gap-3.5 px-5 py-3 rounded-2xl border border-slate-200/90 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-all cursor-pointer shadow-2xs"
@@ -582,66 +474,12 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
               </button>
 
               <button
-                onClick={() => setShowSummaryModal(true)}
-                className="w-full flex items-center justify-start gap-3.5 px-5 py-3 rounded-2xl border border-slate-200/90 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold transition-all cursor-pointer shadow-2xs"
-              >
-                <FileText className="w-4 h-4 text-slate-500" />
-                Generate Summary
-              </button>
-
-              <button
                 onClick={() => setShowCancelModal(true)}
                 className="w-full flex items-center justify-start gap-3.5 px-5 py-3 rounded-2xl border border-slate-200/90 bg-white hover:bg-rose-50/60 text-rose-600 text-sm font-semibold transition-all cursor-pointer shadow-2xs"
               >
                 <XCircle className="w-4 h-4 text-rose-500" />
                 Cancel Appointment
               </button>
-            </div>
-          </div>
-
-          {/* Card 3: RELATED SESSIONS */}
-          <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-100 shadow-xs">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-              RELATED SESSIONS
-            </h3>
-
-            <div className="space-y-3">
-              {/* Previous Session */}
-              <div className="bg-blue-50/40 border border-blue-100/70 rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
-                    PREVIOUS
-                  </span>
-                  <span className="px-2 py-0.5 bg-emerald-100/90 text-emerald-700 text-[10px] font-extrabold rounded-md uppercase">
-                    COMPLETED
-                  </span>
-                </div>
-                <h4 className="text-sm font-extrabold text-slate-900">
-                  Oct 16, 2024
-                </h4>
-                <p className="text-xs font-medium text-slate-500 mt-0.5">
-                  Follow-up Session
-                </p>
-              </div>
-
-              {/* Next Session */}
-              <div
-                onClick={() => triggerToast('Navigating to upcoming session scheduled on Oct 30...')}
-                className="bg-white border border-slate-200/80 hover:border-blue-300 rounded-2xl p-4 transition-all cursor-pointer group"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-extrabold text-slate-400 tracking-wider uppercase">
-                    NEXT
-                  </span>
-                  <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-colors" />
-                </div>
-                <h4 className="text-sm font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">
-                  Oct 30, 2024
-                </h4>
-                <p className="text-xs font-medium text-slate-500 mt-0.5">
-                  Routine Checkup
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -727,7 +565,7 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
                 Cancel Appointment?
               </h3>
               <p className="text-sm font-medium text-slate-500 mt-1">
-                Are you sure you want to cancel appointment #APT-1024 for Sanya Malhotra? This action will notify the patient and therapist.
+                Are you sure you want to cancel this appointment for {appointment?.patientName || 'Patient'}? Cancellation policy rules will be evaluated automatically.
               </p>
             </div>
 
@@ -749,71 +587,71 @@ export const AppointmentDetailsPage: React.FC<AppointmentDetailsPageProps> = ({
         </div>
       )}
 
-      {/* Summary Generator Modal */}
-      {showSummaryModal && (
+      {/* Process Refund Modal */}
+      {showRefundModal && (
+        <ProcessRefundModal
+          target={refundTarget}
+          isOpen={showRefundModal}
+          onClose={() => setShowRefundModal(false)}
+          onSuccess={() => triggerToast('Refund processed successfully!')}
+        />
+      )}
+      {/* Delete Record Confirmation Modal */}
+      {showDeleteModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl space-y-5 border border-slate-100">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <h3 className="text-lg font-extrabold text-slate-900">
-                  AI Clinical Summary
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowSummaryModal(false)}
-                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl space-y-5 border border-slate-100 animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
             </div>
 
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3 text-xs sm:text-sm text-slate-700 font-medium leading-relaxed">
-              <p>
-                <strong>Patient:</strong> Sanya Malhotra (ACL Recovery)
-              </p>
-              <p>
-                <strong>Date:</strong> Oct 23, 2024 | <strong>Therapist:</strong> Dr. Arjun Mehta
-              </p>
-              <hr className="border-slate-200 my-2" />
-              <p>
-                Patient demonstrates steady progression with ACL rehabilitation. Flexion range has reached 115 degrees with minimal discomfort. Quadriceps strength index is currently at 78%. Recommended continuing hamstring curls and progressive weight loading for upcoming 2 weeks.
+            <div>
+              <h3 className="text-lg font-extrabold text-slate-900">
+                Delete Appointment Record?
+              </h3>
+              <p className="text-sm font-medium text-slate-500 mt-1">
+                Are you sure you want to permanently delete the appointment record for <strong className="text-slate-900">{appointment?.patientName || 'Patient'}</strong>? The booked slot will be freed in Firestore.
               </p>
             </div>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-3">
               <button
-                onClick={() => {
-                  setShowSummaryModal(false);
-                  triggerToast('Clinical summary copied to clipboard!');
-                }}
-                className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
-                Copy Text
+                Keep Record
               </button>
               <button
-                onClick={() => {
-                  setShowSummaryModal(false);
-                  triggerToast('Clinical summary saved to patient medical records.');
+                type="button"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    if (appointment?.id) {
+                      await deleteScheduleRecord(
+                        appointment.id,
+                        appointment.doctorId || appointment.therapistId,
+                        appointment.fullDate,
+                        appointment.timeSlot || appointment.time
+                      );
+                    }
+                    setShowDeleteModal(false);
+                    if (onBack) onBack();
+                  } catch (e: any) {
+                    triggerToast(e.message || 'Failed to delete appointment record.');
+                  } finally {
+                    setIsDeleting(false);
+                  }
                 }}
-                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                className="px-5 py-2 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
               >
-                Save to Medical Chart
+                {isDeleting ? 'Deleting...' : 'Yes, Delete Record'}
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Process Refund Modal */}
-      <ProcessRefundModal
-        isOpen={showRefundModal}
-        onClose={() => setShowRefundModal(false)}
-        target={refundTarget}
-        onSuccess={(msg) => triggerToast(msg)}
-      />
     </div>
   );
 };

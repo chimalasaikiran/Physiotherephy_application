@@ -18,6 +18,24 @@ export interface UserProfileData {
 
 const COLLECTION_NAME = 'users';
 
+const formatPatientId = (uid: string, existingPatientId?: string): string => {
+  if (existingPatientId && /^PAT-\d{4,}$/i.test(existingPatientId)) {
+    return existingPatientId.toUpperCase();
+  }
+  if (existingPatientId && /^#?OM-(\d{4,})$/i.test(existingPatientId)) {
+    const match = existingPatientId.match(/\d+/);
+    if (match) return `PAT-${match[0]}`;
+  }
+  const clean = (uid || '').replace(/[^a-zA-Z0-9]/g, '');
+  if (!clean) return 'PAT-1001';
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash * 31 + clean.charCodeAt(i)) & 0x7fffffff;
+  }
+  const num = 1001 + (hash % 8999);
+  return `PAT-${num}`;
+};
+
 export class UserService {
   /**
    * Sync or initialize user profile record in Cloud Firestore upon login
@@ -143,8 +161,8 @@ export class UserService {
           seenIds.add(id);
           results.push({
             id,
-            patientId: data.patientId || `#OM-${id.slice(0, 4)}`,
-            name: data.name || data.fullName || 'Unnamed Patient',
+            patientId: formatPatientId(id, data.patientId),
+            name: (data.name && data.name !== 'Unnamed Patient') ? data.name : (data.fullName && data.fullName !== 'Unnamed Patient') ? data.fullName : `Patient (${id.slice(0, 6)})`,
             age: Number(data.age) || 30,
             gender: data.gender || 'Male',
             avatarUrl:
@@ -185,7 +203,7 @@ export class UserService {
           const data = docSnap.data();
           results.push({
             id,
-            patientId: `#OM-${id.slice(0, 4)}`,
+            patientId: formatPatientId(id, data.patientId),
             name: data.fullName || data.name || `User (${data.phone || id.slice(0, 6)})`,
             age: Number(data.age) || 28,
             gender: data.gender || 'Not specified',

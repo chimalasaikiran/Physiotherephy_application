@@ -48,34 +48,8 @@ import ExportsTab from './components/ExportsTab';
 import { CreateReportModal } from './components/CreateReportModal';
 import { ViewReportModal } from './components/ViewReportModal';
 
-// Helper for exporting arrays to CSV
-const downloadCsv = (filename: string, headers: { header: string; accessor: (item: any) => any }[], data: any[]) => {
-  if (!data || data.length === 0) return '0 KB';
-  const csvRows: string[] = [];
-  csvRows.push(headers.map((h) => `"${h.header}"`).join(','));
+import { downloadCsv, downloadPdf, downloadExcel, type ExportColumn } from '../utils/exportUtils';
 
-  data.forEach((row) => {
-    const values = headers.map((h) => {
-      const val = h.accessor(row);
-      const escaped = ('' + (val ?? '')).replace(/"/g, '""');
-      return `"${escaped}"`;
-    });
-    csvRows.push(values.join(','));
-  });
-
-  const csvContent = csvRows.join('\n');
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-
-  const kbSize = (csvContent.length / 1024).toFixed(1);
-  return `${kbSize} KB`;
-};
 
 interface ReportsPageProps {
   initialSubTab?: 'Overview' | 'Patient Reports' | 'Treatment Reports' | 'Financial Reports' | 'Exports';
@@ -230,85 +204,254 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
 
   const pinnedReports = recentReports.filter((r) => r.isPinned);
 
-  // Trigger export for current active view
-  const handleExportData = async (format: 'CSV' | 'Excel' | 'PDF' = 'CSV') => {
-    const filename = `Physio_${activeSubTab.replace(/\\s+/g, '_')}_${Date.now()}`;
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
-    if (activeSubTab === 'Patient Reports' && patients.length > 0) {
-      const sizeStr = downloadCsv(
-        filename,
-        [
-          { header: 'Patient Name', accessor: (item: Patient) => item.name },
-          { header: 'Condition', accessor: (item: Patient) => item.condition || 'General' },
-          { header: 'Recovery Score %', accessor: (item: Patient) => item.recoveryScore || 0 },
-          { header: 'Status', accessor: (item: Patient) => item.status || 'Active' },
-          { header: 'Attending Therapist', accessor: (item: Patient) => item.therapistName || 'Staff' },
-        ],
-        patients
-      );
+  // Trigger CSV export for current active view
+  const handleExportCsv = async () => {
+    const filename = `Physio_${activeSubTab.replace(/\s+/g, '_')}_${Date.now()}`;
 
-      await createExportArchiveItem({
-        fileName: `${filename}.${format.toLowerCase()}`,
-        format: format === 'Excel' ? 'EXCEL' : format === 'PDF' ? 'PDF' : 'CSV',
-        size: sizeStr,
-        status: 'Completed',
-        dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        reportType: 'Patient Reports',
-        recordsCount: patients.length,
-      });
+    try {
+      if (activeSubTab === 'Patient Reports' && patients.length > 0) {
+        const sizeStr = downloadCsv(
+          filename,
+          [
+            { header: 'Patient Name', accessor: (item: Patient) => item.name },
+            { header: 'Condition', accessor: (item: Patient) => item.condition || 'General' },
+            { header: 'Recovery Score %', accessor: (item: Patient) => item.recoveryScore || 0 },
+            { header: 'Status', accessor: (item: Patient) => item.status || 'Active' },
+            { header: 'Attending Therapist', accessor: (item: Patient) => item.therapistName || 'Staff' },
+          ],
+          patients
+        );
 
-      showToast(`Exported ${patients.length} patient records to ${filename}.csv!`);
-    } else if (activeSubTab === 'Financial Reports' && payments.length > 0) {
-      const sizeStr = downloadCsv(
-        filename,
-        [
-          { header: 'Transaction ID', accessor: (item: PaymentRecord) => item.id },
-          { header: 'Patient Name', accessor: (item: PaymentRecord) => item.patientName },
-          { header: 'Amount (INR)', accessor: (item: PaymentRecord) => item.amount },
-          { header: 'Date', accessor: (item: PaymentRecord) => item.paidAt || item.createdAt },
-          { header: 'Payment Method', accessor: (item: PaymentRecord) => item.paymentMethod },
-          { header: 'Status', accessor: (item: PaymentRecord) => item.paymentStatus || item.status },
-        ],
-        payments
-      );
+        await createExportArchiveItem({
+          fileName: `${filename}.csv`,
+          format: 'CSV',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: 'Patient Reports',
+          recordsCount: patients.length,
+        });
 
-      await createExportArchiveItem({
-        fileName: `${filename}.${format.toLowerCase()}`,
-        format: format === 'Excel' ? 'EXCEL' : format === 'PDF' ? 'PDF' : 'CSV',
-        size: sizeStr,
-        status: 'Completed',
-        dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        reportType: 'Financial Reports',
-        recordsCount: payments.length,
-      });
+        showToast(`Exported ${patients.length} patient records to ${filename}.csv!`);
+      } else if (activeSubTab === 'Financial Reports' && payments.length > 0) {
+        const sizeStr = downloadCsv(
+          filename,
+          [
+            { header: 'Transaction ID', accessor: (item: PaymentRecord) => item.id },
+            { header: 'Patient Name', accessor: (item: PaymentRecord) => item.patientName },
+            { header: 'Amount (INR)', accessor: (item: PaymentRecord) => item.amount },
+            { header: 'Date', accessor: (item: PaymentRecord) => item.paidAt || item.createdAt },
+            { header: 'Payment Method', accessor: (item: PaymentRecord) => item.paymentMethod },
+            { header: 'Status', accessor: (item: PaymentRecord) => item.paymentStatus || item.status },
+          ],
+          payments
+        );
 
-      showToast(`Exported ${payments.length} financial payment records to ${filename}.csv!`);
-    } else {
-      const sizeStr = downloadCsv(
-        filename,
-        [
-          { header: 'Report Title', accessor: (item: RecentReport) => item.title },
-          { header: 'Category', accessor: (item: RecentReport) => item.category },
-          { header: 'Patient Name', accessor: (item: RecentReport) => item.patientName || 'N/A' },
-          { header: 'Therapist Name', accessor: (item: RecentReport) => item.therapistName || 'N/A' },
-          { header: 'Status', accessor: (item: RecentReport) => item.status || 'Verified' },
-          { header: 'Date', accessor: (item: RecentReport) => item.date },
-          { header: 'Summary', accessor: (item: RecentReport) => item.summaryText || '' },
-        ],
-        filteredRecentReports
-      );
+        await createExportArchiveItem({
+          fileName: `${filename}.csv`,
+          format: 'CSV',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: 'Financial Reports',
+          recordsCount: payments.length,
+        });
 
-      await createExportArchiveItem({
-        fileName: `${filename}.${format.toLowerCase()}`,
-        format: format === 'Excel' ? 'EXCEL' : format === 'PDF' ? 'PDF' : 'CSV',
-        size: sizeStr,
-        status: 'Completed',
-        dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        reportType: activeSubTab,
-        recordsCount: filteredRecentReports.length,
-      });
+        showToast(`Exported ${payments.length} financial payment records to ${filename}.csv!`);
+      } else {
+        const sizeStr = downloadCsv(
+          filename,
+          [
+            { header: 'Report Title', accessor: (item: RecentReport) => item.title },
+            { header: 'Category', accessor: (item: RecentReport) => item.category },
+            { header: 'Patient Name', accessor: (item: RecentReport) => item.patientName || 'N/A' },
+            { header: 'Therapist Name', accessor: (item: RecentReport) => item.therapistName || 'N/A' },
+            { header: 'Status', accessor: (item: RecentReport) => item.status || 'Verified' },
+            { header: 'Date', accessor: (item: RecentReport) => item.date },
+            { header: 'Summary', accessor: (item: RecentReport) => item.summaryText || '' },
+          ],
+          filteredRecentReports
+        );
 
-      showToast(`Exported ${filteredRecentReports.length} ${activeSubTab} records to ${filename}.csv!`);
+        await createExportArchiveItem({
+          fileName: `${filename}.csv`,
+          format: 'CSV',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: activeSubTab,
+          recordsCount: filteredRecentReports.length,
+        });
+
+        showToast(`Exported ${filteredRecentReports.length} ${activeSubTab} records to ${filename}.csv!`);
+      }
+    } catch (err: any) {
+      console.error('Error generating CSV export:', err);
+      showToast(`Export failed: ${err?.message || 'Unknown error'}`);
+    }
+  };
+
+  // Trigger dedicated PDF export for current active view
+  const handleExportPdf = async () => {
+    if (isExportingPdf) return;
+    setIsExportingPdf(true);
+
+    const baseName = `Physio_${activeSubTab.replace(/\s+/g, '_')}_${Date.now()}`;
+    const docTitle = `${activeSubTab} Summary Report`;
+
+    try {
+      if (activeSubTab === 'Patient Reports' && patients.length > 0) {
+        const columns: ExportColumn<Patient>[] = [
+          { header: 'Patient Name', accessor: (item) => item.name },
+          { header: 'Condition', accessor: (item) => item.condition || 'General' },
+          { header: 'Recovery Score %', accessor: (item) => item.recoveryScore || 0 },
+          { header: 'Status', accessor: (item) => item.status || 'Active' },
+          { header: 'Attending Therapist', accessor: (item) => item.therapistName || 'Staff' },
+        ];
+        const sizeStr = downloadPdf(baseName, docTitle, columns, patients);
+
+        await createExportArchiveItem({
+          fileName: `${baseName}.pdf`,
+          format: 'PDF',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: 'Patient Reports',
+          recordsCount: patients.length,
+        });
+        showToast(`Successfully generated & downloaded ${baseName}.pdf (${patients.length} records)!`);
+      } else if (activeSubTab === 'Financial Reports' && payments.length > 0) {
+        const columns: ExportColumn<PaymentRecord>[] = [
+          { header: 'Transaction ID', accessor: (item) => item.id },
+          { header: 'Patient Name', accessor: (item) => item.patientName },
+          { header: 'Amount (INR)', accessor: (item) => item.amount },
+          { header: 'Date', accessor: (item) => item.paidAt || item.createdAt },
+          { header: 'Payment Method', accessor: (item) => item.paymentMethod },
+          { header: 'Status', accessor: (item) => item.paymentStatus || item.status },
+        ];
+        const sizeStr = downloadPdf(baseName, docTitle, columns, payments);
+
+        await createExportArchiveItem({
+          fileName: `${baseName}.pdf`,
+          format: 'PDF',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: 'Financial Reports',
+          recordsCount: payments.length,
+        });
+        showToast(`Successfully generated & downloaded ${baseName}.pdf (${payments.length} records)!`);
+      } else {
+        const columns: ExportColumn<RecentReport>[] = [
+          { header: 'Report Title', accessor: (item) => item.title },
+          { header: 'Category', accessor: (item) => item.category },
+          { header: 'Patient Name', accessor: (item) => item.patientName || 'N/A' },
+          { header: 'Therapist Name', accessor: (item) => item.therapistName || 'N/A' },
+          { header: 'Status', accessor: (item) => item.status || 'Verified' },
+          { header: 'Date', accessor: (item) => item.date },
+        ];
+        const sizeStr = downloadPdf(baseName, docTitle, columns, filteredRecentReports);
+
+        await createExportArchiveItem({
+          fileName: `${baseName}.pdf`,
+          format: 'PDF',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: activeSubTab,
+          recordsCount: filteredRecentReports.length,
+        });
+        showToast(`Successfully generated & downloaded ${baseName}.pdf (${filteredRecentReports.length} records)!`);
+      }
+    } catch (err: any) {
+      console.error('Error generating PDF export:', err);
+      showToast(`PDF Export failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  // Trigger dedicated Excel (.xlsx) export for current active view
+  const handleExportExcel = async () => {
+    if (isExportingExcel) return;
+    setIsExportingExcel(true);
+
+    const baseName = `Physio_${activeSubTab.replace(/\s+/g, '_')}_${Date.now()}`;
+    const sheetTitle = activeSubTab;
+
+    try {
+      if (activeSubTab === 'Patient Reports' && patients.length > 0) {
+        const columns: ExportColumn<Patient>[] = [
+          { header: 'Patient Name', accessor: (item) => item.name },
+          { header: 'Condition', accessor: (item) => item.condition || 'General' },
+          { header: 'Recovery Score %', accessor: (item) => item.recoveryScore || 0 },
+          { header: 'Status', accessor: (item) => item.status || 'Active' },
+          { header: 'Attending Therapist', accessor: (item) => item.therapistName || 'Staff' },
+        ];
+        const sizeStr = downloadExcel(baseName, sheetTitle, columns, patients);
+
+        await createExportArchiveItem({
+          fileName: `${baseName}.xlsx`,
+          format: 'EXCEL',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: 'Patient Reports',
+          recordsCount: patients.length,
+        });
+        showToast(`Successfully generated & downloaded ${baseName}.xlsx (${patients.length} records)!`);
+      } else if (activeSubTab === 'Financial Reports' && payments.length > 0) {
+        const columns: ExportColumn<PaymentRecord>[] = [
+          { header: 'Transaction ID', accessor: (item) => item.id },
+          { header: 'Patient Name', accessor: (item) => item.patientName },
+          { header: 'Amount (INR)', accessor: (item) => item.amount },
+          { header: 'Date', accessor: (item) => item.paidAt || item.createdAt },
+          { header: 'Payment Method', accessor: (item) => item.paymentMethod },
+          { header: 'Status', accessor: (item) => item.paymentStatus || item.status },
+        ];
+        const sizeStr = downloadExcel(baseName, sheetTitle, columns, payments);
+
+        await createExportArchiveItem({
+          fileName: `${baseName}.xlsx`,
+          format: 'EXCEL',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: 'Financial Reports',
+          recordsCount: payments.length,
+        });
+        showToast(`Successfully generated & downloaded ${baseName}.xlsx (${payments.length} records)!`);
+      } else {
+        const columns: ExportColumn<RecentReport>[] = [
+          { header: 'Report Title', accessor: (item) => item.title },
+          { header: 'Category', accessor: (item) => item.category },
+          { header: 'Patient Name', accessor: (item) => item.patientName || 'N/A' },
+          { header: 'Therapist Name', accessor: (item) => item.therapistName || 'N/A' },
+          { header: 'Status', accessor: (item) => item.status || 'Verified' },
+          { header: 'Date', accessor: (item) => item.date },
+          { header: 'Summary', accessor: (item) => item.summaryText || '' },
+        ];
+        const sizeStr = downloadExcel(baseName, sheetTitle, columns, filteredRecentReports);
+
+        await createExportArchiveItem({
+          fileName: `${baseName}.xlsx`,
+          format: 'EXCEL',
+          size: sizeStr,
+          status: 'Completed',
+          dateCreated: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+          reportType: activeSubTab,
+          recordsCount: filteredRecentReports.length,
+        });
+        showToast(`Successfully generated & downloaded ${baseName}.xlsx (${filteredRecentReports.length} records)!`);
+      }
+    } catch (err: any) {
+      console.error('Error generating Excel export:', err);
+      showToast(`Excel Export failed: ${err?.message || 'Unknown error'}`);
+    } finally {
+      setIsExportingExcel(false);
     }
   };
 
@@ -365,7 +508,7 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
 
         <div className="flex items-center space-x-3">
           <button
-            onClick={() => handleExportData('CSV')}
+            onClick={handleExportCsv}
             className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-xs flex items-center space-x-2 cursor-pointer"
           >
             <Download className="w-4 h-4 text-slate-500" />
@@ -918,35 +1061,43 @@ export const ReportsPage: React.FC<ReportsPageProps> = ({ initialSubTab = 'Overv
                     </div>
                   </div>
 
-                  {/* Action 2 */}
-                  <div
-                    onClick={() => handleExportData('PDF')}
-                    className="self-stretch px-3 py-3 bg-indigo-50 hover:bg-indigo-100 rounded-2xl inline-flex justify-between items-center transition-colors cursor-pointer"
+                  {/* Action 2: Export PDF */}
+                  <button
+                    type="button"
+                    disabled={isExportingPdf || isExportingExcel}
+                    onClick={handleExportPdf}
+                    className={`self-stretch px-3 py-3 bg-indigo-50 hover:bg-indigo-100 rounded-2xl inline-flex justify-between items-center transition-colors cursor-pointer text-left w-full border border-transparent ${
+                      isExportingPdf ? 'opacity-70 cursor-not-allowed' : ''
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="size-5 bg-blue-900 rounded-xs flex items-center justify-center">
                         <FileText className="w-3.5 h-3.5 text-white" />
                       </div>
-                      <div className="text-center justify-center text-slate-900 text-base font-normal font-['Inter'] leading-6">
-                        Export PDF
+                      <div className="text-slate-900 text-base font-normal font-['Inter'] leading-6">
+                        {isExportingPdf ? 'Generating PDF...' : 'Export PDF'}
                       </div>
                     </div>
-                  </div>
+                  </button>
 
-                  {/* Action 3 */}
-                  <div
-                    onClick={() => handleExportData('Excel')}
-                    className="self-stretch px-3 py-3 bg-indigo-50 hover:bg-indigo-100 rounded-2xl inline-flex justify-between items-center transition-colors cursor-pointer"
+                  {/* Action 3: Export Excel */}
+                  <button
+                    type="button"
+                    disabled={isExportingExcel || isExportingPdf}
+                    onClick={handleExportExcel}
+                    className={`self-stretch px-3 py-3 bg-indigo-50 hover:bg-indigo-100 rounded-2xl inline-flex justify-between items-center transition-colors cursor-pointer text-left w-full border border-transparent ${
+                      isExportingExcel ? 'opacity-70 cursor-not-allowed' : ''
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="size-5 bg-blue-900 rounded-xs flex items-center justify-center">
+                      <div className="size-5 bg-emerald-600 rounded-xs flex items-center justify-center">
                         <FileSpreadsheet className="w-3.5 h-3.5 text-white" />
                       </div>
-                      <div className="text-center justify-center text-slate-900 text-base font-normal font-['Inter'] leading-6">
-                        Export Excel
+                      <div className="text-slate-900 text-base font-normal font-['Inter'] leading-6">
+                        {isExportingExcel ? 'Generating Excel...' : 'Export Excel'}
                       </div>
                     </div>
-                  </div>
+                  </button>
 
                   {/* Action 4 */}
                   <div

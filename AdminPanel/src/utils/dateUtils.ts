@@ -54,6 +54,13 @@ export function toIsoStringSafe(val: any, fallbackStr?: string): string {
  * Safely format date into YYYY-MM-DD string
  */
 export function toYmdStringSafe(val: any, fallbackYmd?: string): string {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return match[0];
+    }
+  }
   const d = parseSafeDate(val);
   if (d) {
     try {
@@ -92,22 +99,38 @@ export function parseTimeSlot(timeStr?: string): { hours: number; minutes: numbe
 export function parseAppointmentDateTime(fullDateVal: any, timeSlotVal?: string): Date | null {
   if (!fullDateVal) return null;
 
-  // If fullDateVal is ISO string with time
-  if (typeof fullDateVal === 'string' && fullDateVal.includes('T')) {
-    const d = parseSafeDate(fullDateVal);
-    if (d) {
-      if (timeSlotVal) {
-        const { hours, minutes } = parseTimeSlot(timeSlotVal);
-        d.setHours(hours, minutes, 0, 0);
+  if (typeof fullDateVal === 'string') {
+    const trimmed = fullDateVal.trim();
+    const ymdMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (ymdMatch) {
+      const year = parseInt(ymdMatch[1], 10);
+      const month = parseInt(ymdMatch[2], 10);
+      const day = parseInt(ymdMatch[3], 10);
+      const { hours, minutes } = parseTimeSlot(timeSlotVal);
+      return new Date(year, month - 1, day, hours, minutes, 0, 0);
+    }
+
+    if (trimmed.includes('T')) {
+      const d = parseSafeDate(trimmed);
+      if (d) {
+        if (timeSlotVal) {
+          const { hours, minutes } = parseTimeSlot(timeSlotVal);
+          d.setHours(hours, minutes, 0, 0);
+        }
+        return d;
       }
-      return d;
     }
   }
 
   const ymd = toYmdStringSafe(fullDateVal);
   const parts = ymd.split('-').map((p) => parseInt(p, 10));
   if (parts.length < 3 || parts.some(isNaN)) {
-    return parseSafeDate(fullDateVal);
+    const d = parseSafeDate(fullDateVal);
+    if (d && timeSlotVal) {
+      const { hours, minutes } = parseTimeSlot(timeSlotVal);
+      d.setHours(hours, minutes, 0, 0);
+    }
+    return d;
   }
 
   const [year, month, day] = parts;
@@ -131,13 +154,14 @@ export function parseSessionDurationMinutes(durationVal?: string | number): numb
  * Status rules:
  * - Completed -> Completed
  * - Cancelled -> Cancelled
- * - Scheduled Date + Time passed without completion -> Expired
+ * - Confirmed / Scheduled / Pending -> Confirmed / Scheduled / Pending
  * - Scheduled Date + Time currently active -> Active / Today
  * - Scheduled Date + Time in future -> Upcoming
  */
 export function resolveAppointmentStatus(
   appt?: {
     status?: string;
+    appointmentStatus?: string;
     fullDate?: any;
     date?: any;
     appointmentDate?: any;
@@ -147,32 +171,36 @@ export function resolveAppointmentStatus(
     sessionDuration?: string | number;
   },
   now: Date = new Date()
-): 'Upcoming' | 'Active / Today' | 'Completed' | 'Cancelled' | 'Expired' {
-  if (!appt) return 'Upcoming';
-  const rawStatus = (appt.status || '').trim();
+): 'Upcoming' | 'Active / Today' | 'Completed' | 'Cancelled' | 'Confirmed' | 'Pending' | 'Scheduled' {
+  if (!appt) return 'Scheduled';
+  const rawStatus = (appt.status || appt.appointmentStatus || '').trim();
 
-  if (rawStatus === 'Completed') return 'Completed';
-  if (rawStatus === 'Cancelled') return 'Cancelled';
+  if (rawStatus === 'Completed' || rawStatus === 'COMPLETED') return 'Completed';
+  if (rawStatus === 'Cancelled' || rawStatus === 'CANCELLED') return 'Cancelled';
+  if (rawStatus === 'Confirmed' || rawStatus === 'CONFIRMED') return 'Confirmed';
+  if (rawStatus === 'Pending' || rawStatus === 'PENDING') return 'Pending';
+  if (rawStatus === 'Scheduled' || rawStatus === 'SCHEDULED') return 'Scheduled';
+  if (rawStatus === 'In Progress' || rawStatus === 'IN_PROGRESS') return 'Active / Today';
 
   const dateVal = appt.fullDate || appt.date || appt.appointmentDate || appt.createdAt;
   const timeVal = appt.timeSlot || appt.time;
   const startTime = parseAppointmentDateTime(dateVal, timeVal);
 
   if (!startTime) {
-    if (rawStatus === 'Expired') return 'Expired';
-    return 'Upcoming';
+    return 'Confirmed';
   }
 
   const durationMin = parseSessionDurationMinutes(appt.sessionDuration);
   const endTime = new Date(startTime.getTime() + durationMin * 60 * 1000);
 
-  if (now > endTime) {
-    return 'Expired';
-  } else if (now >= startTime && now <= endTime) {
-    return 'Active / Today';
-  } else {
+  if (now <= endTime) {
+    if (now >= startTime && now <= endTime) {
+      return 'Active / Today';
+    }
     return 'Upcoming';
   }
+
+  return 'Confirmed';
 }
 
 /**

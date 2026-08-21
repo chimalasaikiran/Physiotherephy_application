@@ -108,6 +108,21 @@ export const fetchTherapistsFromApi = async (serviceId?: string): Promise<ApiDoc
   }
 };
 
+import { auth, db } from '@/config/firebase';
+import { collection, getDocs, doc, setDoc, arrayUnion, serverTimestamp, query, where } from 'firebase/firestore';
+
+const MASTER_TIME_SLOTS = [
+  '08:30 AM',
+  '09:30 AM',
+  '10:30 AM',
+  '11:00 AM',
+  '11:45 AM',
+  '02:00 PM',
+  '03:30 PM',
+  '04:30 PM',
+  '06:00 PM',
+];
+
 export const fetchAvailableSlotsFromApi = async (
   doctorId: string,
   fullDate: string
@@ -116,17 +131,70 @@ export const fetchAvailableSlotsFromApi = async (
     const res = await fetch(
       `${BASE_URL}/slots?doctorId=${encodeURIComponent(doctorId)}&fullDate=${encodeURIComponent(fullDate)}`
     );
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data as ApiSlotsResponse;
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data.masterSlots)) {
+        return json.data as ApiSlotsResponse;
+      }
+    }
   } catch (error) {
-    console.warn('Backend slots API unreachable:', error);
-    return null;
+    console.warn('Backend slots API unreachable, falling back to Firestore query:', error);
   }
-};
 
-import { auth, db } from '@/config/firebase';
-import { collection, getDocs, doc, setDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+  // Fallback to Firestore booked_slots and appointments query
+  try {
+    if (db) {
+      const bookedSlotsSet = new Set<string>();
+
+      // Query booked_slots
+      try {
+        const slotsRef = collection(db, 'booked_slots');
+        const qSlots = query(slotsRef, where('doctorId', '==', doctorId), where('fullDate', '==', fullDate));
+        const slotSnap = await getDocs(qSlots);
+        slotSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.status !== 'Cancelled' && data.timeSlot) {
+            bookedSlotsSet.add(data.timeSlot);
+          }
+        });
+      } catch (err) {
+        console.warn('booked_slots collection query warning:', err);
+      }
+
+      // Query appointments as secondary check
+      try {
+        const apptsRef = collection(db, 'appointments');
+        const qAppts = query(apptsRef, where('doctorId', '==', doctorId), where('fullDate', '==', fullDate));
+        const apptSnap = await getDocs(qAppts);
+        apptSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.status !== 'Cancelled' && data.timeSlot) {
+            bookedSlotsSet.add(data.timeSlot);
+          }
+        });
+      } catch (err) {
+        console.warn('appointments query warning:', err);
+      }
+
+      const bookedSlots = Array.from(bookedSlotsSet);
+      const availableSlots = MASTER_TIME_SLOTS.filter((slot) => !bookedSlots.includes(slot));
+
+      return {
+        masterSlots: MASTER_TIME_SLOTS,
+        bookedSlots,
+        availableSlots,
+      };
+    }
+  } catch (fsErr) {
+    console.error('Direct Firestore slots fetch error:', fsErr);
+  }
+
+  return {
+    masterSlots: MASTER_TIME_SLOTS,
+    bookedSlots: [],
+    availableSlots: MASTER_TIME_SLOTS,
+  };
+};
 
 export const createAppointmentViaBackend = async (
   params: CreateBookingParams
@@ -373,11 +441,13 @@ export const rescheduleAppointmentViaBackend = async (
     console.warn('Backend reschedule appointment endpoint unreachable/failed, falling back to direct Firestore:', error.message || error);
     try {
       if (db) {
+        // 1. Update main appointment document
         const apptRef = doc(db, 'appointments', appointmentId);
         await setDoc(
           apptRef,
           {
             fullDate: newDate,
+            dateStr: newDate,
             timeSlot: newTimeSlot,
             dateId: newDateId || 'd1',
             status: 'Upcoming',
@@ -385,6 +455,78 @@ export const rescheduleAppointmentViaBackend = async (
           },
           { merge: true }
         );
+
+        // 2. Release old slot in booked_slots and lock new slot
+        const sanitizeKey = (str: string) => str.replace(/[^a-zA-Z0-9]/g, '_');
+        if (oldDate && oldTimeSlot) {
+          const oldSlotKey = `${doctorId}_${sanitizeKey(oldDate)}_${sanitizeKey(oldTimeSlot)}`;
+          const oldSlotRef = doc(db, 'booked_slots', oldSlotKey);
+          await setDoc(oldSlotRef, { status: 'Cancelled', updatedAt: serverTimestamp() }, { merge: true });
+        }
+
+        const newSlotKey = `${doctorId}_${sanitizeKey(newDate)}_${sanitizeKey(newTimeSlot)}`;
+        const newSlotRef = doc(db, 'booked_slots', newSlotKey);
+        await setDoc(
+          newSlotRef,
+          {
+            slotKey: newSlotKey,
+            appointmentId,
+            doctorId,
+            fullDate: newDate,
+            timeSlot: newTimeSlot,
+            status: 'Booked',
+            createdAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        // 3. Mirror update to user subcollection if user is logged in
+        const currentUid = auth.currentUser?.uid || 'user_demo_123';
+        try {
+          const userSubApptRef = doc(db, 'users', currentUid, 'appointments', appointmentId);
+          await setDoc(
+            userSubApptRef,
+            {
+              fullDate: newDate,
+              dateStr: newDate,
+              timeSlot: newTimeSlot,
+              dateId: newDateId || 'd1',
+              status: 'Upcoming',
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (subErr) {
+          console.warn('User subcollection appointment reschedule update warning:', subErr);
+        }
+
+        // 4. Update next appointment info in users and patient details collections
+        try {
+          const userDocRef = doc(db, 'users', currentUid);
+          await setDoc(
+            userDocRef,
+            {
+              nextAppointmentDate: newDate,
+              nextAppointmentTime: newTimeSlot,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+
+          const detailDocRef = doc(db, 'patient details', currentUid);
+          await setDoc(
+            detailDocRef,
+            {
+              nextAppointmentDate: newDate,
+              nextAppointmentTime: newTimeSlot,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (uErr) {
+          console.warn('Patient therapist next appointment update warning:', uErr);
+        }
+
         return true;
       }
     } catch (fsErr) {
@@ -424,7 +566,14 @@ export const fetchUserAppointmentsViaBackend = async (userId: string): Promise<a
         const items: any[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (!data.userId || data.userId === userId || userId === 'user_demo_123') {
+          if (
+            !data.userId ||
+            data.userId === userId ||
+            data.patientId === userId ||
+            userId === 'user_demo_123' ||
+            data.userId === 'user_demo_123' ||
+            data.patientId === 'user_demo_123'
+          ) {
             items.push({ id: docSnap.id, ...data });
           }
         });

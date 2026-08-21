@@ -6,8 +6,7 @@ import { AppointmentsTable, type AppointmentItem } from './components/Appointmen
 import { TodaysTimeline } from './components/TodaysTimeline';
 import { PendingConfirmations } from './components/PendingConfirmations';
 import { QuickActions } from './components/QuickActions';
-import { subscribeToSchedules, updateScheduleStatusRecord } from '@/services/scheduleService';
-
+import { subscribeToSchedules, updateScheduleStatusRecord, markCashAsPaidRecord, deleteScheduleRecord } from '@/services/scheduleService';
 import { isDateInTimelineFilter, parseAppointmentDateTime } from '@/utils/dateUtils';
 
 interface SchedulePageProps {
@@ -26,6 +25,8 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
   const [selectedTherapist, setSelectedTherapist] = useState('All');
   const [selectedType, setSelectedType] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('All');
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('All');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [currentPage, setCurrentPage] = useState(1);
   const [appointmentsList, setAppointmentsList] = useState<AppointmentItem[]>([]);
@@ -40,7 +41,7 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
     return () => unsub();
   }, []);
 
-  // Filtering appointments based on search, timeline & filter dropdowns
+  // Filtering appointments based on search, timeline & all filter dropdowns
   const filteredAppointments = useMemo(() => {
     return appointmentsList.filter((item) => {
       const matchesSearch =
@@ -51,12 +52,26 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
       const matchesTherapist =
         selectedTherapist === 'All' || item.therapistName.toLowerCase().includes(selectedTherapist.toLowerCase());
 
-      const matchesType = selectedType === 'All' || item.type === selectedType;
+      const matchesType =
+        selectedType === 'All' ||
+        item.type.toLowerCase().includes(selectedType.toLowerCase()) ||
+        (selectedType === 'Home Visit' && item.type === 'Home Visit') ||
+        (selectedType === 'Clinic Visit' && item.type === 'Clinic Visit') ||
+        (selectedType === 'Online' && item.type === 'Online');
 
       const matchesStatus =
         selectedStatus === 'All' ||
         item.status === selectedStatus ||
         (selectedStatus === 'Confirmed' && (item.status === 'Confirmed' || item.status === 'Scheduled'));
+
+      const matchesPaymentMethod =
+        selectedPaymentMethod === 'All' ||
+        (selectedPaymentMethod === 'Cash' && item.paymentMethod === 'CASH') ||
+        (selectedPaymentMethod === 'Online' && item.paymentMethod === 'ONLINE');
+
+      const matchesPaymentStatus =
+        selectedPaymentStatus === 'All' ||
+        (item.paymentStatus || '').toString().toLowerCase() === selectedPaymentStatus.toLowerCase();
 
       let matchesTimeline = true;
       if (selectedTimeframe !== 'All') {
@@ -67,9 +82,27 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
         }
       }
 
-      return matchesSearch && matchesTherapist && matchesType && matchesStatus && matchesTimeline;
+      return (
+        matchesSearch &&
+        matchesTherapist &&
+        matchesType &&
+        matchesStatus &&
+        matchesPaymentMethod &&
+        matchesPaymentStatus &&
+        matchesTimeline
+      );
     });
-  }, [appointmentsList, rawDocsList, searchTerm, selectedTherapist, selectedType, selectedStatus, selectedTimeframe]);
+  }, [
+    appointmentsList,
+    rawDocsList,
+    searchTerm,
+    selectedTherapist,
+    selectedType,
+    selectedStatus,
+    selectedPaymentMethod,
+    selectedPaymentStatus,
+    selectedTimeframe,
+  ]);
 
   const handleStatusChange = async (item: AppointmentItem, newStatus: AppointmentItem['status']) => {
     try {
@@ -81,8 +114,33 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
         raw?.fullDate,
         raw?.timeSlot || raw?.time
       );
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to update status in Firestore:', e);
+      alert(e.message || 'Status transition invalid or failed.');
+    }
+  };
+
+  const handleMarkCashPaid = async (item: AppointmentItem) => {
+    try {
+      await markCashAsPaidRecord(item.id, 'Clinic Admin');
+    } catch (e: any) {
+      console.error('Failed to mark cash payment as paid:', e);
+      alert(e.message || 'Failed to mark cash payment as paid.');
+    }
+  };
+
+  const handleDeleteAppointment = async (item: AppointmentItem) => {
+    try {
+      const raw = rawDocsList.find((r) => r.id === item.id);
+      await deleteScheduleRecord(
+        item.id,
+        raw?.therapistId || raw?.doctorId,
+        raw?.fullDate,
+        raw?.timeSlot || raw?.time
+      );
+    } catch (e: any) {
+      console.error('Failed to delete appointment from Firestore:', e);
+      alert(e.message || 'Failed to delete appointment record.');
     }
   };
 
@@ -91,9 +149,12 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
       alert('No schedules to export.');
       return;
     }
-    const headers = 'ID,Patient,Therapist,Type,Date,Time,Status\n';
+    const headers = 'ID,Patient,Therapist,Type,Date,Time,Amount,PaymentMethod,PaymentStatus,Status\n';
     const rows = filteredAppointments
-      .map((a) => `"${a.id}","${a.patientName}","${a.therapistName}","${a.type}","${a.date}","${a.time}","${a.status}"`)
+      .map(
+        (a) =>
+          `"${a.id}","${a.patientName}","${a.therapistName}","${a.type}","${a.date}","${a.time}","₹${a.amount || 1500}","${a.paymentMethod || 'CASH'}","${a.paymentStatus || 'PENDING'}","${a.status}"`
+      )
       .join('\n');
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -131,6 +192,10 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
             onTypeChange={setSelectedType}
             selectedStatus={selectedStatus}
             onStatusChangeFilter={setSelectedStatus}
+            selectedPaymentMethod={selectedPaymentMethod}
+            onPaymentMethodChange={setSelectedPaymentMethod}
+            selectedPaymentStatus={selectedPaymentStatus}
+            onPaymentStatusChange={setSelectedPaymentStatus}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
           />
@@ -145,6 +210,8 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
             viewMode={viewMode}
             onSelectSession={(item) => onOpenSessionDetails?.(item)}
             onStatusChange={handleStatusChange}
+            onMarkCashPaid={handleMarkCashPaid}
+            onDeleteAppointment={handleDeleteAppointment}
           />
         </div>
 
@@ -176,4 +243,3 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
 };
 
 export default SchedulePage;
-

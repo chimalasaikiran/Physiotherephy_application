@@ -133,12 +133,12 @@ export const CancelAppointmentScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
       <View style={styles.container}>
         {/* Header Bar */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 4, height: 56 + insets.top }]}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -290,7 +290,7 @@ export const CancelAppointmentScreen: React.FC = () => {
         {/* Bottom Navigation Menu Bar */}
         <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 

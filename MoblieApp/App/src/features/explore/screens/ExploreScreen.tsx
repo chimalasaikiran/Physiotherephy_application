@@ -49,6 +49,56 @@ interface ExploreScreenProps {
   onTabPress?: (tab: TabKey) => void;
 }
 
+const getLatestUpcomingAppointment = (bookings: any[]) => {
+  if (!Array.isArray(bookings) || bookings.length === 0) return null;
+
+  const validUpcoming = bookings.filter((b: any) => {
+    if (!b) return false;
+    if (!b.status) return true;
+    const statusLower = String(b.status).trim().toLowerCase();
+    if (
+      statusLower === 'cancelled' ||
+      statusLower === 'canceled' ||
+      statusLower === 'completed' ||
+      statusLower === 'finished' ||
+      statusLower === 'done' ||
+      statusLower === 'rejected'
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  if (validUpcoming.length === 0) return null;
+
+  validUpcoming.sort((a: any, b: any) => {
+    const timeA = a.createdAt?.seconds
+      ? a.createdAt.seconds * 1000
+      : a.createdAt
+      ? new Date(a.createdAt).getTime()
+      : 0;
+    const timeB = b.createdAt?.seconds
+      ? b.createdAt.seconds * 1000
+      : b.createdAt
+      ? new Date(b.createdAt).getTime()
+      : 0;
+
+    if (timeA && timeB && timeA !== timeB) {
+      return timeB - timeA;
+    }
+
+    const idNumA = parseInt(String(a.id || '').replace(/\D/g, '')) || 0;
+    const idNumB = parseInt(String(b.id || '').replace(/\D/g, '')) || 0;
+    if (idNumA && idNumB && idNumA !== idNumB) {
+      return idNumB - idNumA;
+    }
+
+    return 0;
+  });
+
+  return validUpcoming[0];
+};
+
 const DEFAULT_THERAPISTS = [
   {
     id: 'doc-1',
@@ -139,21 +189,22 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
   const progressRatio = totalProgramExercises > 0 ? Math.min(1, completedCount / totalProgramExercises) : 0;
   const computedScore = activeAssignment ? activeAssignment.progressPercent : Math.round(progressRatio * 100);
 
+  const { user, userProfile } = useAuth();
+  const userName = userProfile?.fullName?.trim() || Strings.explore.userNameDefault || 'User';
+
   // Real-Time Appointments & Progress listener on Screen Focus
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
       const currentUser = auth.currentUser;
-      const userId = currentUser?.uid || 'user_demo_123';
+      const userId = user?.uid || currentUser?.uid || 'user_demo_123';
 
       // Fetch initial upcoming appointment
       fetchUserAppointmentsViaBackend(userId)
         .then((firestoreBookings) => {
           if (isMounted) {
             if (firestoreBookings && firestoreBookings.length > 0) {
-              const upcoming = firestoreBookings.find(
-                (b: any) => !b.status || b.status === 'Upcoming' || b.status === 'Pending' || b.status === 'Confirmed'
-              );
+              const upcoming = getLatestUpcomingAppointment(firestoreBookings);
               setUpcomingAppointment(upcoming || null);
             } else {
               setUpcomingAppointment(null);
@@ -170,9 +221,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
         userId,
         (fsAppointments) => {
           if (isMounted && Array.isArray(fsAppointments)) {
-            const upcoming = fsAppointments.find(
-              (b: any) => !b.status || b.status === 'Upcoming' || b.status === 'Pending' || b.status === 'Confirmed'
-            );
+            const upcoming = getLatestUpcomingAppointment(fsAppointments);
             setUpcomingAppointment(upcoming || null);
           }
         }
@@ -218,13 +267,13 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
         unsubAssignments();
         unsubscribeTherapists();
       };
-    }, [])
+    }, [user?.uid])
   );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     const currentUser = auth.currentUser;
-    const userId = currentUser?.uid || 'user_demo_123';
+    const userId = user?.uid || currentUser?.uid || 'user_demo_123';
 
     try {
       const [apiBookings, progressData] = await Promise.all([
@@ -233,9 +282,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
       ]);
 
       if (apiBookings && apiBookings.length > 0) {
-        const upcoming = apiBookings.find(
-          (b: any) => !b.status || b.status === 'Upcoming' || b.status === 'Pending' || b.status === 'Confirmed'
-        );
+        const upcoming = getLatestUpcomingAppointment(apiBookings);
         setUpcomingAppointment(upcoming || null);
       }
       if (progressData) {
@@ -249,7 +296,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [user?.uid]);
 
   const toggleExercise = async (id: string) => {
     if (activeAssignment) {
@@ -282,9 +329,6 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
       router.push('/profile');
     }
   };
-
-  const { userProfile } = useAuth();
-  const userName = userProfile?.fullName?.trim() || Strings.explore.userNameDefault || 'User';
 
   const getGreetingHeading = () => {
     const hour = new Date().getHours();
@@ -385,30 +429,79 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
 
                 <View style={styles.doctorInfoRow}>
                   <Ionicons name="person-outline" size={16} color="#93C5FD" style={styles.docIcon} />
-                  <Text style={styles.doctorName}>{upcomingAppointment.doctorName || upcomingAppointment.therapistName}</Text>
+                  <Text style={styles.doctorName}>
+                    {upcomingAppointment.doctorName ||
+                      upcomingAppointment.therapistName ||
+                      upcomingAppointment.doctor ||
+                      'Specialist Clinician'}
+                  </Text>
                 </View>
-                <Text style={styles.doctorSpecialty}>{upcomingAppointment.doctorSpecialty || upcomingAppointment.serviceTitle}</Text>
+                <Text style={styles.doctorSpecialty}>
+                  {upcomingAppointment.doctorSpecialty ||
+                    upcomingAppointment.serviceTitle ||
+                    upcomingAppointment.specialty ||
+                    'Physiotherapy Consultation'}
+                </Text>
 
                 <View style={styles.locationRow}>
                   <Ionicons name="location-outline" size={15} color="#60A5FA" style={styles.locIcon} />
-                  <Text style={styles.locationText}>{upcomingAppointment.placeTitle || upcomingAppointment.location || 'ONE MEDICAL Clinic'}</Text>
+                  <Text style={styles.locationText}>
+                    {upcomingAppointment.placeTitle ||
+                      upcomingAppointment.clinicName ||
+                      upcomingAppointment.location ||
+                      'ONE MEDICAL Clinic'}
+                  </Text>
                 </View>
 
                 <View style={styles.appointmentActionsRow}>
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    style={styles.viewDetailsButton}
-                    onPress={() => router.push('/my-bookings' as any)}
+                    style={styles.rescheduleHeaderBtn}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/reschedule' as any,
+                        params: {
+                          bookingId: upcomingAppointment.id,
+                          doctorId: upcomingAppointment.doctorId || 'doc_1',
+                          doctorName:
+                            upcomingAppointment.doctorName ||
+                            upcomingAppointment.therapistName ||
+                            'Dr. Ananya Iyer',
+                          doctorSpecialty:
+                            upcomingAppointment.doctorSpecialty ||
+                            upcomingAppointment.serviceTitle ||
+                            'Senior Physiotherapist',
+                          serviceTitle:
+                            upcomingAppointment.serviceTitle || 'Physiotherapy Consultation',
+                          fullDate:
+                            upcomingAppointment.fullDate ||
+                            upcomingAppointment.dateStr ||
+                            'Oct 24, 2026',
+                          timeSlot: upcomingAppointment.timeSlot || '10:00 AM',
+                          clinicName:
+                            upcomingAppointment.placeTitle ||
+                            upcomingAppointment.clinicName ||
+                            'ONE MEDICAL Clinic',
+                          clinicAddress:
+                            upcomingAppointment.location ||
+                            upcomingAppointment.clinicAddress ||
+                            'Indiranagar, Bengaluru',
+                          avatarImageName: upcomingAppointment.avatarImageName || 'doctor_ananya',
+                          feeStr: upcomingAppointment.feeStr || '₹800',
+                        },
+                      })
+                    }
                   >
-                    <Text style={styles.viewDetailsText}>View Bookings</Text>
+                    <Ionicons name="calendar-outline" size={14} color="#003D9B" style={{ marginRight: 4 }} />
+                    <Text style={styles.rescheduleHeaderText}>Reschedule</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    style={styles.directionsButton}
-                    onPress={() => Alert.alert('Directions', 'Opening Maps navigation to Clinic')}
+                    style={styles.viewDetailsButton}
+                    onPress={() => router.push('/my-bookings' as any)}
                   >
-                    <Text style={styles.directionsText}>Get Directions</Text>
+                    <Text style={styles.viewDetailsText}>My Bookings</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -916,20 +1009,36 @@ const styles = StyleSheet.create({
   },
   appointmentActionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
-  viewDetailsButton: {
+  rescheduleHeaderBtn: {
     flex: 1,
     height: 42,
     backgroundColor: '#FFFFFF',
     borderRadius: 9999,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rescheduleHeaderText: {
+    fontSize: Typography.fontSize.sm,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#003D9B',
+  },
+  viewDetailsButton: {
+    flex: 1,
+    height: 42,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   viewDetailsText: {
     fontSize: Typography.fontSize.sm,
     fontWeight: Typography.fontWeight.bold,
-    color: '#003D9B',
+    color: '#FFFFFF',
   },
   directionsButton: {
     flex: 1,

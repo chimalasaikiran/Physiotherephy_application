@@ -59,8 +59,11 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
     Boolean(userProfile?.profileCompleted) ||
     Boolean(userProfile?.fullName && userProfile.fullName.trim().length > 0);
 
+  const hasRedirectedRef = React.useRef(false);
+
   React.useEffect(() => {
-    if (hasCompleteProfile) {
+    if (hasCompleteProfile && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true;
       router.replace('/explore');
     }
   }, [hasCompleteProfile]);
@@ -78,13 +81,18 @@ export const CompleteProfileScreen: React.FC<CompleteProfileScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ fullName?: string; dob?: string }>({});
 
-  if (hasCompleteProfile || isAuthLoading) {
+  if (hasCompleteProfile) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
         <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={{ marginTop: 12, fontSize: 14, color: Colors.darkBlue, fontWeight: 'bold' }}>
-          Redirecting to Home...
-        </Text>
+      </View>
+    );
+  }
+
+  if (isAuthLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background }}>
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }

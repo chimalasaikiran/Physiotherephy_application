@@ -8,9 +8,10 @@ export default function Index() {
   const [showSplash, setShowSplash] = useState(true);
   const router = useRouter();
   const { user, isProfileComplete, isSessionValid, isLoading } = useAuth();
+  const hasNavigatedRef = React.useRef(false);
 
   useEffect(() => {
-    if (!showSplash && !isLoading) {
+    if (!showSplash && !isLoading && !hasNavigatedRef.current) {
       const isAuthenticated = Boolean(user);
       if (isAuthenticated && isSessionValid) {
         const targetRoute = getAuthNavigationRoute({
@@ -19,6 +20,7 @@ export default function Index() {
           isSessionValid,
         });
         if (targetRoute !== '/login') {
+          hasNavigatedRef.current = true;
           router.replace(targetRoute as any);
         }
       }
@@ -27,7 +29,7 @@ export default function Index() {
 
   const handleSplashFinish = () => {
     setShowSplash(false);
-    if (!isLoading) {
+    if (!isLoading && !hasNavigatedRef.current) {
       const isAuthenticated = Boolean(user);
       if (isAuthenticated && isSessionValid) {
         const targetRoute = getAuthNavigationRoute({
@@ -36,6 +38,7 @@ export default function Index() {
           isSessionValid,
         });
         if (targetRoute !== '/login') {
+          hasNavigatedRef.current = true;
           router.replace(targetRoute as any);
         }
       }

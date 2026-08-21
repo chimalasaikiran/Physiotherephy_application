@@ -92,17 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const now = timestamp || Date.now();
             setLoginTimestamp(now);
 
-            // Pre-seed userProfile with stored session metadata so isProfileComplete is true immediately
-            if (storedSession && storedSession.profileCompleted) {
-              setUserProfile({
-                uid: currentUser.uid,
-                phone: currentUser.phoneNumber || storedSession.phone || '',
-                fullName: 'User',
-                profileCompleted: true,
-              } as UserProfileData);
-            }
-
-            // Sync user session: Direct Firestore read by authenticated UID
+            // Fetch actual user profile directly from Firestore / backend service
             let profile = await fetchUserProfile(currentUser.uid);
             if (!profile) {
               profile = await fetchUserProfileFromService(currentUser);
@@ -113,8 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             const isComp = Boolean(
               profile?.profileCompleted ||
-              (profile?.fullName && profile.fullName.trim().length > 0) ||
-              storedSession?.profileCompleted
+              (profile?.fullName && profile.fullName.trim().length > 0)
             );
 
             // Ensure local storage session is updated
@@ -244,16 +233,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 1. Check user profile directly from Firestore using authenticated user's UID
       let existingProfile = await fetchUserProfile(loggedInUser.uid);
 
-      // 2. If not found in Firestore, fallback to User Service microservice
+      // 2. If not found directly in Firestore, check fallback microservice
       if (!existingProfile) {
         existingProfile = await fetchUserProfileFromService(loggedInUser);
       }
 
-      // 3. Determine if profile is complete (profileCompleted flag or presence of fullName)
+      // 3. Determine if user exists and profile is completed (profileCompleted flag or presence of fullName)
       let isComplete = false;
       if (existingProfile) {
         isComplete = Boolean(
-          existingProfile.profileCompleted ||
+          existingProfile.profileCompleted === true ||
           (existingProfile.fullName && existingProfile.fullName.trim().length > 0)
         );
       }
@@ -261,7 +250,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let finalProfile: UserProfileData | null = existingProfile;
 
       if (!finalProfile) {
-        // New user with no existing Firestore profile -> initialize record
+        // New user with no existing Firestore profile -> initialize user record in Firestore with profileCompleted: false
         finalProfile = await initializeUserRecord(loggedInUser);
         isComplete = false;
       } else if (!finalProfile.profileCompleted && isComplete) {
@@ -270,7 +259,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUserProfile(finalProfile);
 
-      // Securely persist login session timestamp and user info
+      // Securely persist login session timestamp and user info with verified profile completion state
       const now = Date.now();
       const sessionData: StoredAuthSession = {
         loginTimestamp: now,

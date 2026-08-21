@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -22,9 +23,7 @@ import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { DoctorAvatarMap } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
-import { rescheduleAppointmentViaBackend } from '@/api/appointmentApi';
-
-import { Alert } from 'react-native';
+import { rescheduleAppointmentViaBackend, fetchAvailableSlotsFromApi } from '@/api/appointmentApi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -32,8 +31,10 @@ export interface DatePillItem {
   id: string;
   dayLabel: string; // e.g. "MON", "TUE"
   dateNum: string; // e.g. "16", "17"
-  fullDateStr: string; // e.g. "Tue, 17 Sept"
-  hasSlotAvailable: boolean;
+  fullDateStr: string; // e.g. "Tue, 17 Sep 2026"
+  monthYearStr: string; // e.g. "September 2026"
+  rawDate: Date;
+  isToday: boolean;
 }
 
 export interface TimeSlotItem {
@@ -41,27 +42,92 @@ export interface TimeSlotItem {
   time: string;
   isAvailable: boolean;
   isLocked?: boolean;
+  reason?: 'expired' | 'booked';
 }
 
-const DATE_PILLS: DatePillItem[] = [
-  { id: 'd16', dayLabel: 'MON', dateNum: '16', fullDateStr: 'Mon, 16 Sept', hasSlotAvailable: true },
-  { id: 'd17', dayLabel: 'TUE', dateNum: '17', fullDateStr: 'Tue, 17 Sept', hasSlotAvailable: true },
-  { id: 'd18', dayLabel: 'WED', dateNum: '18', fullDateStr: 'Wed, 18 Sept', hasSlotAvailable: true },
-  { id: 'd19', dayLabel: 'THU', dateNum: '19', fullDateStr: 'Thu, 19 Sept', hasSlotAvailable: true },
-  { id: 'd20', dayLabel: 'FRI', dateNum: '20', fullDateStr: 'Fri, 20 Sept', hasSlotAvailable: true },
-  { id: 'd21', dayLabel: 'SAT', dateNum: '21', fullDateStr: 'Sat, 21 Sept', hasSlotAvailable: true },
-  { id: 'd22', dayLabel: 'SUN', dateNum: '22', fullDateStr: 'Sun, 22 Sept', hasSlotAvailable: true },
+const MASTER_TIME_SLOTS = [
+  '08:30 AM',
+  '09:30 AM',
+  '10:30 AM',
+  '11:00 AM',
+  '11:45 AM',
+  '02:00 PM',
+  '03:30 PM',
+  '04:30 PM',
+  '06:00 PM',
 ];
 
-const TIME_SLOTS: TimeSlotItem[] = [
-  { id: 't1', time: '08:30 AM', isAvailable: true },
-  { id: 't2', time: '09:30 AM', isAvailable: true },
-  { id: 't3', time: '10:00 AM', isAvailable: false, isLocked: true },
-  { id: 't4', time: '11:00 AM', isAvailable: true },
-  { id: 't5', time: '11:45 AM', isAvailable: true },
-  { id: 't6', time: '02:00 PM', isAvailable: true },
-  { id: 't7', time: '03:30 PM', isAvailable: true },
-];
+const generateUpcomingDatePills = (count = 14): DatePillItem[] => {
+  const pills: DatePillItem[] = [];
+  const today = new Date();
+
+  for (let i = 0; i < count; i++) {
+    const d = new Date(today);
+    d.setDate(today.getDate() + i);
+
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+    const dateNum = d.getDate().toString();
+    const monthShort = d.toLocaleDateString('en-US', { month: 'short' });
+    const yearStr = d.getFullYear();
+    const monthYear = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const fullDateStr = `${dayName.slice(0, 3)}, ${dateNum} ${monthShort} ${yearStr}`;
+
+    pills.push({
+      id: `d_${d.getFullYear()}_${d.getMonth() + 1}_${dateNum}`,
+      dayLabel: dayName.slice(0, 3),
+      dateNum,
+      fullDateStr,
+      monthYearStr: monthYear,
+      rawDate: d,
+      isToday: i === 0,
+    });
+  }
+
+  return pills;
+};
+
+const isTimeSlotExpired = (targetDate: Date, timeSlotStr: string): boolean => {
+  const now = new Date();
+
+  // If target date is strictly in the future (after today)
+  if (
+    targetDate.getFullYear() > now.getFullYear() ||
+    (targetDate.getFullYear() === now.getFullYear() && targetDate.getMonth() > now.getMonth()) ||
+    (targetDate.getFullYear() === now.getFullYear() &&
+      targetDate.getMonth() === now.getMonth() &&
+      targetDate.getDate() > now.getDate())
+  ) {
+    return false;
+  }
+
+  // If target date is in the past
+  if (
+    targetDate.getFullYear() < now.getFullYear() ||
+    (targetDate.getFullYear() === now.getFullYear() && targetDate.getMonth() < now.getMonth()) ||
+    (targetDate.getFullYear() === now.getFullYear() &&
+      targetDate.getMonth() === now.getMonth() &&
+      targetDate.getDate() < now.getDate())
+  ) {
+    return true;
+  }
+
+  // Target date is TODAY -> parse timeSlotStr
+  const match = timeSlotStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return false;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const period = match[3].toUpperCase();
+
+  if (period === 'PM' && hours < 12) hours += 12;
+  if (period === 'AM' && hours === 12) hours = 0;
+
+  const slotDate = new Date(now);
+  slotDate.setHours(hours, minutes, 0, 0);
+
+  // Expired if slot time is before or equal to current time + 15 mins cutoff
+  return slotDate.getTime() <= now.getTime() + 15 * 60 * 1000;
+};
 
 export const RescheduleScreen: React.FC = () => {
   const router = useRouter();
@@ -80,7 +146,19 @@ export const RescheduleScreen: React.FC = () => {
     feeStr?: string;
   }>();
 
-  // Dynamic values
+  // Dynamic upcoming date pills generator (14 days starting today)
+  const datePills = useMemo(() => generateUpcomingDatePills(14), []);
+  const [selectedDateId, setSelectedDateId] = useState<string>(datePills[0]?.id || '');
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
+  const [selectedSlotTime, setSelectedSlotTime] = useState<string>('09:30 AM');
+  const [activeNavTab, setActiveNavTab] = useState<TabKey>('bookings');
+
+  // Submit / Success states
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isSuccessModalVisible, setIsSuccessModalVisible] = useState<boolean>(false);
+
+  // Dynamic values from router params
   const bookingId = params.bookingId || 'OPT-849204';
   const doctorName = params.doctorName || 'Dr. Ananya Iyer';
   const doctorSpecialty = params.doctorSpecialty || 'MSK Specialist';
@@ -91,18 +169,62 @@ export const RescheduleScreen: React.FC = () => {
   const avatarKey = params.avatarImageName || 'doctor_ananya';
   const avatarSource = DoctorAvatarMap[avatarKey] || DoctorAvatarMap.doctor_ananya;
 
-  // Selected date & slot states matching exact Figma reference
-  const [selectedDateId, setSelectedDateId] = useState<string>('d17'); // TUE 17 selected by default
-  const [selectedSlotTime, setSelectedSlotTime] = useState<string>('09:30 AM'); // 09:30 AM selected by default
-  const [activeNavTab, setActiveNavTab] = useState<TabKey>('bookings');
-
-  // Submit / Success states
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [isSuccessModalVisible, setIsSuccessModalVisible] = useState<boolean>(false);
-
   const selectedDate = useMemo(() => {
-    return DATE_PILLS.find((d) => d.id === selectedDateId) || DATE_PILLS[1];
-  }, [selectedDateId]);
+    return datePills.find((d) => d.id === selectedDateId) || datePills[0];
+  }, [selectedDateId, datePills]);
+
+  // Dynamically fetch booked slots whenever selectedDate or doctorId changes
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingSlots(true);
+    const docId = params.doctorId || 'doc_1';
+
+    fetchAvailableSlotsFromApi(docId, selectedDate.fullDateStr)
+      .then((res) => {
+        if (isMounted && res) {
+          setBookedSlots(res.bookedSlots || []);
+        }
+      })
+      .catch((err) => {
+        console.warn('Error fetching available slots:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingSlots(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDate, params.doctorId]);
+
+  // Compute available / locked time slots based on expiration and booked slots
+  const timeSlotsList = useMemo<TimeSlotItem[]>(() => {
+    return MASTER_TIME_SLOTS.map((time, idx) => {
+      const isExpired = isTimeSlotExpired(selectedDate.rawDate, time);
+      // Check if slot is booked by ANOTHER appointment (allow if same appointment)
+      const isBooked = bookedSlots.includes(time) && !(params.fullDate === selectedDate.fullDateStr && params.timeSlot === time);
+      const isLocked = isExpired || isBooked;
+
+      return {
+        id: `t_${idx}`,
+        time,
+        isAvailable: !isLocked,
+        isLocked,
+        reason: isExpired ? 'expired' : isBooked ? 'booked' : undefined,
+      };
+    });
+  }, [selectedDate, bookedSlots, params.fullDate, params.timeSlot]);
+
+  // Automatically select first valid available time slot if selected slot is locked/expired
+  useEffect(() => {
+    const currentSlotObj = timeSlotsList.find((s) => s.time === selectedSlotTime);
+    if (!currentSlotObj || !currentSlotObj.isAvailable) {
+      const firstValid = timeSlotsList.find((s) => s.isAvailable);
+      if (firstValid) {
+        setSelectedSlotTime(firstValid.time);
+      }
+    }
+  }, [timeSlotsList, selectedSlotTime]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -113,6 +235,12 @@ export const RescheduleScreen: React.FC = () => {
   };
 
   const handleConfirmReschedule = async () => {
+    const selectedSlotObj = timeSlotsList.find((s) => s.time === selectedSlotTime);
+    if (!selectedSlotObj || !selectedSlotObj.isAvailable) {
+      Alert.alert('Invalid Selection', 'The selected time slot is unavailable or expired. Please pick an available slot.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       if (params.bookingId) {
@@ -143,7 +271,6 @@ export const RescheduleScreen: React.FC = () => {
       }
     }
   };
-
 
   const handleSuccessDone = () => {
     setIsSuccessModalVisible(false);
@@ -183,7 +310,7 @@ export const RescheduleScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={22} color="#003D9B" />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Appointment Details</Text>
+          <Text style={styles.headerTitle}>Reschedule Appointment</Text>
 
           <TouchableOpacity
             activeOpacity={0.8}
@@ -219,7 +346,7 @@ export const RescheduleScreen: React.FC = () => {
               <View style={styles.originalPill}>
                 <Ionicons name="calendar-outline" size={13} color="#003D9B" style={{ marginRight: 4 }} />
                 <Text style={styles.originalPillText}>
-                  ORIGINAL: {currentScheduledOriginal.toUpperCase()}
+                  CURRENT: {currentScheduledOriginal.toUpperCase()}
                 </Text>
               </View>
             </View>
@@ -229,7 +356,7 @@ export const RescheduleScreen: React.FC = () => {
           <View style={styles.section}>
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>Select New Date</Text>
-              <Text style={styles.monthLabel}>September 2024</Text>
+              <Text style={styles.monthLabel}>{selectedDate.monthYearStr}</Text>
             </View>
 
             <ScrollView
@@ -237,7 +364,7 @@ export const RescheduleScreen: React.FC = () => {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.dateScrollContainer}
             >
-              {DATE_PILLS.map((item) => {
+              {datePills.map((item) => {
                 const isSelected = item.id === selectedDateId;
                 return (
                   <TouchableOpacity
@@ -270,17 +397,25 @@ export const RescheduleScreen: React.FC = () => {
 
           {/* AVAILABLE TIME SLOTS SECTION */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Available Time Slots</Text>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Available Time Slots</Text>
+              {loadingSlots && <ActivityIndicator size="small" color="#003D9B" />}
+            </View>
 
             <View style={styles.timeSlotsGrid}>
-              {TIME_SLOTS.map((slot) => {
+              {timeSlotsList.map((slot) => {
                 const isSelected = slot.time === selectedSlotTime;
                 const isLocked = slot.isLocked;
 
                 if (isLocked) {
                   return (
                     <View key={slot.id} style={styles.slotChipLocked}>
-                      <Ionicons name="lock-closed" size={13} color="#94A3B8" style={{ marginRight: 4 }} />
+                      <Ionicons
+                        name={slot.reason === 'expired' ? 'time-outline' : 'lock-closed'}
+                        size={13}
+                        color="#94A3B8"
+                        style={{ marginRight: 4 }}
+                      />
                       <Text style={styles.slotTextLocked}>{slot.time}</Text>
                     </View>
                   );

@@ -137,11 +137,11 @@ export const AppointmentConfirmedScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
       {/* Header Bar */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 4, height: 56 + insets.top }]}>
         <TouchableOpacity
           activeOpacity={0.7}
           onPress={handleBackToHome}
@@ -252,7 +252,7 @@ export const AppointmentConfirmedScreen: React.FC = () => {
           <Ionicons name="arrow-forward" size={18} color={Colors.white} />
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 

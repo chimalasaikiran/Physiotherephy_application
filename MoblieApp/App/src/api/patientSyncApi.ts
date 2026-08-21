@@ -101,10 +101,19 @@ export interface PatientRecord {
 // Mapper: UserProfileData → PatientRecord
 // ─────────────────────────────────────────────────────────────────────────────
 
-const generatePatientId = (uid: string): string => {
-  const clean = uid.replace(/[^a-zA-Z0-9]/g, '');
-  const num = parseInt(clean.substring(0, 8), 36) % 10000;
-  return `#OM-${String(Math.abs(num)).padStart(4, '0')}`;
+const generatePatientId = (uid: string, existingId?: string): string => {
+  if (existingId && /^PAT-\d{4,}$/i.test(existingId)) {
+    return existingId.toUpperCase();
+  }
+  const clean = (uid || '').replace(/[^a-zA-Z0-9]/g, '');
+  if (!clean) return 'PAT-1001';
+
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash * 31 + clean.charCodeAt(i)) & 0x7fffffff;
+  }
+  const num = 1001 + (hash % 8999);
+  return `PAT-${num}`;
 };
 
 const mapUserProfileToPatientRecord = (

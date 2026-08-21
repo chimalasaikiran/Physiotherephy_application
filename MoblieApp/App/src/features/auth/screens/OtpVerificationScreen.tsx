@@ -71,7 +71,17 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
     };
   }, [timer]);
 
+  useEffect(() => {
+    const fullCode = otp.join('');
+    if (fullCode.length === 6 && !isVerifying && !error) {
+      handleVerifyCode(fullCode);
+    }
+  }, [otp]);
+
+  const isNavigatingRef = React.useRef(false);
+
   const handleBack = () => {
+    if (isVerifying) return;
     if (onBackPress) {
       onBackPress();
     } else if (router.canGoBack()) {
@@ -82,6 +92,7 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
   };
 
   const handleEditNumber = () => {
+    if (isVerifying) return;
     if (onEditNumberPress) {
       onEditNumberPress();
     } else {
@@ -89,9 +100,9 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
     }
   };
 
-  const handleVerify = async () => {
-    if (isVerifying) return;
-    const fullCode = otp.join('');
+  const handleVerifyCode = async (codeToVerify?: string) => {
+    if (isVerifying || isNavigatingRef.current) return;
+    const fullCode = codeToVerify || otp.join('');
     if (fullCode.length < 6) {
       setError('Please enter the complete 6-digit verification code');
       return;
@@ -104,6 +115,7 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
       const result = await verifyOtp(fullCode);
 
       if (result.success) {
+        isNavigatingRef.current = true;
         if (onVerifySuccess) {
           onVerifySuccess(fullCode, result.profileCompleted);
         } else {
@@ -122,6 +134,10 @@ export const OtpVerificationScreen: React.FC<OtpVerificationScreenProps> = ({
       setIsVerifying(false);
       setError(err?.message || 'An unexpected authentication error occurred. Please try again.');
     }
+  };
+
+  const handleVerify = () => {
+    handleVerifyCode();
   };
 
   const handleResendCode = async () => {

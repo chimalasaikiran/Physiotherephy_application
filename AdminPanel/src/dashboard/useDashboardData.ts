@@ -207,7 +207,6 @@ export function useDashboardData() {
     let completedAppointments = 0;
     let cancelledAppointments = 0;
     let scheduledAppointments = 0;
-    let expiredAppointments = 0;
 
     rawAppointmentDocs.forEach((a) => {
       const st = resolveAppointmentStatus(
@@ -223,7 +222,6 @@ export function useDashboardData() {
 
       if (st === 'Completed') completedAppointments++;
       else if (st === 'Cancelled') cancelledAppointments++;
-      else if (st === 'Expired') expiredAppointments++;
       else scheduledAppointments++;
     });
 
@@ -280,7 +278,7 @@ export function useDashboardData() {
       completedAppointments,
       scheduledAppointments,
       cancelledAppointments,
-      expiredAppointments,
+      expiredAppointments: 0,
       todaysAppointmentsCount: todaysSchedule.length,
       totalRevenue,
       paidPaymentsTotal,
@@ -319,33 +317,61 @@ export function useDashboardData() {
           nowTick
         );
 
+        const apptType = rawDoc.type || rawDoc.visitType || 'Physiotherapy';
+        const typeLower = apptType.toLowerCase();
+
+        let typeBg = 'bg-[#EADEFF]';
+        let typeColor = 'text-[#6750A4]';
+
+        if (typeLower.includes('consultation') || typeLower.includes('initial')) {
+          typeBg = 'bg-[#D8E2FF]';
+          typeColor = 'text-[#003D9B]';
+        } else if (typeLower.includes('speech') || typeLower.includes('occupational')) {
+          typeBg = 'bg-[#C2F0EE]';
+          typeColor = 'text-[#006A6B]';
+        } else if (typeLower.includes('physio')) {
+          typeBg = 'bg-[#EADEFF]';
+          typeColor = 'text-[#6750A4]';
+        } else if (typeLower.includes('home')) {
+          typeBg = 'bg-amber-100';
+          typeColor = 'text-amber-800';
+        }
+
+        let dotColor = 'bg-[#006A6B]';
+        let statusColor = 'text-[#051A3E]';
+
+        if (dynamicStatus === 'Confirmed') {
+          dotColor = 'bg-[#006A6B]';
+          statusColor = 'text-[#051A3E]';
+        } else if (dynamicStatus === 'In Progress') {
+          dotColor = 'bg-[#003D9B]';
+          statusColor = 'text-[#051A3E]';
+        } else if (dynamicStatus === 'Completed') {
+          dotColor = 'bg-slate-300';
+          statusColor = 'text-slate-600';
+        } else if (dynamicStatus === 'Cancelled') {
+          dotColor = 'bg-rose-500';
+          statusColor = 'text-rose-700';
+        } else if (dynamicStatus === 'Pending') {
+          dotColor = 'bg-amber-500';
+          statusColor = 'text-amber-700';
+        }
+
+        const timeStr = rawDoc.timeSlot || rawDoc.time || '10:30 AM';
+
         return {
           id: rawDoc.id,
           patientName,
           avatarInitials: avatarInitials || 'PT',
-          avatarBg: 'bg-blue-100 text-blue-700',
-          therapistName: rawDoc.therapistName || rawDoc.doctorName || 'Specialist',
-          type: rawDoc.type || rawDoc.visitType || 'Clinic Visit',
-          typeBg: rawDoc.type === 'Online' ? 'bg-purple-50' : rawDoc.type === 'Home Visit' ? 'bg-amber-50' : 'bg-blue-50',
-          typeColor: rawDoc.type === 'Online' ? 'text-purple-700' : rawDoc.type === 'Home Visit' ? 'text-amber-700' : 'text-blue-700',
+          avatarBg: 'bg-[#D8E2FF] text-[#003D9B]',
+          therapistName: rawDoc.therapistName || rawDoc.doctorName || 'Dr. Specialist',
+          type: apptType,
+          typeBg,
+          typeColor,
           status: dynamicStatus as any,
-          statusColor:
-            dynamicStatus === 'Completed'
-              ? 'text-emerald-700'
-              : dynamicStatus === 'Cancelled'
-                ? 'text-rose-700'
-                : dynamicStatus === 'Expired'
-                  ? 'text-amber-700'
-                  : 'text-blue-700',
-          dotColor:
-            dynamicStatus === 'Completed'
-              ? 'bg-emerald-500'
-              : dynamicStatus === 'Cancelled'
-                ? 'bg-rose-500'
-                : dynamicStatus === 'Expired'
-                  ? 'bg-amber-500'
-                  : 'bg-blue-500',
-          time: `${rawDoc.dateLabel || rawDoc.fullDate || 'Today'} • ${rawDoc.timeSlot || rawDoc.time || '10:00 AM'}`,
+          statusColor,
+          dotColor,
+          time: timeStr,
           raw: rawDoc,
         };
       });

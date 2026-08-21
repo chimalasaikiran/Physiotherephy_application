@@ -70,8 +70,8 @@ export const AppointmentCancelledScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent />
 
       <View style={styles.container}>
         <ScrollView
@@ -79,7 +79,7 @@ export const AppointmentCancelledScreen: React.FC = () => {
           contentContainerStyle={[
             styles.scrollContent,
             {
-              paddingTop: Spacing.md,
+              paddingTop: Math.max(insets.top + 8, Spacing.md),
               paddingBottom: 110 + Math.max(insets.bottom, 12),
             },
           ]}
@@ -194,7 +194,7 @@ export const AppointmentCancelledScreen: React.FC = () => {
         {/* Bottom Navigation Menu Bar */}
         <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />
       </View>
-    </SafeAreaView>
+    </View>
   );
 };
 

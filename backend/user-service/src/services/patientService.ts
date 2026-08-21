@@ -87,7 +87,7 @@ const generatePatientId = (uid: string): string => {
 const mapPatientDoc = (id: string, data: any): PatientData => ({
   id,
   patientId: data.patientId || generatePatientId(id),
-  name: data.name || data.fullName || 'Unnamed Patient',
+  name: (data.name && data.name !== 'Unnamed Patient') ? data.name : (data.fullName && data.fullName !== 'Unnamed Patient') ? data.fullName : `Patient (${id.slice(0, 6)})`,
   age: Number(data.age) || 0,
   gender: data.gender || 'Not specified',
   avatarUrl:

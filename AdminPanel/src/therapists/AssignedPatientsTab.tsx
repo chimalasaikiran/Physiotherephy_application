@@ -18,9 +18,11 @@ import type { Therapist } from './types';
 import { db } from '@/auth/config/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 
+import { formatPatientId } from '@/services/patientService';
+
 export interface AssignedPatient {
   id: string;
-  patientId: string; // e.g. "PT-2091"
+  patientId: string; // e.g. "PAT-1001"
   name: string;
   avatarUrl?: string;
   condition: string;
@@ -52,45 +54,47 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = ({ therap
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  // Subscribe to real-time Firestore appointments for this therapist
+  // Subscribe to real-time Firestore appointments & users for this therapist
   useEffect(() => {
     if (!db) {
       setIsLoading(false);
       return;
     }
 
-    const apptsRef = collection(db, 'appointments');
-    const unsub = onSnapshot(
-      apptsRef,
-      (snapshot) => {
-        const rawAppts: any[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
+    let rawUsersMap: Record<string, any> = {};
+    let rawAppts: any[] = [];
 
-          const matchesTherapist =
-            !therapist ||
-            (therapist.id && (data.doctorId === therapist.id || data.therapistId === therapist.id)) ||
-            (therapist.name && (
-              (data.doctorName && data.doctorName.toLowerCase().includes(therapist.name.toLowerCase())) ||
-              (data.therapistName && data.therapistName.toLowerCase().includes(therapist.name.toLowerCase()))
-            ));
+    const processData = () => {
+      const patientMap: Record<string, AssignedPatient> = {};
 
-          if (matchesTherapist) {
-            rawAppts.push({ id: docSnap.id, ...data });
-          }
-        });
+      const therapistId = therapist?.id;
+      const therapistNameClean = therapist?.name?.toLowerCase().trim();
+      const assignedIdsSet = new Set<string>(therapist?.assignedPatientIds || []);
 
-        const patientMap: Record<string, AssignedPatient> = {};
+      // 1. Process matching appointments
+      rawAppts.forEach((appt) => {
+        const matchesTherapist =
+          !therapist ||
+          (therapistId && (appt.doctorId === therapistId || appt.therapistId === therapistId)) ||
+          (therapistNameClean && (
+            (appt.doctorName && appt.doctorName.toLowerCase().includes(therapistNameClean)) ||
+            (appt.therapistName && appt.therapistName.toLowerCase().includes(therapistNameClean))
+          ));
 
-        rawAppts.forEach((appt) => {
+        if (matchesTherapist) {
           const pId = appt.userId || appt.patientId || appt.userName || 'patient_demo';
-          const pName = appt.userName || appt.patientName || 'Patient';
+          const userDoc = rawUsersMap[pId] || rawUsersMap[appt.userId] || rawUsersMap[appt.patientId] || {};
+
+          const pName = userDoc.fullName || userDoc.name || appt.userName || appt.patientName || 'Patient';
+          const formattedId = formatPatientId(pId, userDoc.patientId || appt.patientId);
           const pAvatar =
+            userDoc.avatarUri ||
+            userDoc.avatarUrl ||
             appt.patientAvatar ||
             appt.userAvatar ||
             'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150';
           const condition =
-            appt.serviceTitle || appt.patientSubtitle || appt.patientCondition || 'Physiotherapy Session';
+            appt.serviceTitle || appt.patientSubtitle || appt.patientCondition || userDoc.condition || userDoc.primaryConcern || 'Physiotherapy Session';
           const apptDate = appt.fullDate || appt.dateLabel || appt.date || 'Scheduled Date';
           const apptTime = appt.timeSlot || appt.time || '10:00 AM';
           const apptStatus = appt.status || 'Upcoming';
@@ -100,7 +104,7 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = ({ therap
           if (!patientMap[pId]) {
             patientMap[pId] = {
               id: pId,
-              patientId: appt.patientId || pId.substring(0, 8),
+              patientId: formattedId,
               name: pName,
               avatarUrl: pAvatar,
               condition,
@@ -126,19 +130,74 @@ export const AssignedPatientsTab: React.FC<AssignedPatientsTabProps> = ({ therap
               if (apptStatus === 'Cancelled') patientMap[pId].status = 'Needs Review';
             }
           }
-        });
+        }
+      });
 
-        setAssignedPatients(Object.values(patientMap));
-        setIsLoading(false);
+      // 2. Process matching users from users collection not yet added from appointments
+      Object.values(rawUsersMap).forEach((uDoc) => {
+        const pId = uDoc.id;
+        const matchesUserTherapist =
+          (therapistId && (uDoc.doctorId === therapistId || uDoc.therapistId === therapistId)) ||
+          (therapistNameClean && uDoc.therapistName && uDoc.therapistName.toLowerCase().includes(therapistNameClean)) ||
+          assignedIdsSet.has(pId);
+
+        if (matchesUserTherapist && !patientMap[pId]) {
+          const pName = uDoc.fullName || uDoc.name || `Patient (${uDoc.phone || pId.slice(0, 6)})`;
+          const formattedId = formatPatientId(pId, uDoc.patientId);
+          patientMap[pId] = {
+            id: pId,
+            patientId: formattedId,
+            name: pName,
+            avatarUrl:
+              uDoc.avatarUri ||
+              uDoc.avatarUrl ||
+              'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150',
+            condition: uDoc.condition || uDoc.primaryConcern || 'General Rehab',
+            sessionsCount: 1,
+            latestAppointmentDate: 'Pending Schedule',
+            latestAppointmentTime: '--',
+            appointmentStatus: 'Confirmed',
+            paymentStatus: 'Paid',
+            status: 'On Track',
+          };
+        }
+      });
+
+      setAssignedPatients(Object.values(patientMap));
+      setIsLoading(false);
+    };
+
+    const unsubUsers = onSnapshot(
+      collection(db, 'users'),
+      (snapshot) => {
+        const uMap: Record<string, any> = {};
+        snapshot.forEach((docSnap) => {
+          uMap[docSnap.id] = { id: docSnap.id, ...docSnap.data() };
+        });
+        rawUsersMap = uMap;
+        processData();
       },
-      (err) => {
-        console.warn('Real-time assigned patients listener error:', err);
-        setIsLoading(false);
-      }
+      (err) => console.warn('AssignedPatientsTab users listener error:', err)
     );
 
-    return () => unsub();
-  }, [therapist?.id, therapist?.name]);
+    const unsubAppts = onSnapshot(
+      collection(db, 'appointments'),
+      (snapshot) => {
+        const appts: any[] = [];
+        snapshot.forEach((docSnap) => {
+          appts.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        rawAppts = appts;
+        processData();
+      },
+      (err) => console.warn('AssignedPatientsTab appts listener error:', err)
+    );
+
+    return () => {
+      unsubUsers();
+      unsubAppts();
+    };
+  }, [therapist?.id, therapist?.name, therapist?.assignedPatientIds]);
 
   // Filtered List
   const filteredPatients = useMemo(() => {

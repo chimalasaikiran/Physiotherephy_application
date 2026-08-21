@@ -1,5 +1,7 @@
 import React from 'react';
 import type { AppointmentItem } from './AppointmentsTable';
+import { parseTimeSlot } from '@/utils/dateUtils';
+import { formatAppointmentTypeLabel } from '@/utils/appointmentUtils';
 
 interface TodaysTimelineProps {
   appointments?: AppointmentItem[];
@@ -7,7 +9,14 @@ interface TodaysTimelineProps {
 }
 
 export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [], onSelectSession }) => {
-  const activeItems = appointments.filter((a) => a.status !== 'Cancelled').slice(0, 5);
+  // Sort today's appointments by start time
+  const sortedItems = [...appointments].sort((a, b) => {
+    const tA = parseTimeSlot(a.time);
+    const tB = parseTimeSlot(b.time);
+    const minsA = tA.hours * 60 + tA.minutes;
+    const minsB = tB.hours * 60 + tB.minutes;
+    return minsA - minsB;
+  }).slice(0, 6);
 
   return (
     <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs space-y-4">
@@ -17,7 +26,7 @@ export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [
           TODAY'S TIMELINE
         </h3>
         <button
-          onClick={() => activeItems[0] && onSelectSession?.(activeItems[0])}
+          onClick={() => sortedItems[0] && onSelectSession?.(sortedItems[0])}
           className="text-xs font-bold text-blue-600 hover:text-blue-700 transition-colors cursor-pointer"
         >
           View All
@@ -25,47 +34,55 @@ export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [
       </div>
 
       {/* Timeline Items */}
-      {activeItems.length > 0 ? (
+      {sortedItems.length > 0 ? (
         <div className="relative pl-5 space-y-5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
-          {activeItems.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => onSelectSession?.(item)}
-              className="relative flex items-start justify-between cursor-pointer hover:opacity-80 transition-opacity"
-            >
-              {/* Timeline Dot */}
+          {sortedItems.map((item) => {
+            const statusColor =
+              item.status === 'Completed'
+                ? 'text-emerald-600'
+                : item.status === 'In Progress'
+                ? 'text-blue-600'
+                : item.status === 'Cancelled'
+                ? 'text-rose-600'
+                : item.status === 'Expired'
+                ? 'text-amber-700'
+                : 'text-sky-600';
+
+            const dotColor =
+              item.status === 'Completed'
+                ? 'bg-emerald-500 ring-emerald-100'
+                : item.status === 'In Progress'
+                ? 'bg-blue-600 ring-blue-100 animate-pulse'
+                : item.status === 'Cancelled'
+                ? 'bg-rose-500 ring-rose-100'
+                : item.status === 'Expired'
+                ? 'bg-amber-600 ring-amber-100'
+                : 'bg-sky-500 ring-sky-100';
+
+            return (
               <div
-                className={`absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full ring-4 ring-white ${
-                  item.status === 'Confirmed'
-                    ? 'bg-blue-600 ring-blue-100'
-                    : item.status === 'Completed'
-                    ? 'bg-emerald-500 ring-emerald-100'
-                    : 'bg-amber-500 ring-amber-100'
-                }`}
-              />
-
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 leading-tight">
-                  {item.patientName}
-                </h4>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">
-                  {item.time} • {item.type}
-                </p>
-              </div>
-
-              <span
-                className={`text-xs font-bold ${
-                  item.status === 'Confirmed'
-                    ? 'text-blue-600'
-                    : item.status === 'Completed'
-                    ? 'text-emerald-600'
-                    : 'text-amber-600'
-                }`}
+                key={item.id}
+                onClick={() => onSelectSession?.(item)}
+                className="relative flex items-start justify-between cursor-pointer hover:opacity-80 transition-opacity"
               >
-                {item.status}
-              </span>
-            </div>
-          ))}
+                {/* Timeline Dot */}
+                <div className={`absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full ring-4 ring-white ${dotColor}`} />
+
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 leading-tight">
+                    {item.time} • {item.patientName}
+                  </h4>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    {formatAppointmentTypeLabel(item.type)}
+                  </p>
+                </div>
+
+                <span className={`text-xs font-extrabold ${statusColor}`}>
+                  {item.status}
+                </span>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <p className="text-xs text-slate-400 text-center py-4 font-medium">
@@ -75,4 +92,3 @@ export const TodaysTimeline: React.FC<TodaysTimelineProps> = ({ appointments = [
     </div>
   );
 };
-

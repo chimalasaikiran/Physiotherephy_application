@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { useFocusEffect, useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { DefaultBookingFallback, PaymentTransactionData } from '@/constants';
 import { PaymentProcessingCard } from '@/features/appointments';
@@ -18,6 +19,7 @@ import { auth } from '@/config/firebase';
 
 export const PaymentProcessingScreen: React.FC = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     bookingId?: string;
     doctorId?: string;
@@ -200,10 +202,16 @@ export const PaymentProcessingScreen: React.FC = () => {
 
   return (
     <View style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor={Colors.background} translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" translucent />
 
       {/* Full screen container blocking all touches during loading */}
-      <View style={styles.container} pointerEvents="none">
+      <View
+        style={[
+          styles.container,
+          { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 },
+        ]}
+        pointerEvents="none"
+      >
         <PaymentProcessingCard
           transactionData={transactionData}
           onComplete={handleProcessingComplete}

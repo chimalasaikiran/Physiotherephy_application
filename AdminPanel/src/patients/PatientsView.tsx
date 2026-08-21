@@ -800,9 +800,24 @@ export const PatientsView: React.FC<PatientsViewProps> = ({
                         </p>
                       </div>
                     </div>
-                    <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold font-mono">
-                      {patient.patientId}
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold font-mono">
+                        {patient.patientId}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete patient record for ${patient.name}?`)) {
+                            await deletePatient(patient.id);
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Delete Patient Record"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between gap-2">
