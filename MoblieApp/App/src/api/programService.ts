@@ -662,6 +662,37 @@ export const updateAssignmentProgress = async (
 };
 
 /**
+ * Helper to determine if all exercises for the active week are completed,
+ * returning the next week number if complete.
+ */
+export const checkWeekProgression = (
+  assignment: MobileProgramAssignment,
+  completedExercisesList: string[]
+): number => {
+  const currentWeek = assignment.currentWeek || 1;
+  const weeks = assignment.programDetails?.weeks && assignment.programDetails.weeks.length > 0
+    ? assignment.programDetails.weeks
+    : getDefaultWeeksForProgram(assignment.programTitle, `${assignment.totalWeeks || 8} Weeks`);
+
+  const totalWeeks = assignment.totalWeeks || weeks.length || 8;
+  const currentWeekObj = weeks.find((w) => w.weekNumber === currentWeek);
+
+  if (!currentWeekObj || !currentWeekObj.exercises || currentWeekObj.exercises.length === 0) {
+    return currentWeek;
+  }
+
+  const isWeekFinished = currentWeekObj.exercises.every((ex) =>
+    completedExercisesList.includes(ex.id) || completedExercisesList.includes(ex.name)
+  );
+
+  if (isWeekFinished && currentWeek < totalWeeks) {
+    return currentWeek + 1;
+  }
+
+  return currentWeek;
+};
+
+/**
  * Mark a specific exercise as complete.
  * Calculates exact progress percent = Math.min(100, Math.round((completed.length / total) * 100)).
  * Synchronizes with Firestore so both Mobile App and Admin Panel update in real time.
@@ -710,6 +741,9 @@ export const markExerciseComplete = async (
     status = 'completed';
   }
 
+  // Calculate week auto-advancement
+  const newCurrentWeek = checkWeekProgression(currentAssignment, updatedCompleted);
+
   await updateAssignmentProgress(assignmentId, {
     completedExercises: updatedCompleted,
     pendingExercises: updatedPending,
@@ -717,6 +751,7 @@ export const markExerciseComplete = async (
     completedSessions: Math.max(currentAssignment.completedSessions, Math.ceil((updatedCompleted.length / totalExercises) * (currentAssignment.totalSessions || 16))),
     assignmentStatus,
     status,
+    currentWeek: newCurrentWeek,
     lastCompletedExercise: exerciseId,
   });
 };

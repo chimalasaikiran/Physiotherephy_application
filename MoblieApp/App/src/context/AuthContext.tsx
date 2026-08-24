@@ -179,7 +179,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setConfirmationResult(confirmation);
       return { success: true };
     } catch (error: any) {
-      console.error('Firebase Phone Auth Error:', error);
+      console.warn('Firebase Phone Auth:', error?.message || error);
       let errorMsg = 'Failed to send OTP. Please check the mobile number and try again.';
       if (error.code === 'auth/invalid-phone-number') {
         errorMsg = 'The phone number format is invalid. Include country code (e.g. +91 98765 43210).';
@@ -275,7 +275,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profileCompleted: isComplete,
       };
     } catch (error: any) {
-      console.error('Firebase OTP Verification Error:', error);
+      console.warn('Firebase OTP Verification:', error?.message || error);
       let errorMsg = 'Invalid verification code. Please check and try again.';
       if (error.code === 'auth/invalid-verification-code') {
         errorMsg = 'The OTP entered is incorrect. Please double check.';

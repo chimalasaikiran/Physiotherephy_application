@@ -21,6 +21,9 @@ import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
 
+import { useAuth } from '@/context/AuthContext';
+import { subscribeToPatientAssignments, MobileProgramAssignment } from '@/api/programService';
+
 interface ExerciseItemData {
   id: string;
   name: string;
@@ -32,7 +35,19 @@ interface ExerciseItemData {
 export const TodaySessionScreen: React.FC = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('recovery');
+  const [assignment, setAssignment] = useState<MobileProgramAssignment | null>(null);
+
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = subscribeToPatientAssignments(user.uid, (assignments) => {
+      if (assignments && assignments.length > 0) {
+        setAssignment(assignments[0]);
+      }
+    });
+    return () => unsub();
+  }, [user?.uid]);
 
   const data = Strings.todaySessionDetails;
 
@@ -102,8 +117,8 @@ export const TodaySessionScreen: React.FC = () => {
   const handleExercisePress = (exercise: ExerciseItemData, index: number = 0) => {
     if (exercise.status === 'active') {
       router.push({
-        pathname: '/exercise-details',
-        params: { id: exercise.id, name: exercise.name, exerciseIndex: index.toString() },
+        pathname: '/active-session',
+        params: { id: exercise.id, name: exercise.name, exerciseIndex: index.toString(), assignmentId: assignment?.id || '' },
       } as any);
     } else {
       Alert.alert('Exercise Locked 🔒', 'Complete previous active exercises to unlock this movement.');
@@ -119,6 +134,7 @@ export const TodaySessionScreen: React.FC = () => {
         totalSets: '3',
         totalExercises: '5',
         name: 'Pelvic Tilt',
+        assignmentId: assignment?.id || '',
       },
     } as any);
   };
