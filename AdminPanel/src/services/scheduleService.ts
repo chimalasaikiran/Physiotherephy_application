@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/auth/config/firebase';
 import type { AppointmentItem } from '@/schedule/components/AppointmentsTable';
-import { resolveAppointmentStatus } from '@/utils/dateUtils';
+import { resolveAppointmentStatus, getAppointmentSortTime } from '@/utils/dateUtils';
 import {
   normalizeAppointmentType,
   normalizeAppointmentStatus,
@@ -295,7 +295,10 @@ export const subscribeToSchedules = (
     // Check past appointments for auto-expiration recovery
     checkAndUpdateExpiredAppointments(currentApptDocs);
 
-    const filteredDocs = currentApptDocs.filter((d) => !isGaneshUser(d));
+    const filteredDocs = currentApptDocs
+      .filter((d) => !isGaneshUser(d))
+      .sort((a, b) => getAppointmentSortTime(b) - getAppointmentSortTime(a));
+
     const mapped = filteredDocs.map((docSnap) =>
       mapDocToAppointmentItem(docSnap.id, docSnap, patientsMap)
     );

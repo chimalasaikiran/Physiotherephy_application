@@ -180,26 +180,28 @@ export const PaymentsPage: React.FC<PaymentsPageProps> = ({
 
   const combinedTransactions = useMemo(() => {
     const items = toTransactionItems(transactions, payments);
-    return items.map((t) => ({
-      id: t.id,
-      transactionId: t.transactionId,
-      type: (t.type || 'Payment') as any,
-      patientId: '',
-      patientName: t.patientName || 'Patient',
-      therapistId: '',
-      therapistName: '',
-      appointmentId: '',
-      invoiceId: '',
-      invoiceNumber: '',
-      paymentId: '',
-      amount: Number(t.amount || 0),
-      currency: 'INR',
-      method: t.method || 'UPI',
-      status: (((t.status as string) === 'Paid' || (t.status as string) === 'PAID' || t.status === 'Completed') ? 'Completed' : t.status || 'Completed') as any,
-      description: '',
-      timestamp: t.timestamp,
-      createdAt: t.timestamp,
-    }));
+    return items
+      .map((t) => ({
+        id: t.id,
+        transactionId: t.transactionId,
+        type: (t.type || 'Payment') as any,
+        patientId: '',
+        patientName: t.patientName || 'Patient',
+        therapistId: '',
+        therapistName: '',
+        appointmentId: '',
+        invoiceId: '',
+        invoiceNumber: '',
+        paymentId: '',
+        amount: Number(t.amount || 0),
+        currency: 'INR',
+        method: t.method || 'UPI',
+        status: (((t.status as string) === 'Paid' || (t.status as string) === 'PAID' || t.status === 'Completed') ? 'Completed' : t.status || 'Completed') as any,
+        description: '',
+        timestamp: t.timestamp,
+        createdAt: t.timestamp,
+      }))
+      .sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
   }, [transactions, payments]);
 
   const handleCreateInvoiceClick = () => {

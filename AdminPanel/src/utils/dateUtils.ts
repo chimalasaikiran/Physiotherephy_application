@@ -140,6 +140,36 @@ export function parseAppointmentDateTime(fullDateVal: any, timeSlotVal?: string)
 }
 
 /**
+ * Helper to compute numeric timestamp for sorting appointments/schedules/bookings latest first.
+ */
+export function getAppointmentSortTime(item: any): number {
+  if (!item) return 0;
+  // 1. Try createdAt (ISO string, Firestore Timestamp object, number, etc.)
+  const createdVal = item.createdAt || item.created_at || item.paidAt || item.timestamp;
+  if (createdVal) {
+    const d = parseSafeDate(createdVal);
+    if (d && !isNaN(d.getTime())) return d.getTime();
+  }
+
+  // 2. Try updatedAt
+  if (item.updatedAt || item.updated_at) {
+    const d = parseSafeDate(item.updatedAt || item.updated_at);
+    if (d && !isNaN(d.getTime())) return d.getTime();
+  }
+
+  // 3. Fallback to appointment date & time slot
+  const apptDate = parseAppointmentDateTime(
+    item.fullDate || item.dateLabel || item.date || item.appointmentDate,
+    item.timeSlot || item.time
+  );
+  if (apptDate && !isNaN(apptDate.getTime())) {
+    return apptDate.getTime();
+  }
+
+  return 0;
+}
+
+/**
  * Helper to parse session duration in minutes
  */
 export function parseSessionDurationMinutes(durationVal?: string | number): number {

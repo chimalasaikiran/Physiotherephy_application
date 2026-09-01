@@ -250,7 +250,6 @@ export const SelectDateTimeScreen: React.FC = () => {
     paymentMode: 'online' | 'clinic';
     paymentMethodId: string;
   }) => {
-    setIsPaymentModalVisible(false);
     const methodNames: Record<string, string> = {
       upi: 'UPI (GPay / PhonePe / Paytm)',
       card: 'Credit / Debit Card',
@@ -304,6 +303,7 @@ export const SelectDateTimeScreen: React.FC = () => {
           paymentMethod: 'Pay at Clinic',
         });
 
+        setIsPaymentModalVisible(false);
         router.replace({
           pathname: '/appointment-confirmed' as any,
           params: {
@@ -325,6 +325,7 @@ export const SelectDateTimeScreen: React.FC = () => {
           },
         });
       } catch (error: any) {
+        setIsPaymentModalVisible(false);
         if (error?.message === 'SLOT_ALREADY_BOOKED') {
           Alert.alert(
             'Slot Unavailable',
@@ -354,6 +355,7 @@ export const SelectDateTimeScreen: React.FC = () => {
         }
       }
     } else {
+      setIsPaymentModalVisible(false);
       router.push({
         pathname: '/payment-processing' as any,
         params: {

@@ -7,7 +7,7 @@ import { TodaysTimeline } from './components/TodaysTimeline';
 import { PendingConfirmations } from './components/PendingConfirmations';
 import { QuickActions } from './components/QuickActions';
 import { subscribeToSchedules, updateScheduleStatusRecord, markCashAsPaidRecord, deleteScheduleRecord } from '@/services/scheduleService';
-import { isDateInTimelineFilter, parseAppointmentDateTime } from '@/utils/dateUtils';
+import { isDateInTimelineFilter, parseAppointmentDateTime, getAppointmentSortTime } from '@/utils/dateUtils';
 
 interface SchedulePageProps {
   onOpenNewAppointment?: () => void;
@@ -91,6 +91,10 @@ export const SchedulePage: React.FC<SchedulePageProps> = ({
         matchesPaymentStatus &&
         matchesTimeline
       );
+    }).sort((a, b) => {
+      const rawA = rawDocsList.find((r) => r.id === a.id) || a;
+      const rawB = rawDocsList.find((r) => r.id === b.id) || b;
+      return getAppointmentSortTime(rawB) - getAppointmentSortTime(rawA);
     });
   }, [
     appointmentsList,

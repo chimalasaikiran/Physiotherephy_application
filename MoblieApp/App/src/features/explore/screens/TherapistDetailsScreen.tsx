@@ -270,6 +270,7 @@ export const TherapistDetailsScreen: React.FC = () => {
           paymentMethod: 'Pay at Clinic',
         });
 
+        setIsPaymentModalVisible(false);
         router.replace({
           pathname: '/appointment-confirmed' as any,
           params: {
@@ -290,6 +291,7 @@ export const TherapistDetailsScreen: React.FC = () => {
           },
         });
       } catch (error: any) {
+        setIsPaymentModalVisible(false);
         if (error?.message === 'SLOT_ALREADY_BOOKED') {
           Alert.alert(
             'Slot Unavailable',
@@ -318,6 +320,7 @@ export const TherapistDetailsScreen: React.FC = () => {
         }
       }
     } else {
+      setIsPaymentModalVisible(false);
       router.push({
         pathname: '/payment-processing' as any,
         params: {

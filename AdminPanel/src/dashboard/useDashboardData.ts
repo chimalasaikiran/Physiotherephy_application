@@ -3,7 +3,7 @@ import { subscribeToPatients } from '@/services/patientService';
 import { subscribeToTherapists } from '@/services/therapistService';
 import { subscribeToSchedules, resolvePatientName } from '@/services/scheduleService';
 import { subscribeToPayments, subscribeToRefunds } from '@/services/paymentService';
-import { parseSafeDate, toYmdStringSafe, resolveAppointmentStatus } from '@/utils/dateUtils';
+import { parseSafeDate, toYmdStringSafe, resolveAppointmentStatus, getAppointmentSortTime } from '@/utils/dateUtils';
 
 import type { Patient } from '@/patients/types';
 import type { Therapist } from '@/therapists/types';
@@ -289,13 +289,7 @@ export function useDashboardData() {
   // Sorted Recent Appointments with dynamic status
   const recentAppointments = useMemo(() => {
     return [...rawAppointmentDocs]
-      .sort((a, b) => {
-        const dateA = parseSafeDate(a.createdAt || a.updatedAt || a.fullDate);
-        const dateB = parseSafeDate(b.createdAt || b.updatedAt || b.fullDate);
-        const timeA = dateA ? dateA.getTime() : 0;
-        const timeB = dateB ? dateB.getTime() : 0;
-        return timeB - timeA;
-      })
+      .sort((a, b) => getAppointmentSortTime(b) - getAppointmentSortTime(a))
       .slice(0, 10)
       .map((rawDoc) => {
         const patientName = resolvePatientName(rawDoc, patientsMap);

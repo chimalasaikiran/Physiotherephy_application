@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -34,7 +34,7 @@ export interface PaymentSelectionModalProps {
     bookingDetails: BookingDetails;
     paymentMode: 'online' | 'clinic';
     paymentMethodId: string;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
@@ -50,18 +50,37 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
   const [selectedMethodId, setSelectedMethodId] = useState<string>('upi');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleConfirm = () => {
-    onConfirmBooking({
-      bookingDetails,
-      paymentMode,
-      paymentMethodId: selectedMethodId,
-    });
+  useEffect(() => {
+    if (visible) {
+      setIsProcessing(false);
+    }
+  }, [visible]);
+
+  const handleClose = () => {
+    if (!isProcessing) {
+      onClose();
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    try {
+      await onConfirmBooking({
+        bookingDetails,
+        paymentMode,
+        paymentMethodId: selectedMethodId,
+      });
+    } catch (error) {
+      console.error('Booking confirmation error:', error);
+      setIsProcessing(false);
+    }
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={handleClose}>
       <View style={styles.overlay}>
-        <TouchableOpacity style={styles.backdropTouch} activeOpacity={1} onPress={onClose} />
+        <TouchableOpacity style={styles.backdropTouch} activeOpacity={1} onPress={handleClose} disabled={isProcessing} />
 
         <SafeAreaView style={styles.modalContentShell}>
           <View style={styles.header}>
@@ -74,7 +93,7 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
                 </Text>
               </View>
 
-              <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+              <TouchableOpacity onPress={handleClose} disabled={isProcessing} style={[styles.closeBtn, isProcessing && { opacity: 0.5 }]} activeOpacity={0.7}>
                 <Ionicons name="close" size={20} color={Colors.textPrimary} />
               </TouchableOpacity>
             </View>
@@ -85,6 +104,7 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
             <View style={styles.modeContainer}>
               <TouchableOpacity
                 activeOpacity={0.85}
+                disabled={isProcessing}
                 onPress={() => setPaymentMode('online')}
                 style={[styles.modeCard, paymentMode === 'online' && styles.modeCardSelected]}
               >
@@ -109,6 +129,7 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
 
               <TouchableOpacity
                 activeOpacity={0.85}
+                disabled={isProcessing}
                 onPress={() => setPaymentMode('clinic')}
                 style={[styles.modeCard, paymentMode === 'clinic' && styles.modeCardSelected]}
               >
@@ -146,6 +167,7 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
                       <TouchableOpacity
                         key={method.id}
                         activeOpacity={0.8}
+                        disabled={isProcessing}
                         onPress={() => setSelectedMethodId(method.id)}
                         style={[styles.methodItem, isSelected && styles.methodItemSelected]}
                       >

@@ -280,7 +280,13 @@ export const subscribeToPayments = (
     return onSnapshot(
       colRef,
       (snapshot) => {
-        const payments = snapshot.docs.map((d) => mapDocToPayment(d.id, d.data()));
+        const payments = snapshot.docs
+          .map((d) => mapDocToPayment(d.id, d.data()))
+          .sort((a, b) => {
+            const tA = new Date(a.createdAt || a.paidAt || 0).getTime();
+            const tB = new Date(b.createdAt || b.paidAt || 0).getTime();
+            return tB - tA;
+          });
         onData(payments);
       },
       (err) => {
@@ -304,7 +310,13 @@ export const subscribeToInvoices = (
     return onSnapshot(
       colRef,
       (snapshot) => {
-        const invoices = snapshot.docs.map((d) => mapDocToInvoice(d.id, d.data()));
+        const invoices = snapshot.docs
+          .map((d) => mapDocToInvoice(d.id, d.data()))
+          .sort((a, b) => {
+            const tA = new Date(a.createdAt || a.issueDate || 0).getTime();
+            const tB = new Date(b.createdAt || b.issueDate || 0).getTime();
+            return tB - tA;
+          });
         onData(invoices);
       },
       (err) => {
@@ -328,7 +340,13 @@ export const subscribeToTransactions = (
     return onSnapshot(
       colRef,
       (snapshot) => {
-        const txns = snapshot.docs.map((d) => mapDocToTransaction(d.id, d.data()));
+        const txns = snapshot.docs
+          .map((d) => mapDocToTransaction(d.id, d.data()))
+          .sort((a, b) => {
+            const tA = new Date(a.createdAt || a.timestamp || 0).getTime();
+            const tB = new Date(b.createdAt || b.timestamp || 0).getTime();
+            return tB - tA;
+          });
         onData(txns);
       },
       (err) => {
