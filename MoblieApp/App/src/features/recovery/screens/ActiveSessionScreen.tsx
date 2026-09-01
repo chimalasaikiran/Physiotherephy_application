@@ -511,9 +511,14 @@ export const ActiveSessionScreen: React.FC = () => {
           accessibilityLabel="Mark exercise complete"
         >
           <View style={styles.checkCircleIcon}>
-            <Ionicons name="checkmark" size={16} color="#003D9B" />
+            <Ionicons name="checkmark" size={15} color="#003D9B" />
           </View>
-          <Text style={styles.markCompleteBtnText}>
+          <Text
+            style={styles.markCompleteBtnText}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             Mark Exercise Complete
           </Text>
         </TouchableOpacity>
@@ -814,15 +819,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: 16,
     paddingTop: 12,
     backgroundColor: '#FFFFFF',
-    gap: 14,
+    gap: 10,
   },
   stepIconBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#EEF2F6',
     justifyContent: 'center',
     alignItems: 'center',
@@ -833,32 +838,34 @@ const styles = StyleSheet.create({
   },
   markCompleteBtn: {
     flex: 1,
-    height: 56,
+    height: 52,
     borderRadius: 9999,
     backgroundColor: '#003D9B',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 10,
+    paddingHorizontal: 16,
+    gap: 8,
     shadowColor: '#003D9B',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowRadius: 10,
     elevation: 5,
   },
   checkCircleIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
   markCompleteBtnText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: Typography.fontWeight.bold,
     color: '#FFFFFF',
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
+    flexShrink: 1,
   },
 });
 

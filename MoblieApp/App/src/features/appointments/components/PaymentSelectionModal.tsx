@@ -43,8 +43,6 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
   onClose,
   onConfirmBooking,
 }) => {
-  if (!bookingDetails) return null;
-
   const paymentStrings = Strings.booking.payment;
   const [paymentMode, setPaymentMode] = useState<'online' | 'clinic'>('online');
   const [selectedMethodId, setSelectedMethodId] = useState<string>('upi');
@@ -55,6 +53,8 @@ export const PaymentSelectionModal: React.FC<PaymentSelectionModalProps> = ({
       setIsProcessing(false);
     }
   }, [visible]);
+
+  if (!bookingDetails) return null;
 
   const handleClose = () => {
     if (!isProcessing) {

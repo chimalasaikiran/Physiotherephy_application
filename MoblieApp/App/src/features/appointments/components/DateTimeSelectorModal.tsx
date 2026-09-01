@@ -39,8 +39,6 @@ export const DateTimeSelectorModal: React.FC<DateTimeSelectorModalProps> = ({
   onClose,
   onProceedToPayment,
 }) => {
-  if (!doctor) return null;
-
   const places = Strings.booking.places;
   const dates = Strings.booking.dates;
   const timeSlots = Strings.booking.timeSlots;
@@ -48,6 +46,8 @@ export const DateTimeSelectorModal: React.FC<DateTimeSelectorModalProps> = ({
   const [selectedPlaceId, setSelectedPlaceId] = useState<string>('clinic');
   const [selectedDateId, setSelectedDateId] = useState<string>('d1');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('04:30 PM');
+
+  if (!doctor) return null;
 
   const selectedPlace = places.find((p) => p.id === selectedPlaceId) || places[0];
   const selectedDate = dates.find((d) => d.id === selectedDateId) || dates[0];
