@@ -837,7 +837,7 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
                   </View>
                   <View style={styles.upcomingTextGroup}>
                     <Text style={styles.upcomingItemTitle}>
-                      {activeAssignment.programDetails?.name || 'Recovery Exercises'}
+                      {activeAssignment.programDetails?.title || 'Recovery Exercises'}
                     </Text>
                     <Text style={styles.upcomingItemSub}>
                       {`Week ${activeAssignment.currentWeek || 1} • ${remainingCount} remaining`}
