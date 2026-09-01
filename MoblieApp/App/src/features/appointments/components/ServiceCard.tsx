@@ -49,30 +49,62 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
   }, [isSelected, scaleAnim]);
 
   const getImageSource = (key?: string, id?: string) => {
-    const targetKey = key || id || '';
+    const targetKey = (key || id || '').toLowerCase().trim();
     switch (targetKey) {
       case 'service_back_pain':
       case 'back_pain':
+      case 'spine':
         return require('../../../assets/images/service_back_pain.png');
-      case 'service_neck_pain':
-      case 'neck_pain':
-        return require('../../../assets/images/service_neck_pain.png');
-      case 'service_sports_injury':
-      case 'sports_injury':
-        return require('../../../assets/images/service_sports_injury.png');
-      case 'service_post_surgery':
-      case 'post_surgery':
-        return require('../../../assets/images/service_post_surgery.png');
+
       case 'service_knee_pain':
       case 'knee_pain':
+      case 'knee_rehab':
+      case 'knee':
         return require('../../../assets/images/service_knee_pain.png');
+
+      case 'service_post_surgery':
+      case 'post_surgery':
+      case 'post_surgery_recovery':
+      case 'rehab':
+        return require('../../../assets/images/service_post_surgery.png');
+
+      case 'service_sports_injury':
+      case 'sports_injury':
+      case 'sports_injury_therapy':
+      case 'sports':
+        return require('../../../assets/images/service_sports_injury.png');
+
+      case 'service_neck_pain':
+      case 'neck_pain':
+      case 'neck_shoulder':
+      case 'cervical':
+        return require('../../../assets/images/service_neck_pain.png');
+
+      case 'service_stroke_neuro':
+      case 'stroke_neuro':
+      case 'neuro_rehab':
+      case 'neurological_rehab':
+      case 'neurology':
+        return require('../../../assets/images/service_stroke_neuro.png');
+
       case 'service_home_visit':
       case 'home_visit':
+      case 'home':
         return require('../../../assets/images/service_home_visit.png');
+
       case 'service_online_consult':
       case 'online_consult':
+      case 'virtual':
         return require('../../../assets/images/service_online_consult.png');
+
       default:
+        if (targetKey.includes('knee')) return require('../../../assets/images/service_knee_pain.png');
+        if (targetKey.includes('neck') || targetKey.includes('shoulder')) return require('../../../assets/images/service_neck_pain.png');
+        if (targetKey.includes('sport')) return require('../../../assets/images/service_sports_injury.png');
+        if (targetKey.includes('surg') || targetKey.includes('rehab')) return require('../../../assets/images/service_post_surgery.png');
+        if (targetKey.includes('neuro') || targetKey.includes('stroke')) return require('../../../assets/images/service_stroke_neuro.png');
+        if (targetKey.includes('home')) return require('../../../assets/images/service_home_visit.png');
+        if (targetKey.includes('consult') || targetKey.includes('online')) return require('../../../assets/images/service_online_consult.png');
         return require('../../../assets/images/service_back_pain.png');
     }
   };

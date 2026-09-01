@@ -55,6 +55,7 @@ export const ServiceSelectionScreen: React.FC = () => {
             iconName: s.iconName as any,
             startingFee: s.startingFee,
             numericFee: s.numericFee,
+            imageKey: s.imageKey || s.id,
           }));
           setServicesList(mapped);
         }

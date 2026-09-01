@@ -9,6 +9,7 @@ export interface ServiceItem {
   iconName: string;
   startingFee: string;
   numericFee: number;
+  imageKey?: string;
 }
 
 export interface DoctorItem {
@@ -64,6 +65,7 @@ const SERVICES_CATALOG: ServiceItem[] = [
     iconName: 'fitness',
     startingFee: '₹800',
     numericFee: 800,
+    imageKey: 'service_back_pain',
   },
   {
     id: 'knee_rehab',
@@ -73,6 +75,7 @@ const SERVICES_CATALOG: ServiceItem[] = [
     iconName: 'body',
     startingFee: '₹850',
     numericFee: 850,
+    imageKey: 'service_knee_pain',
   },
   {
     id: 'post_surgery',
@@ -82,6 +85,7 @@ const SERVICES_CATALOG: ServiceItem[] = [
     iconName: 'pulse',
     startingFee: '₹1,000',
     numericFee: 1000,
+    imageKey: 'service_post_surgery',
   },
   {
     id: 'sports_injury',
@@ -91,6 +95,7 @@ const SERVICES_CATALOG: ServiceItem[] = [
     iconName: 'trophy',
     startingFee: '₹950',
     numericFee: 950,
+    imageKey: 'service_sports_injury',
   },
   {
     id: 'neck_shoulder',
@@ -100,6 +105,7 @@ const SERVICES_CATALOG: ServiceItem[] = [
     iconName: 'shield',
     startingFee: '₹750',
     numericFee: 750,
+    imageKey: 'service_neck_pain',
   },
   {
     id: 'stroke_neuro',
@@ -109,6 +115,7 @@ const SERVICES_CATALOG: ServiceItem[] = [
     iconName: 'medical',
     startingFee: '₹1,200',
     numericFee: 1200,
+    imageKey: 'service_stroke_neuro',
   },
 ];
 

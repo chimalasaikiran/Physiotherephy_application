@@ -31,6 +31,7 @@ export interface ApiMedicalService {
   iconName: string;
   startingFee: string;
   numericFee: number;
+  imageKey?: string;
 }
 
 export interface ApiDoctor {
