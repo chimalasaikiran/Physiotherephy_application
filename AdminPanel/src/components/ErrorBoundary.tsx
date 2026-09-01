@@ -1,86 +1,172 @@
-import React, { Component, type ErrorInfo, type ReactNode } from 'react';
-import { RefreshCw, AlertTriangle } from 'lucide-react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 
-interface Props {
+interface ErrorBoundaryProps {
   children: ReactNode;
-  fallback?: ReactNode;
+  fallback?: (error: Error, resetError: () => void) => ReactNode;
+  componentName?: string;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
-  errorInfo: ErrorInfo | null;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-    errorInfo: null,
-  };
-
-  public static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, errorInfo: null };
+/**
+ * React Error Boundary for the Admin Panel.
+ *
+ * Wraps individual pages/sections to prevent a single crash from
+ * taking down the entire admin panel application.
+ */
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught React UI error:', error, errorInfo);
-    this.setState({ errorInfo });
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
+    return { hasError: true, error };
   }
 
-  private handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
-    window.location.reload();
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    const { componentName = 'Unknown' } = this.props;
+    console.error(`[ErrorBoundary: ${componentName}] Runtime Error:`, error, errorInfo);
+    // In production: report to Sentry / Firebase Crashlytics
+  }
+
+  resetError = (): void => {
+    this.setState({ hasError: false, error: null });
   };
 
-  public render() {
-    if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
+  render(): ReactNode {
+    const { hasError, error } = this.state;
+    const { children, fallback } = this.props;
 
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6 font-sans text-white">
-          <div className="max-w-lg w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-8 shadow-2xl backdrop-blur-xl text-center space-y-6">
-            <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-8 h-8" />
-            </div>
+    if (!hasError) return children;
 
-            <div className="space-y-2">
-              <h2 className="text-2xl font-extrabold text-white tracking-tight">
-                Something went wrong
-              </h2>
-              <p className="text-sm text-slate-400">
-                An unexpected application error occurred in the clinic interface.
-              </p>
-            </div>
-
-            {this.state.error && (
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800/80 text-left overflow-x-auto max-h-40 text-xs font-mono text-rose-300/90">
-                <p className="font-bold text-rose-400">{this.state.error.toString()}</p>
-                {this.state.errorInfo?.componentStack && (
-                  <pre className="mt-2 text-[10px] text-slate-500 whitespace-pre-wrap">
-                    {this.state.errorInfo.componentStack}
-                  </pre>
-                )}
-              </div>
-            )}
-
-            <div className="pt-2 flex items-center justify-center gap-3">
-              <button
-                onClick={this.handleReset}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm transition-all shadow-lg shadow-blue-600/30 cursor-pointer"
-              >
-                <RefreshCw className="w-4 h-4 animate-spin-slow" />
-                Reload Application
-              </button>
-            </div>
-          </div>
-        </div>
-      );
+    if (fallback && error) {
+      return fallback(error, this.resetError);
     }
 
-    return this.props.children;
+    const isDev = import.meta.env.DEV;
+
+    return (
+      <div
+        role="alert"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '300px',
+          padding: '32px',
+          margin: '16px',
+          background: 'linear-gradient(135deg, #fef2f2 0%, #fff7ed 100%)',
+          borderRadius: '20px',
+          border: '1px solid #fecaca',
+          textAlign: 'center',
+          gap: '12px',
+        }}
+      >
+        <div
+          style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: '#fee2e2',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '28px',
+            marginBottom: '8px',
+          }}
+        >
+          ⚠️
+        </div>
+
+        <h2
+          style={{
+            fontSize: '20px',
+            fontWeight: 700,
+            color: '#1e293b',
+            margin: 0,
+            fontFamily: 'Inter, system-ui, sans-serif',
+          }}
+        >
+          Something went wrong
+        </h2>
+
+        <p
+          style={{
+            fontSize: '14px',
+            color: '#64748b',
+            margin: 0,
+            maxWidth: '400px',
+            lineHeight: '1.6',
+          }}
+        >
+          This section encountered an error. Your data is safe. Reload the page or click below to retry.
+        </p>
+
+        {isDev && error && (
+          <pre
+            style={{
+              background: '#1e293b',
+              color: '#f8fafc',
+              padding: '12px 16px',
+              borderRadius: '10px',
+              fontSize: '12px',
+              textAlign: 'left',
+              maxWidth: '100%',
+              overflow: 'auto',
+              whiteSpace: 'pre-wrap',
+              margin: '8px 0',
+              maxHeight: '140px',
+            }}
+          >
+            {error.stack || error.message}
+          </pre>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+          <button
+            onClick={this.resetError}
+            style={{
+              padding: '10px 24px',
+              background: '#003D9B',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '9999px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'Inter, system-ui, sans-serif',
+              transition: 'opacity 0.15s ease',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.85')}
+            onMouseLeave={(e) => (e.currentTarget.style.opacity = '1')}
+          >
+            🔄 Retry
+          </button>
+
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '10px 24px',
+              background: 'transparent',
+              color: '#64748b',
+              border: '1.5px solid #e2e8f0',
+              borderRadius: '9999px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'Inter, system-ui, sans-serif',
+            }}
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
   }
 }
 

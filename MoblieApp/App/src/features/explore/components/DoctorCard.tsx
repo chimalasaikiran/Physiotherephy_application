@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -24,6 +25,17 @@ interface DoctorCardProps {
 }
 
 export const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookPress }) => {
+  const handlePress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      // Fallback
+    }
+    if (onBookPress) {
+      onBookPress(doctor);
+    }
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.leftCol}>
@@ -57,7 +69,7 @@ export const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookPress }) =
 
       <View style={styles.rightCol}>
         <TouchableOpacity
-          onPress={() => onBookPress && onBookPress(doctor)}
+          onPress={handlePress}
           activeOpacity={0.8}
           style={styles.bookButton}
           accessibilityRole="button"

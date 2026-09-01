@@ -9,6 +9,8 @@ import {
   Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 
@@ -47,6 +49,15 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
       tension: 100,
     }).start();
   }, [isSelected, scaleAnim]);
+
+  const handlePress = () => {
+    try {
+      Haptics.selectionAsync();
+    } catch {
+      // Fallback
+    }
+    onSelect(service);
+  };
 
   const getImageSource = (key?: string, id?: string) => {
     const targetKey = (key || id || '').toLowerCase().trim();
@@ -114,7 +125,7 @@ export const ServiceCard: React.FC<ServiceCardProps> = ({
     <Animated.View style={[{ transform: [{ scale: scaleAnim }] }]}>
       <TouchableOpacity
         activeOpacity={0.88}
-        onPress={() => onSelect(service)}
+        onPress={handlePress}
         accessibilityRole="button"
         accessibilityLabel={`Select service ${service.title}`}
         accessibilityState={{ selected: isSelected }}

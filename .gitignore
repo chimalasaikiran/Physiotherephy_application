@@ -15,13 +15,19 @@ node_modules/
 !.env.example
 !**/.env.example
 
-# Credentials & Service Account Keys
+# Credentials & Service Account Keys — NEVER commit these
 *serviceAccount*
+serviceAccountKey*
+*serviceAccountKey*
+*.json.json
 *.pem
 *.key
 *.p12
 *.crt
 *.secret
+# Firebase Admin SDK key files (all variants)
+firebase-adminsdk-*.json
+*-firebase-adminsdk-*.json
 
 # IDE / OS files
 .vscode/

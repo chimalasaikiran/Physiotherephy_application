@@ -58,19 +58,19 @@ export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
   const exercisesDisplay =
     completedCount && totalCount
       ? `${completedCount} of ${totalCount}`
-      : (params.exercises as string) || sStrings.exercisesValue || '5 of 5';
+      : (params.exercises as string) || null;
 
   const durationDisplay =
-    durationText || (params.duration as string) || sStrings.durationValue || '22 Minutes';
+    durationText || (params.duration as string) || null;
 
   const streakDisplay =
-    streakText || (params.streak as string) || sStrings.streakValue || '8 Days';
+    streakText || (params.streak as string) || null;
 
   const recoveryDisplay =
-    recoveryText || (params.recovery as string) || sStrings.recoveryValue || '72%';
+    recoveryText || (params.recovery as string) || null;
 
   const badgeDisplay =
-    recoveryBadgeText || (params.badge as string) || sStrings.recoveryBadge || '+2% Today';
+    recoveryBadgeText || (params.badge as string) || null;
 
   const noteDisplay =
     therapistNoteText ||
@@ -137,14 +137,14 @@ export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
               <Text style={styles.statLabel}>
                 {sStrings.exercisesLabel || 'EXERCISES'}
               </Text>
-              <Text style={styles.statValue}>{exercisesDisplay}</Text>
+              <Text style={styles.statValue}>{exercisesDisplay || '--'}</Text>
             </View>
 
             <View style={styles.statCol}>
               <Text style={styles.statLabel}>
                 {sStrings.durationLabel || 'DURATION'}
               </Text>
-              <Text style={styles.statValue}>{durationDisplay}</Text>
+              <Text style={styles.statValue}>{durationDisplay || '--'}</Text>
             </View>
           </View>
 
@@ -156,7 +156,7 @@ export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
               <Text style={styles.statLabel}>
                 {sStrings.streakLabel || 'STREAK'}
               </Text>
-              <Text style={styles.statValue}>{streakDisplay}</Text>
+              <Text style={styles.statValue}>{streakDisplay || '--'}</Text>
             </View>
 
             <View style={styles.statCol}>
@@ -164,10 +164,10 @@ export const SessionCompleteScreen: React.FC<SessionCompleteScreenProps> = ({
                 {sStrings.recoveryLabel || 'RECOVERY'}
               </Text>
               <View style={styles.recoveryValueRow}>
-                <Text style={styles.statValue}>{recoveryDisplay}</Text>
-                <View style={styles.recoveryBadgePill}>
+                <Text style={styles.statValue}>{recoveryDisplay || '--'}</Text>
+                {badgeDisplay ? (
                   <Text style={styles.recoveryBadgeText}>{badgeDisplay}</Text>
-                </View>
+                ) : null}
               </View>
             </View>
           </View>

@@ -1,10 +1,16 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import { Request, Response } from 'express';
 import { ProgramService } from '../services/programService.js';
+import {
+  authenticateFirebaseToken,
+  requireAdminRole,
+  AuthenticatedRequest,
+} from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-// GET /api/v1/programs
-router.get('/', async (_req: Request, res: Response) => {
+// GET /api/v1/programs — Authenticated (mobile + admin)
+router.get('/', authenticateFirebaseToken, async (_req: AuthenticatedRequest, res: Response) => {
   try {
     const programs = await ProgramService.getAllPrograms();
     res.json({ success: true, count: programs.length, data: programs });
@@ -13,8 +19,8 @@ router.get('/', async (_req: Request, res: Response) => {
   }
 });
 
-// GET /api/v1/programs/:id
-router.get('/:id', async (req: Request, res: Response) => {
+// GET /api/v1/programs/:id — Authenticated (mobile + admin)
+router.get('/:id', authenticateFirebaseToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : String(req.params.id);
     const program = await ProgramService.getProgramById(id);
@@ -27,8 +33,8 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/v1/programs
-router.post('/', async (req: Request, res: Response) => {
+// POST /api/v1/programs — Admin only
+router.post('/', authenticateFirebaseToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const programId = await ProgramService.createProgram(req.body);
     const created = await ProgramService.getProgramById(programId);
@@ -38,8 +44,8 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/v1/programs/:id
-router.put('/:id', async (req: Request, res: Response) => {
+// PUT /api/v1/programs/:id — Admin only
+router.put('/:id', authenticateFirebaseToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : String(req.params.id);
     const updated = await ProgramService.updateProgram(id, req.body);
@@ -52,8 +58,8 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/v1/programs/:id
-router.delete('/:id', async (req: Request, res: Response) => {
+// DELETE /api/v1/programs/:id — Admin only
+router.delete('/:id', authenticateFirebaseToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : String(req.params.id);
     const success = await ProgramService.deleteProgram(id);

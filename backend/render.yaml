@@ -14,7 +14,7 @@ services:
       - key: FIREBASE_PROJECT_ID
         value: physicotherephy-c28dd
       - key: CORS_ORIGIN
-        value: "*"
+        value: "https://physiotherephy-application.vercel.app"
       - key: FIREBASE_CLIENT_EMAIL
         sync: false
       - key: FIREBASE_PRIVATE_KEY
@@ -35,7 +35,7 @@ services:
       - key: FIREBASE_PROJECT_ID
         value: physicotherephy-c28dd
       - key: CORS_ORIGIN
-        value: "*"
+        value: "https://physiotherephy-application.vercel.app"
       - key: FIREBASE_CLIENT_EMAIL
         sync: false
       - key: FIREBASE_PRIVATE_KEY
@@ -56,7 +56,7 @@ services:
       - key: FIREBASE_PROJECT_ID
         value: physicotherephy-c28dd
       - key: CORS_ORIGIN
-        value: "*"
+        value: "https://physiotherephy-application.vercel.app"
       - key: FIREBASE_CLIENT_EMAIL
         sync: false
       - key: FIREBASE_PRIVATE_KEY

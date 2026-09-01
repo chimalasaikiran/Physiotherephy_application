@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,7 +24,7 @@ import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
 
-import { fetchUserProgressStats, ProgressStats as UserProgressData, DEFAULT_USER_PROGRESS } from '@/api/recoveryApi';
+import { fetchUserProgressStats, ProgressStats as UserProgressData, DEFAULT_EMPTY_PROGRESS } from '@/api/recoveryApi';
 import { subscribeToPatientAssignments, MobileProgramAssignment } from '@/api/programService';
 import { auth } from '@/config/firebase';
 import { useAuth } from '@/context/AuthContext';
@@ -55,7 +56,8 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
   const insets = useSafeAreaInsets();
   const { user, userProfile } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('recovery');
-  const [userProgress, setUserProgress] = useState<UserProgressData>(DEFAULT_USER_PROGRESS);
+  const [userProgress, setUserProgress] = useState<UserProgressData>(DEFAULT_EMPTY_PROGRESS);
+  const [progressLoading, setProgressLoading] = useState<boolean>(true);
   const [assignedPrograms, setAssignedPrograms] = useState<MobileProgramAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState<boolean>(true);
 
@@ -71,17 +73,15 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
       return;
     }
 
-    fetchUserProgressStats(uid).then((progressData) => {
-      if (isMounted && progressData) {
-        setUserProgress((prev) => ({
-          ...prev,
-          ...progressData,
-          completedSessionCount: progressData.completedSessionCount ?? progressData.completedSessions ?? prev.completedSessionCount,
-          recoveryScore: progressData.recoveryScore ?? progressData.recoveryPercentage ?? prev.recoveryScore,
-          streakDays: progressData.streakDays ?? prev.streakDays,
-        }));
-      }
-    });
+    fetchUserProgressStats(uid)
+      .then((progressData) => {
+        if (isMounted && progressData) {
+          setUserProgress(progressData);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setProgressLoading(false);
+      });
 
     const unsubAssignments = subscribeToPatientAssignments(
       uid,

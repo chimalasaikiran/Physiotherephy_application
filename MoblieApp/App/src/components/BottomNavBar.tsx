@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ViewStyle, Animated, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
@@ -36,7 +37,7 @@ const TABS: TabConfig[] = [
   },
   {
     key: 'bookings',
-    label: 'bookings',
+    label: 'Bookings',
     activeIcon: 'calendar',
     inactiveIcon: 'calendar-outline',
   },
@@ -81,9 +82,18 @@ const TabButton: React.FC<TabButtonProps> = React.memo(({ tab, isActive, onPress
     ]).start();
   }, [isActive, scaleAnim, bgOpacityAnim]);
 
+  const handlePress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      // Ignore if haptics fail on unssupported environments like web
+    }
+    onPress();
+  };
+
   return (
     <TouchableOpacity
-      onPress={onPress}
+      onPress={handlePress}
       activeOpacity={0.7}
       style={styles.tabButton}
       accessibilityRole="tab"
@@ -112,7 +122,7 @@ const TabButton: React.FC<TabButtonProps> = React.memo(({ tab, isActive, onPress
         <Ionicons
           name={isActive ? tab.activeIcon : tab.inactiveIcon}
           size={19}
-          color={isActive ? Colors.white : '#64748B'}
+          color={isActive ? Colors.white : Colors.textSecondary}
         />
 
         {/* Optional Notification Badge */}

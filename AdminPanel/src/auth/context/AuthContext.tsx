@@ -12,21 +12,12 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../config/firebase';
 import type { AdminProfile, AdminRole, AdminModule, PermissionAction } from '../types/auth';
 import { ROLE_PERMISSIONS } from '../types/auth';
-
-async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 interface AuthContextType {
   firebaseUser: User | null;
@@ -68,24 +59,9 @@ const AuthContext = createContext<AuthContextType>({
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
-  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem('physio_admin_session');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (adminProfile) {
-      localStorage.setItem('physio_admin_session', JSON.stringify(adminProfile));
-    } else {
-      localStorage.removeItem('physio_admin_session');
-    }
-  }, [adminProfile]);
 
   // Sync Admin profile data from Firestore upon Auth state change with real-time listener
   useEffect(() => {
@@ -130,6 +106,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 };
 
                 setAdminProfile(profile);
+              } else {
+                // Firebase user exists but no admin record — unauthorized
+                await signOut(auth);
+                setFirebaseUser(null);
+                setAdminProfile(null);
+                setAuthError('Unauthorized: Your account does not have administrator privileges.');
               }
               setIsLoading(false);
             },
@@ -143,6 +125,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setIsLoading(false);
         }
       } else {
+        setFirebaseUser(null);
+        setAdminProfile(null);
         setIsLoading(false);
       }
     });
@@ -153,76 +137,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  /**
+   * Login with Firebase email/password only.
+   * No localStorage credential fallback — all auth goes through Firebase.
+   */
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
     setAuthError(null);
-    const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Attempt standard Firebase Auth
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
       setIsLoading(false);
       return true;
     } catch (err: any) {
-      console.warn('Firebase Auth standard login attempt:', err?.code, err?.message);
-
-      // 2. Validate against Provisioned and Updated credentials
-      const inputHash = await hashPassword(password);
-      const tempHash = await hashPassword('TempAdmin#2026!Secured');
-
-      const storedCredsStr = localStorage.getItem('physio_admin_credentials_store');
-      const storedCreds = storedCredsStr ? JSON.parse(storedCredsStr) : null;
-
-      // If administrator has already set custom email & password:
-      if (storedCreds && storedCreds.updated) {
-        if (cleanEmail === storedCreds.email.toLowerCase() && inputHash === storedCreds.passwordHash) {
-          const profile: AdminProfile = {
-            uid: storedCreds.uid || 'admin-primary-001',
-            email: storedCreds.email,
-            fullName: 'Dr. Sarah Smith (Primary Admin)',
-            role: 'superadmin',
-            isActive: true,
-            mustChangePassword: false,
-            department: 'Executive Clinic Operations',
-          };
-          setAdminProfile(profile);
-          setIsLoading(false);
-          return true;
-        }
-
-        if (cleanEmail === 'admin.temp@physiotherapy.com') {
-          setIsLoading(false);
-          const errStr = 'Temporary credentials have expired. Please sign in with your updated administrator email and password.';
-          setAuthError(errStr);
-          throw new Error(errStr);
-        }
-
-        setIsLoading(false);
-        const errStr = 'Invalid email address or password.';
-        setAuthError(errStr);
-        throw new Error(errStr);
-      }
-
-      // Initial login using provisioned temporary credentials:
-      if (cleanEmail === 'admin.temp@physiotherapy.com' && inputHash === tempHash) {
-        const tempProfile: AdminProfile = {
-          uid: 'admin-temp-001',
-          email: 'admin.temp@physiotherapy.com',
-          fullName: 'Dr. Sarah Smith (Primary Admin)',
-          role: 'superadmin',
-          isActive: true,
-          mustChangePassword: true, // Forces initial credential update modal
-          department: 'Executive Clinic Operations',
-        };
-        setAdminProfile(tempProfile);
-        setIsLoading(false);
-        return true;
-      }
-
       setIsLoading(false);
-      const userFriendlyMessage = 'Invalid email address or password.';
-      setAuthError(userFriendlyMessage);
-      throw new Error(userFriendlyMessage);
+      let msg = 'Invalid email address or password.';
+      if (err?.code === 'auth/user-not-found' || err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+        msg = 'Invalid email address or password.';
+      } else if (err?.code === 'auth/too-many-requests') {
+        msg = 'Too many failed attempts. Please try again later or reset your password.';
+      } else if (err?.code === 'auth/user-disabled') {
+        msg = 'This account has been disabled. Contact your system administrator.';
+      }
+      setAuthError(msg);
+      throw new Error(msg);
     }
   };
 
@@ -259,7 +197,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       await signOut(auth).catch(() => {});
-      localStorage.removeItem('physio_admin_session');
       setAdminProfile(null);
       setFirebaseUser(null);
       setAuthError(null);
@@ -315,8 +252,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateAdminPassword = async (newPassword: string): Promise<boolean> => {
-    if (!newPassword || newPassword.length < 6) {
-      throw new Error('Password must be at least 6 characters.');
+    if (!newPassword || newPassword.length < 8) {
+      throw new Error('Password must be at least 8 characters.');
     }
 
     if (auth.currentUser) {
@@ -412,5 +349,3 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 };
 
 export const useAuth = () => useContext(AuthContext);
-
-

@@ -7,7 +7,8 @@ export interface AuthenticatedRequest extends Request {
     phone?: string;
     email?: string;
     name?: string;
-    [key: string]: any;
+    admin?: boolean;
+    role?: string;
   };
 }
 
@@ -43,25 +44,16 @@ export const authenticateFirebaseToken = async (
   try {
     const decodedToken = await adminAuth.verifyIdToken(idToken);
     req.user = {
-      ...decodedToken,
       uid: decodedToken.uid,
-      phone: decodedToken.phone_number || '',
-      email: decodedToken.email || '',
+      phone: decodedToken.phone_number,
+      email: decodedToken.email,
+      name: decodedToken.name,
+      admin: decodedToken.admin as boolean | undefined,
+      role: decodedToken.role as string | undefined,
     };
     next();
   } catch (error: any) {
     console.error('Error verifying Firebase ID Token in user-service:', error.message || error);
-
-    // Development fallback for testing without full service account key setup
-    if (process.env.NODE_ENV !== 'production' && idToken.startsWith('mock-token-')) {
-      const mockUid = idToken.replace('mock-token-', '');
-      req.user = {
-        uid: mockUid,
-        phone: req.body?.phone || '+919999999999',
-      };
-      next();
-      return;
-    }
 
     res.status(401).json({
       success: false,
@@ -103,3 +95,35 @@ export const requireAdminRole = (
   next();
 };
 
+/**
+ * Middleware to verify a patient can only access their own record (or is an admin).
+ * Must be used after authenticateFirebaseToken.
+ * Checks req.params.id against req.user.uid.
+ */
+export const requireOwnerOrAdmin = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void => {
+  if (!req.user) {
+    res.status(401).json({ success: false, error: 'Unauthorized: Authentication required.' });
+    return;
+  }
+
+  const resourceId = req.params.id;
+  const isOwner = req.user.uid === resourceId;
+  const isAdmin =
+    req.user.admin === true ||
+    req.user.role === 'superadmin' ||
+    req.user.role === 'admin';
+
+  if (!isOwner && !isAdmin) {
+    res.status(403).json({
+      success: false,
+      error: 'Forbidden: You do not have permission to access this resource.',
+    });
+    return;
+  }
+
+  next();
+};

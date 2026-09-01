@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,6 +10,7 @@ import {
   Image,
   Dimensions,
   Alert,
+  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,10 @@ import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
 import { Strings } from '@/constants';
 import { BottomNavBar, TabKey } from '@/components';
+import { fetchUserProgressStats, DEFAULT_EMPTY_PROGRESS } from '@/api/recoveryApi';
+import { subscribeToPatientAssignments } from '@/api/programService';
+import { useAuth } from '@/context/AuthContext';
+import { auth } from '@/config/firebase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -35,8 +40,43 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
 }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('recovery');
   const [selectedTimeFilter, setSelectedTimeFilter] = useState<'week' | 'month' | 'three_months'>('week');
+  const [progressStats, setProgressStats] = useState(DEFAULT_EMPTY_PROGRESS);
+  const [totalProgramSessions, setTotalProgramSessions] = useState(0);
+  const [isDataLoading, setIsDataLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const uid = auth.currentUser?.uid || user?.uid;
+    if (!uid) {
+      setIsDataLoading(false);
+      return;
+    }
+
+    fetchUserProgressStats(uid)
+      .then((stats) => {
+        if (isMounted) setProgressStats(stats);
+      })
+      .finally(() => { if (isMounted) setIsDataLoading(false); });
+
+    const unsub = subscribeToPatientAssignments(
+      uid,
+      (assignments) => {
+        if (isMounted) {
+          const total = assignments.reduce((acc, a) => acc + (a.programDetails?.weeks?.reduce((s, w) => s + (w.exercises?.length || 0), 0) || 0), 0);
+          setTotalProgramSessions(total);
+        }
+      },
+      (err) => console.warn('[RecoveryProgressScreen] assignments error:', err)
+    );
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, [user?.uid]);
 
   const pData = Strings.recoveryProgress;
 
@@ -155,8 +195,12 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
             {/* Right Side Circular Gauge */}
             <View style={styles.scoreRingOuter}>
               <View style={styles.scoreRingInner}>
-                <Text style={styles.scoreNumberText}>{pData.scoreValue}</Text>
-                <Text style={styles.scorePercentText}>{pData.scorePercent}</Text>
+                <Text style={styles.scoreNumberText}>
+                {isDataLoading ? '--' : progressStats.completedSessions.toString()}
+              </Text>
+              <Text style={styles.scorePercentText}>
+                {isDataLoading ? '' : `${progressStats.recoveryPercentage}%`}
+              </Text>
               </View>
             </View>
           </View>
@@ -246,7 +290,9 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
               <View style={[styles.metricIconBox, { backgroundColor: '#EFF6FF' }]}>
                 <Ionicons name="barbell" size={20} color="#003D9B" />
               </View>
-              <Text style={styles.metricValueText}>{pData.stats.sessionsCount}</Text>
+              <Text style={styles.metricValueText}>
+                {isDataLoading ? '--' : `${progressStats.completedSessions}/${progressStats.totalSessions || '--'}`}
+              </Text>
               <Text style={styles.metricLabelText}>{pData.stats.sessionsLabel}</Text>
             </View>
 
@@ -255,7 +301,9 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
               <View style={[styles.metricIconBox, { backgroundColor: '#FFF7ED' }]}>
                 <Ionicons name="flame" size={20} color="#EF4444" />
               </View>
-              <Text style={styles.metricValueText}>{pData.stats.streakCount}</Text>
+              <Text style={styles.metricValueText}>
+                {isDataLoading ? '--' : `${progressStats.streakDays} Days`}
+              </Text>
               <Text style={styles.metricLabelText}>{pData.stats.streakLabel}</Text>
             </View>
 
@@ -264,7 +312,9 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
               <View style={[styles.metricIconBox, { backgroundColor: '#F0FDF4' }]}>
                 <Ionicons name="time" size={20} color="#0D9488" />
               </View>
-              <Text style={styles.metricValueText}>{pData.stats.totalTimeCount}</Text>
+              <Text style={styles.metricValueText}>
+                {isDataLoading ? '--' : `${progressStats.totalMinutesSpent} Min`}
+              </Text>
               <Text style={styles.metricLabelText}>{pData.stats.totalTimeLabel}</Text>
             </View>
 
@@ -273,7 +323,9 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
               <View style={[styles.metricIconBox, { backgroundColor: '#FAF5FF' }]}>
                 <Ionicons name="reload" size={20} color="#9333EA" />
               </View>
-              <Text style={styles.metricValueText}>{pData.stats.exercisesCount}</Text>
+              <Text style={styles.metricValueText}>
+                {isDataLoading ? '--' : `${progressStats.weeklyAdherenceRate}%`}
+              </Text>
               <Text style={styles.metricLabelText}>{pData.stats.exercisesLabel}</Text>
             </View>
           </View>
@@ -329,7 +381,7 @@ export const RecoveryProgressScreen: React.FC<RecoveryProgressScreenProps> = ({
 
             {/* Progress Bar Track */}
             <View style={styles.milestoneProgressTrack}>
-              <View style={[styles.milestoneProgressFill, { width: '70%' }]} />
+              <View style={[styles.milestoneProgressFill, { width: `${Math.min(100, progressStats.recoveryPercentage)}%` }]} />
             </View>
 
             {/* Action Button: Continue Program */}

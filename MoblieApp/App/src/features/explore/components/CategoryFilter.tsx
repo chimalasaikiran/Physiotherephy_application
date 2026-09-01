@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -23,6 +24,15 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   selectedCategory,
   onSelectCategory,
 }) => {
+  const handleSelect = (id: string) => {
+    try {
+      Haptics.selectionAsync();
+    } catch {
+      // Fallback
+    }
+    onSelectCategory(id);
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.sectionTitle}>{Strings.explore.sections.categories}</Text>
@@ -36,7 +46,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
           return (
             <TouchableOpacity
               key={item.id}
-              onPress={() => onSelectCategory(item.id)}
+              onPress={() => handleSelect(item.id)}
               activeOpacity={0.8}
               style={[
                 styles.chip,

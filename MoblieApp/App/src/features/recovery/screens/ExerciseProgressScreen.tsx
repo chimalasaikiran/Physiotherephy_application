@@ -93,7 +93,15 @@ export const ExerciseProgressScreen: React.FC = () => {
   useEffect(() => {
     if (isWorkoutComplete) {
       const timer = setTimeout(() => {
-        router.replace('/session-complete');
+        router.replace({
+          pathname: '/session-complete',
+          params: {
+            assignmentId,
+            exercises: `${totalExercises} of ${totalExercises}`,
+            duration: `${Math.round((completedSetsTotal * 3))} Minutes`,
+            recovery: `${sessionPercent}%`,
+          },
+        });
       }, 1500);
       return () => clearTimeout(timer);
     }
@@ -115,7 +123,12 @@ export const ExerciseProgressScreen: React.FC = () => {
     if (isWorkoutComplete) {
       router.replace({
         pathname: '/session-complete',
-        params: { assignmentId },
+        params: {
+          assignmentId,
+          exercises: `${totalExercises} of ${totalExercises}`,
+          duration: `${Math.round((completedSetsTotal * 3))} Minutes`,
+          recovery: `${sessionPercent}%`,
+        },
       });
     } else if (isExerciseComplete) {
       // Move to next exercise, starting at set 1

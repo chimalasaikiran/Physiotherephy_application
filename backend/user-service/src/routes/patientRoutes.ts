@@ -1,25 +1,28 @@
 import { Router } from 'express';
 import { PatientController } from '../controllers/patientController.js';
-import { authenticateFirebaseToken, requireAdminRole } from '../middleware/authMiddleware.js';
+import {
+  authenticateFirebaseToken,
+  requireAdminRole,
+  requireOwnerOrAdmin,
+} from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-// ─── Public / No-Auth Endpoints ───────────────────────────────────────────────
+// ─── Admin-Only Listing Endpoint ─────────────────────────────────────────────
 
 /**
  * GET /api/v1/patients
- * List all patients (merged from patient details + users collections).
- * Public — used by Admin Panel real-time fallback and initial load.
+ * List all patients — Admin Panel only. Requires valid Firebase token + admin role.
  */
-router.get('/', PatientController.getAllPatients);
+router.get('/', authenticateFirebaseToken, requireAdminRole, PatientController.getAllPatients);
 
 // ─── Authenticated Endpoints ──────────────────────────────────────────────────
 
 /**
  * GET /api/v1/patients/:id
- * Get single patient by Firestore doc ID.
+ * Get single patient by UID. Only the patient themselves or an admin may access.
  */
-router.get('/:id', authenticateFirebaseToken, PatientController.getPatientById);
+router.get('/:id', authenticateFirebaseToken, requireOwnerOrAdmin, PatientController.getPatientById);
 
 /**
  * POST /api/v1/patients
@@ -31,9 +34,9 @@ router.post('/', authenticateFirebaseToken, PatientController.createPatient);
 
 /**
  * PUT /api/v1/patients/:id
- * Full or partial update of a patient record.
+ * Full or partial update of a patient record. Owner or admin only.
  */
-router.put('/:id', authenticateFirebaseToken, PatientController.updatePatient);
+router.put('/:id', authenticateFirebaseToken, requireOwnerOrAdmin, PatientController.updatePatient);
 
 /**
  * DELETE /api/v1/patients/:id
@@ -43,15 +46,14 @@ router.delete('/:id', authenticateFirebaseToken, requireAdminRole, PatientContro
 
 /**
  * PUT /api/v1/patients/:id/medical
- * Update only the medicalHistory field of a patient.
- * Called from mobile MedicalInfoScreen on save.
+ * Update only the medicalHistory field of a patient. Owner or admin only.
  */
-router.put('/:id/medical', authenticateFirebaseToken, PatientController.updateMedicalInfo);
+router.put('/:id/medical', authenticateFirebaseToken, requireOwnerOrAdmin, PatientController.updateMedicalInfo);
 
 /**
  * POST /api/v1/patients/:id/notes
  * Append a clinical note. Admin / therapist only.
  */
-router.post('/:id/notes', authenticateFirebaseToken, PatientController.addClinicalNote);
+router.post('/:id/notes', authenticateFirebaseToken, requireAdminRole, PatientController.addClinicalNote);
 
 export default router;

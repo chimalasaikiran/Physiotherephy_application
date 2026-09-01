@@ -5,6 +5,7 @@ import {
   ForcePasswordChangeModal,
 } from '@/auth';
 import { DashboardPage } from '@/dashboard';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 function MainAppContent() {
   const { isAuthenticated, isLoading, authError, logout, clearAuthError } = useAuth();
@@ -52,10 +53,13 @@ function MainAppContent() {
 
 export function App() {
   return (
-    <AuthProvider>
-      <MainAppContent />
-    </AuthProvider>
+    <ErrorBoundary componentName="AdminApp">
+      <AuthProvider>
+        <MainAppContent />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
+
 
 export default App;

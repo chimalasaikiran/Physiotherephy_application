@@ -1,6 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, Pressable, ViewStyle, TextStyle, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -28,9 +29,20 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   testID,
   rightIcon,
 }) => {
+  const handlePress = () => {
+    if (!disabled && !isLoading && onPress) {
+      try {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      } catch {
+        // Fallback for non-supported environments
+      }
+      onPress();
+    }
+  };
+
   return (
     <Pressable
-      onPress={onPress}
+      onPress={handlePress}
       disabled={disabled || isLoading}
       testID={testID}
       accessibilityRole="button"

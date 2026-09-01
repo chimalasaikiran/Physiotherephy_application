@@ -15,6 +15,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -197,7 +198,11 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
     useCallback(() => {
       let isMounted = true;
       const currentUser = auth.currentUser;
-      const userId = user?.uid || currentUser?.uid || 'user_demo_123';
+      const userId = user?.uid || currentUser?.uid;
+      if (!userId) {
+        setRefreshing(false);
+        return;
+      }
 
       // Fetch initial upcoming appointment
       fetchUserAppointmentsViaBackend(userId)
@@ -273,7 +278,8 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     const currentUser = auth.currentUser;
-    const userId = user?.uid || currentUser?.uid || 'user_demo_123';
+    const userId = user?.uid || currentUser?.uid;
+    if (!userId) { setRefreshing(false); return; }
 
     try {
       const [apiBookings, progressData] = await Promise.all([
@@ -299,6 +305,11 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
   }, [user?.uid]);
 
   const toggleExercise = async (id: string) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch {
+      // Fallback
+    }
     if (activeAssignment) {
       try {
         await toggleExerciseComplete(activeAssignment.id, id, activeAssignment);
@@ -776,39 +787,75 @@ export const ExploreScreen: React.FC<ExploreScreenProps> = ({ hideBottomNavBar =
           <View style={styles.sectionContainer}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>{Strings.explore.upcomingActivity.title}</Text>
-              <TouchableOpacity activeOpacity={0.7}>
+              <TouchableOpacity activeOpacity={0.7} onPress={() => router.push('/my-bookings' as any)}>
                 <Text style={styles.viewAllText}>{Strings.explore.upcomingActivity.viewSchedule}</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.upcomingCard}>
-              {Strings.explore.upcomingActivity.items.map((item, index) => (
+              {/* Real appointment row */}
+              {upcomingAppointment && (
                 <TouchableOpacity
-                  key={item.id}
                   activeOpacity={0.8}
-                  style={[
-                    styles.upcomingItemRow,
-                    index < Strings.explore.upcomingActivity.items.length - 1 && styles.upcomingBorderBottom,
-                  ]}
-                  onPress={() => Alert.alert(item.title, `${item.subtitle}\nTime: ${item.time} ${item.day}`)}
+                  style={[styles.upcomingItemRow, (activeAssignment ? styles.upcomingBorderBottom : null)]}
+                  onPress={() => router.push('/my-bookings' as any)}
                 >
                   <View style={styles.upcomingLeftTime}>
-                    <Text style={styles.upcomingTime}>{item.time}</Text>
-                    <Text style={styles.upcomingDay}>{item.day}</Text>
+                    <Text style={styles.upcomingTime}>{upcomingAppointment.timeSlot || '--'}</Text>
+                    <Text style={styles.upcomingDay}>{upcomingAppointment.fullDate || upcomingAppointment.dateStr || 'Upcoming'}</Text>
                   </View>
-
                   <View style={styles.upcomingIconBox}>
-                    <Ionicons name={item.icon as any} size={18} color="#003D9B" />
+                    <Ionicons name="calendar" size={18} color="#003D9B" />
                   </View>
-
                   <View style={styles.upcomingTextGroup}>
-                    <Text style={styles.upcomingItemTitle}>{item.title}</Text>
-                    <Text style={styles.upcomingItemSub}>{item.subtitle}</Text>
+                    <Text style={styles.upcomingItemTitle}>
+                      {upcomingAppointment.doctorName || upcomingAppointment.therapistName || 'Physiotherapy Appointment'}
+                    </Text>
+                    <Text style={styles.upcomingItemSub}>
+                      {upcomingAppointment.doctorSpecialty || upcomingAppointment.serviceTitle || 'Consultation'}
+                    </Text>
                   </View>
-
                   <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
                 </TouchableOpacity>
-              ))}
+              )}
+
+              {/* Real exercise session row */}
+              {activeAssignment && (
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.upcomingItemRow}
+                  onPress={() => router.push('/today-session' as any)}
+                >
+                  <View style={styles.upcomingLeftTime}>
+                    <Text style={styles.upcomingTime}>Today</Text>
+                    <Text style={styles.upcomingDay}>
+                      {`${baseExercises.length} Ex.`}
+                    </Text>
+                  </View>
+                  <View style={styles.upcomingIconBox}>
+                    <Ionicons name="barbell" size={18} color="#003D9B" />
+                  </View>
+                  <View style={styles.upcomingTextGroup}>
+                    <Text style={styles.upcomingItemTitle}>
+                      {activeAssignment.programDetails?.name || 'Recovery Exercises'}
+                    </Text>
+                    <Text style={styles.upcomingItemSub}>
+                      {`Week ${activeAssignment.currentWeek || 1} • ${remainingCount} remaining`}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+
+              {/* Empty state */}
+              {!upcomingAppointment && !activeAssignment && (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Ionicons name="calendar-outline" size={28} color="#CBD5E1" />
+                  <Text style={{ marginTop: 8, fontSize: 14, color: '#94A3B8', textAlign: 'center' }}>
+                    No upcoming activities.{'\n'}Book an appointment or start a program.
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 

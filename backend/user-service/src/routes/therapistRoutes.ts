@@ -4,19 +4,19 @@ import { authenticateFirebaseToken, requireAdminRole } from '../middleware/authM
 
 const router = Router();
 
-// ─── Public Endpoints ──────────────────────────────────────────────────────────
+// ─── Authenticated Listing Endpoints ──────────────────────────────────────────
 
 /**
  * GET /api/v1/therapists
- * List all therapists. Public — used by Admin Panel and Mobile App.
+ * List all therapists. Requires valid Firebase token (mobile + admin).
  */
-router.get('/', TherapistController.getAllTherapists);
+router.get('/', authenticateFirebaseToken, TherapistController.getAllTherapists);
 
 /**
  * GET /api/v1/therapists/:id
- * Get single therapist by Firestore doc ID.
+ * Get single therapist by Firestore doc ID. Requires valid Firebase token.
  */
-router.get('/:id', TherapistController.getTherapistById);
+router.get('/:id', authenticateFirebaseToken, TherapistController.getTherapistById);
 
 // ─── Admin-Authenticated Endpoints ────────────────────────────────────────────
 
@@ -28,9 +28,9 @@ router.post('/', authenticateFirebaseToken, requireAdminRole, TherapistControlle
 
 /**
  * PUT /api/v1/therapists/:id
- * Update therapist record. Auth required.
+ * Update therapist record. Admin auth required.
  */
-router.put('/:id', authenticateFirebaseToken, TherapistController.updateTherapist);
+router.put('/:id', authenticateFirebaseToken, requireAdminRole, TherapistController.updateTherapist);
 
 /**
  * DELETE /api/v1/therapists/:id
@@ -40,15 +40,15 @@ router.delete('/:id', authenticateFirebaseToken, requireAdminRole, TherapistCont
 
 /**
  * POST /api/v1/therapists/:id/assign
- * Assign a patient to this therapist. Body: { patientId: string }
+ * Assign a patient to this therapist. Admin only.
  */
-router.post('/:id/assign', authenticateFirebaseToken, TherapistController.assignPatient);
+router.post('/:id/assign', authenticateFirebaseToken, requireAdminRole, TherapistController.assignPatient);
 
 /**
  * DELETE /api/v1/therapists/:id/assign/:patientId
- * Remove patient assignment from therapist.
+ * Remove patient assignment from therapist. Admin only.
  */
-router.delete('/:id/assign/:patientId', authenticateFirebaseToken, TherapistController.unassignPatient);
+router.delete('/:id/assign/:patientId', authenticateFirebaseToken, requireAdminRole, TherapistController.unassignPatient);
 
 /**
  * POST /api/v1/therapists/seed

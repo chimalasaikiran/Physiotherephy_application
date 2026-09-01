@@ -8,6 +8,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants';
 import { Typography } from '@/constants';
 import { Spacing } from '@/constants';
@@ -31,6 +32,15 @@ export const BookingCard: React.FC<BookingCardProps> = ({
   const statusCfg = BookingStatusConfig[booking.status];
   const avatarSource = DoctorAvatarMap[booking.avatarImageName] || DoctorAvatarMap.doctor_ananya;
 
+  const handlePress = () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      // Fallback
+    }
+    onPress(booking);
+  };
+
   const getLocationIcon = (): keyof typeof Ionicons.glyphMap => {
     switch (booking.placeType) {
       case 'home':
@@ -45,7 +55,7 @@ export const BookingCard: React.FC<BookingCardProps> = ({
   return (
     <TouchableOpacity
       activeOpacity={0.85}
-      onPress={() => onPress(booking)}
+      onPress={handlePress}
       style={[styles.card, style]}
       accessibilityRole="button"
       accessibilityLabel={`Booking with ${booking.doctorName} for ${booking.serviceTitle}`}
