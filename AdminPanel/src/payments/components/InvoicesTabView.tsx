@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Search, Filter, Download, Plus, Eye, CheckCircle, Trash2 } from 'lucide-react';
 import type { InvoiceDocument } from '../types';
 import { markInvoiceAsPaid, deleteInvoice } from '@/services/paymentService';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 interface InvoicesTabViewProps {
   onCreateInvoice: () => void;
@@ -51,6 +53,97 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
     }
   };
 
+  const handleExportAll = () => {
+    const rows = [
+      ['Invoice #', 'Patient Name', 'Therapist', 'Issue Date', 'Due Date', 'Amount (INR)', 'Status']
+    ];
+    invoices.forEach((inv) => {
+      rows.push([
+        inv.invoiceNumber,
+        inv.patientName,
+        inv.therapistName || 'Unassigned',
+        inv.issueDate,
+        inv.dueDate || '--',
+        String(inv.totalAmount || inv.amount),
+        inv.status
+      ]);
+    });
+    
+    const csvContent = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `All_Invoices_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadPdf = (inv: InvoiceDocument) => {
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(20);
+    doc.text('INVOICE', 14, 22);
+    
+    doc.setFontSize(10);
+    doc.text(`Invoice Number: ${inv.invoiceNumber}`, 14, 30);
+    doc.text(`Issue Date: ${inv.issueDate}`, 14, 35);
+    if (inv.dueDate) doc.text(`Due Date: ${inv.dueDate}`, 14, 40);
+    
+    // Patient Info
+    doc.setFontSize(12);
+    doc.text('Bill To:', 14, 50);
+    doc.setFontSize(10);
+    doc.text(`Name: ${inv.patientName}`, 14, 55);
+    if (inv.patientEmail) doc.text(`Email: ${inv.patientEmail}`, 14, 60);
+    
+    // Therapist
+    doc.text(`Therapist: ${inv.therapistName || 'Unassigned'}`, 14, 70);
+    
+    // Amount & Status
+    doc.text(`Status: ${inv.status}`, 14, 80);
+    if (inv.paymentMethod) doc.text(`Payment Method: ${inv.paymentMethod}`, 14, 85);
+    
+    // Line Items Table
+    const tableBody = [];
+    if (inv.lineItems && inv.lineItems.length > 0) {
+      inv.lineItems.forEach(item => {
+        tableBody.push([
+          item.description || 'Session',
+          String(item.quantity || 1),
+          (item.unitPrice || 0).toLocaleString('en-IN'),
+          (item.totalPrice || 0).toLocaleString('en-IN')
+        ]);
+      });
+    } else {
+      tableBody.push([
+        inv.description || 'Physiotherapy Session',
+        '1',
+        inv.amount.toLocaleString('en-IN'),
+        inv.amount.toLocaleString('en-IN')
+      ]);
+    }
+    
+    const finalAmount = inv.totalAmount || inv.amount;
+
+    autoTable(doc, {
+      startY: 95,
+      head: [['Description', 'Qty', 'Unit Price (INR)', 'Total (INR)']],
+      body: tableBody,
+      foot: [
+        ['', '', 'Subtotal', inv.amount.toLocaleString('en-IN')],
+        ['', '', 'Tax', (inv.taxAmount || 0).toLocaleString('en-IN')],
+        ['', '', 'Discount', (inv.discountAmount || 0).toLocaleString('en-IN')],
+        ['', '', 'Total', finalAmount.toLocaleString('en-IN')]
+      ],
+    });
+    
+    doc.save(`Invoice_${inv.invoiceNumber}.pdf`);
+  };
+
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-xs space-y-6">
       {/* Header and Controls */}
@@ -65,6 +158,13 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-3 w-full sm:w-auto">
+          <button
+            onClick={handleExportAll}
+            className="flex-1 sm:flex-none inline-flex items-center justify-center px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
+          >
+            <Download className="w-4 h-4 mr-1.5" />
+            Export All
+          </button>
           <button
             onClick={onCreateInvoice}
             className="flex-1 sm:flex-none inline-flex items-center justify-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-xs"
@@ -156,13 +256,20 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
                       {inv.status}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 text-right space-x-1.5">
+                  <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                    <button
+                      onClick={() => handleDownloadPdf(inv)}
+                      title="Download PDF"
+                      className="p-1.5 hover:bg-blue-50 rounded-lg text-slate-400 hover:text-blue-600 transition-colors cursor-pointer inline-flex items-center"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
                     {inv.status !== 'Paid' && (
                       <button
                         onClick={() => handleMarkPaid(inv.id)}
                         disabled={actionLoadingId === inv.id}
                         title="Mark as Paid"
-                        className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                        className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer inline-flex items-center"
                       >
                         <CheckCircle className="w-4 h-4" />
                       </button>
@@ -171,7 +278,7 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
                       onClick={() => handleDelete(inv.id)}
                       disabled={actionLoadingId === inv.id}
                       title="Delete Invoice"
-                      className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                      className="p-1.5 hover:bg-rose-50 rounded-lg text-slate-400 hover:text-rose-600 transition-colors cursor-pointer inline-flex items-center"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
