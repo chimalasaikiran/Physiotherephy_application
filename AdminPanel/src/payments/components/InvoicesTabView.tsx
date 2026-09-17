@@ -115,7 +115,7 @@ export const InvoicesTabView: React.FC<InvoicesTabViewProps> = ({
           item.description || 'Session',
           String(item.quantity || 1),
           (item.unitPrice || 0).toLocaleString('en-IN'),
-          (item.totalPrice || 0).toLocaleString('en-IN')
+          (item.total || 0).toLocaleString('en-IN')
         ]);
       });
     } else {
