@@ -28,7 +28,7 @@ import {
   MobileProgramAssignment,
   MobileProgramWeek,
   MobileExercise,
-  getDefaultWeeksForProgram,
+  subscribeToProgramDetailsRealtime,
 } from '@/api/programService';
 import { useAuth } from '@/context/AuthContext';
 
@@ -41,12 +41,13 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
 
   const [activeNavTab, setActiveNavTab] = useState<TabKey>('recovery');
   const [assignment, setAssignment] = useState<MobileProgramAssignment | null>(null);
+  const [realtimeProgram, setRealtimeProgram] = useState<MobileProgram | null>(null);
   const [assignmentLoading, setAssignmentLoading] = useState(true);
   const [expandedWeekNum, setExpandedWeekNum] = useState<number>(1);
 
   React.useEffect(() => {
     let isMounted = true;
-    let unsub = () => {};
+    let unsub = () => { };
 
     if (assignmentId) {
       unsub = subscribeToAssignment(
@@ -83,7 +84,26 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
     };
   }, [assignmentId, user?.uid]);
 
-  const programDetails = assignment?.programDetails;
+  React.useEffect(() => {
+    let isMounted = true;
+    let unsub = () => {};
+    const pid = assignment?.programId;
+    if (pid) {
+      unsub = subscribeToProgramDetailsRealtime(pid, (prog) => {
+        if (isMounted) {
+          setRealtimeProgram(prog);
+        }
+      }, (err) => {
+        console.warn('[RecoveryProgramDetails] program realtime sub error:', err);
+      });
+    }
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, [assignment?.programId]);
+
+  const programDetails = realtimeProgram || assignment?.programDetails;
   const programTitle = assignment?.programTitle || programDetails?.title || 'Assigned Recovery Program';
   const doctorName = programDetails?.doctorName || 'Dr. Ananya Sharma';
   const description = programDetails?.description || `Personalized rehabilitation protocol assigned for ${assignment?.patientCondition || 'recovery'}.`;
@@ -94,9 +114,7 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
   const totalSessions = assignment?.totalSessions || 16;
   const completedExercises = assignment?.completedExercises || [];
 
-  const weeksList: MobileProgramWeek[] = programDetails?.weeks && programDetails.weeks.length > 0
-    ? programDetails.weeks
-    : getDefaultWeeksForProgram(programTitle, `${totalWeeks} Weeks`);
+  const weeksList: MobileProgramWeek[] = programDetails?.weeks || [];
 
   const data = Strings.recoveryProgramDetails;
 
@@ -135,313 +153,323 @@ export const RecoveryProgramDetailsScreen: React.FC = () => {
 
       {/* HEADER BAR */}
       <View style={[styles.header, { paddingTop: insets.top + 4, height: 56 + insets.top }]}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.back()}
-            style={styles.headerIconBtn}
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="arrow-back" size={22} color="#051A3E" />
-          </TouchableOpacity>
-
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {programTitle}
-          </Text>
-
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={handleShare}
-            style={styles.headerIconBtn}
-            accessibilityLabel="Share program"
-          >
-            <Ionicons name="share-social-outline" size={22} color="#051A3E" />
-          </TouchableOpacity>
-        </View>
-
-        {/* MAIN SCROLL CONTENT */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: 110 + Math.max(insets.bottom, 12) },
-          ]}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => router.back()}
+          style={styles.headerIconBtn}
+          accessibilityLabel="Go back"
         >
-          {assignmentLoading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator size="large" color="#003D9B" />
-              <Text style={styles.loadingText}>Loading configured program details...</Text>
+          <Ionicons name="arrow-back" size={22} color="#051A3E" />
+        </TouchableOpacity>
+
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {programTitle}
+        </Text>
+
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={handleShare}
+          style={styles.headerIconBtn}
+          accessibilityLabel="Share program"
+        >
+          <Ionicons name="share-social-outline" size={22} color="#051A3E" />
+        </TouchableOpacity>
+      </View>
+
+      {/* MAIN SCROLL CONTENT */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 110 + Math.max(insets.bottom, 12) },
+        ]}
+      >
+        {assignmentLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#003D9B" />
+            <Text style={styles.loadingText}>Loading configured program details...</Text>
+          </View>
+        ) : (
+          <>
+            {/* CARD 1: ASSIGNED PROGRAM HERO CARD */}
+            <View style={styles.cardContainer}>
+              {/* Status Badge */}
+              <View style={styles.heroStatusRow}>
+                <View style={styles.statusBadgePill}>
+                  <Ionicons name="checkmark-circle" size={14} color="#003D9B" style={{ marginRight: 4 }} />
+                  <Text style={styles.statusBadgeText}>
+                    {(assignment?.status || 'active').toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.difficultyBadge}>
+                  {programDetails?.difficulty || 'Beginner'} Protocol
+                </Text>
+              </View>
+
+              {/* Program Title & Doctor */}
+              <Text style={styles.programTitle}>{programTitle}</Text>
+              <Text style={styles.programDescriptionText}>{description}</Text>
+
+              <View style={styles.doctorRow}>
+                <Image
+                  source={require('../../../assets/images/doctor_ananya.png')}
+                  style={styles.doctorAvatarImage}
+                  resizeMode="cover"
+                />
+                <View>
+                  <Text style={styles.doctorName}>{doctorName}</Text>
+                  <Text style={styles.doctorSubtext}>Prescribing Physiotherapist</Text>
+                </View>
+              </View>
+
+              {/* Progress Header Row */}
+              <View style={styles.sessionHeaderRow}>
+                <Text style={styles.weekProgressText}>
+                  Week {currentWeek} of {totalWeeks}
+                </Text>
+                <Text style={styles.sessionsProgressText}>
+                  {progressPercent}% Complete ({completedSessions}/{totalSessions} Sessions)
+                </Text>
+              </View>
+
+              {/* Progress Track */}
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${Math.max(progressPercent, 2)}%` },
+                  ]}
+                />
+              </View>
             </View>
-          ) : (
-            <>
-              {/* CARD 1: ASSIGNED PROGRAM HERO CARD */}
-              <View style={styles.cardContainer}>
-                {/* Status Badge */}
-                <View style={styles.heroStatusRow}>
-                  <View style={styles.statusBadgePill}>
-                    <Ionicons name="checkmark-circle" size={14} color="#003D9B" style={{ marginRight: 4 }} />
-                    <Text style={styles.statusBadgeText}>
-                      {(assignment?.status || 'active').toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={styles.difficultyBadge}>
-                    {programDetails?.difficulty || 'Beginner'} Protocol
-                  </Text>
-                </View>
 
-                {/* Program Title & Doctor */}
-                <Text style={styles.programTitle}>{programTitle}</Text>
-                <Text style={styles.programDescriptionText}>{description}</Text>
-
-                <View style={styles.doctorRow}>
-                  <Image
-                    source={require('../../../assets/images/doctor_ananya.png')}
-                    style={styles.doctorAvatarImage}
-                    resizeMode="cover"
-                  />
-                  <View>
-                    <Text style={styles.doctorName}>{doctorName}</Text>
-                    <Text style={styles.doctorSubtext}>Prescribing Physiotherapist</Text>
-                  </View>
+            {/* CARD 2: PROGRAM OVERVIEW & GOALS */}
+            <View style={styles.cardContainer}>
+              <View style={styles.overviewHeaderRow}>
+                <View style={styles.infoIconCircle}>
+                  <Ionicons name="information-outline" size={20} color="#003D9B" />
                 </View>
-
-                {/* Progress Header Row */}
-                <View style={styles.sessionHeaderRow}>
-                  <Text style={styles.weekProgressText}>
-                    Week {currentWeek} of {totalWeeks}
-                  </Text>
-                  <Text style={styles.sessionsProgressText}>
-                    {progressPercent}% Complete ({completedSessions}/{totalSessions} Sessions)
-                  </Text>
-                </View>
-
-                {/* Progress Track */}
-                <View style={styles.progressTrack}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${Math.max(progressPercent, 2)}%` },
-                    ]}
-                  />
-                </View>
+                <Text style={styles.overviewTitle}>Program Overview</Text>
               </View>
 
-              {/* CARD 2: PROGRAM OVERVIEW & GOALS */}
-              <View style={styles.cardContainer}>
-                <View style={styles.overviewHeaderRow}>
-                  <View style={styles.infoIconCircle}>
-                    <Ionicons name="information-outline" size={20} color="#003D9B" />
-                  </View>
-                  <Text style={styles.overviewTitle}>Program Overview</Text>
+              <Text style={styles.overviewGoal}>
+                {programDetails?.targetCondition ? `Target Condition: ${programDetails.targetCondition}. ` : ''}
+                Designed to restore range of motion, build core stability, and enable safe return to daily activities.
+              </Text>
+
+              {/* 2x2 Details Grid */}
+              <View style={styles.gridContainer}>
+                <View style={styles.gridBox}>
+                  <Text style={styles.gridLabel}>Duration</Text>
+                  <Text style={styles.gridValue}>{programDetails?.duration || `${totalWeeks} Weeks`}</Text>
                 </View>
-
-                <Text style={styles.overviewGoal}>
-                  {programDetails?.targetCondition ? `Target Condition: ${programDetails.targetCondition}. ` : ''}
-                  Designed to restore range of motion, build core stability, and enable safe return to daily activities.
-                </Text>
-
-                {/* 2x2 Details Grid */}
-                <View style={styles.gridContainer}>
-                  <View style={styles.gridBox}>
-                    <Text style={styles.gridLabel}>Duration</Text>
-                    <Text style={styles.gridValue}>{programDetails?.duration || `${totalWeeks} Weeks`}</Text>
-                  </View>
-                  <View style={styles.gridBox}>
-                    <Text style={styles.gridLabel}>Difficulty</Text>
-                    <Text style={[styles.gridValue, { color: '#0D9488' }]}>
-                      {programDetails?.difficulty || 'Beginner'}
-                    </Text>
-                  </View>
-                  <View style={styles.gridBox}>
-                    <Text style={styles.gridLabel}>Target Area</Text>
-                    <Text style={styles.gridValue}>{programDetails?.bodyAreaTag || 'General Rehab'}</Text>
-                  </View>
-                  <View style={styles.gridBox}>
-                    <Text style={styles.gridLabel}>Total Exercises</Text>
-                    <Text style={styles.gridValue}>
-                      {weeksList.reduce((acc, w) => acc + (w.exercises?.length || 0), 0)} Prescribed
-                    </Text>
-                  </View>
+                <View style={styles.gridBox}>
+                  <Text style={styles.gridLabel}>Difficulty</Text>
+                  <Text style={[styles.gridValue, { color: '#0D9488' }]}>
+                    {programDetails?.difficulty || 'Beginner'}
+                  </Text>
+                </View>
+                <View style={styles.gridBox}>
+                  <Text style={styles.gridLabel}>Target Area</Text>
+                  <Text style={styles.gridValue}>{programDetails?.bodyAreaTag || 'General Rehab'}</Text>
+                </View>
+                <View style={styles.gridBox}>
+                  <Text style={styles.gridLabel}>Total Exercises</Text>
+                  <Text style={styles.gridValue}>
+                    {weeksList.reduce((acc, w) => acc + (w.exercises?.length || 0), 0)} Prescribed
+                  </Text>
                 </View>
               </View>
+            </View>
 
-              {/* CARD 3: CONFIGURED WEEKS & EXERCISES */}
-              <View style={styles.weeksSectionContainer}>
-                <Text style={styles.sectionHeaderTitle}>Program Weeks & Prescribed Exercises</Text>
-                <Text style={styles.sectionSubtext}>
-                  Configured by {doctorName} in the Admin Panel
-                </Text>
+            {/* CARD 3: CONFIGURED WEEKS & EXERCISES */}
+            <View style={styles.weeksSectionContainer}>
+              <Text style={styles.sectionHeaderTitle}>Program Weeks & Prescribed Exercises</Text>
+              <Text style={styles.sectionSubtext}>
+                Configured by {doctorName} in the Admin Panel
+              </Text>
 
+              {weeksList.length === 0 ? (
+                <View style={styles.emptyStateBox}>
+                  <Ionicons name="calendar-outline" size={40} color="#94A3B8" />
+                  <Text style={styles.emptyStateTitle}>No weeks available yet</Text>
+                  <Text style={styles.emptyStateText}>
+                    Waiting for clinical configuration. Your prescribed exercises will appear here in real-time once added by your doctor.
+                  </Text>
+                </View>
+              ) : (
                 <View style={styles.weeksList}>
                   {weeksList.map((week) => {
-                    const isCurrentWeek = week.weekNumber === currentWeek;
-                    const isExpanded = expandedWeekNum === week.weekNumber;
+                  const isCurrentWeek = week.weekNumber === currentWeek;
+                  const isExpanded = expandedWeekNum === week.weekNumber;
 
-                    return (
-                      <View
-                        key={week.weekNumber}
-                        style={[
-                          styles.weekCard,
-                          isCurrentWeek && styles.activeWeekCardBorder,
-                        ]}
+                  return (
+                    <View
+                      key={week.id || `week-${week.weekNumber}-${Math.random()}`}
+                      style={[
+                        styles.weekCard,
+                        isCurrentWeek && styles.activeWeekCardBorder,
+                      ]}
+                    >
+                      {/* Week Header Accordion */}
+                      <TouchableOpacity
+                        activeOpacity={0.88}
+                        onPress={() => toggleWeekExpand(week.weekNumber)}
+                        style={styles.weekCardHeader}
                       >
-                        {/* Week Header Accordion */}
-                        <TouchableOpacity
-                          activeOpacity={0.88}
-                          onPress={() => toggleWeekExpand(week.weekNumber)}
-                          style={styles.weekCardHeader}
-                        >
-                          <View style={styles.weekBadgeAndTitle}>
-                            <View
+                        <View style={styles.weekBadgeAndTitle}>
+                          <View
+                            style={[
+                              styles.weekNumberCircle,
+                              isCurrentWeek && styles.activeWeekNumberCircle,
+                            ]}
+                          >
+                            <Text
                               style={[
-                                styles.weekNumberCircle,
-                                isCurrentWeek && styles.activeWeekNumberCircle,
+                                styles.weekNumberText,
+                                isCurrentWeek && styles.activeWeekNumberText,
                               ]}
                             >
-                              <Text
-                                style={[
-                                  styles.weekNumberText,
-                                  isCurrentWeek && styles.activeWeekNumberText,
-                                ]}
-                              >
-                                {week.weekNumber}
-                              </Text>
-                            </View>
-
-                            <View style={styles.weekTitleGroup}>
-                              <View style={styles.weekTitleRow}>
-                                <Text style={styles.weekTitle}>Week {week.weekNumber}: {week.title}</Text>
-                                {isCurrentWeek && (
-                                  <View style={styles.currentWeekTag}>
-                                    <Text style={styles.currentWeekTagText}>CURRENT</Text>
-                                  </View>
-                                )}
-                              </View>
-                              <Text style={styles.weekFocusText}>Focus: {week.clinicalFocus || 'Rehabilitation'}</Text>
-                            </View>
+                              {week.weekNumber}
+                            </Text>
                           </View>
 
-                          <Ionicons
-                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                            size={20}
-                            color="#64748B"
-                          />
-                        </TouchableOpacity>
+                          <View style={styles.weekTitleGroup}>
+                            <View style={styles.weekTitleRow}>
+                              <Text style={styles.weekTitle}>Week {week.weekNumber}: {week.title}</Text>
+                              {isCurrentWeek && (
+                                <View style={styles.currentWeekTag}>
+                                  <Text style={styles.currentWeekTagText}>CURRENT</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={styles.weekFocusText}>Focus: {week.clinicalFocus || 'Rehabilitation'}</Text>
+                          </View>
+                        </View>
 
-                        {/* Week Exercises (Expanded) */}
-                        {isExpanded && (
-                          <View style={styles.weekExpandedBody}>
-                            {week.description && (
-                              <Text style={styles.weekDescriptionText}>{week.description}</Text>
-                            )}
+                        <Ionicons
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={20}
+                          color="#64748B"
+                        />
+                      </TouchableOpacity>
 
-                            <Text style={styles.exercisesSubtitle}>
-                              PRESCRIBED EXERCISES ({week.exercises?.length || 0})
-                            </Text>
+                      {/* Week Exercises (Expanded) */}
+                      {isExpanded && (
+                        <View style={styles.weekExpandedBody}>
+                          {week.description && (
+                            <Text style={styles.weekDescriptionText}>{week.description}</Text>
+                          )}
 
-                            <View style={styles.exercisesStack}>
-                              {week.exercises?.map((ex, exIdx) => {
-                                const isDone = completedExercises.includes(ex.id) || completedExercises.includes(ex.name);
+                          <Text style={styles.exercisesSubtitle}>
+                            PRESCRIBED EXERCISES ({week.exercises?.length || 0})
+                          </Text>
 
-                                return (
-                                  <View key={ex.id || exIdx} style={styles.exerciseItemCard}>
-                                    {/* Thumbnail Image */}
-                                    <Image
-                                      source={
-                                        ex.image
-                                          ? { uri: ex.image }
-                                          : require('../../../assets/images/exercise_pelvic_tilt.png')
-                                      }
-                                      style={styles.exerciseImage}
-                                      resizeMode="cover"
-                                    />
+                          <View style={styles.exercisesStack}>
+                            {week.exercises?.map((ex, exIdx) => {
+                              const isDone = completedExercises.includes(ex.id) || completedExercises.includes(ex.name);
 
-                                    {/* Info Content */}
-                                    <View style={styles.exerciseInfoContent}>
-                                      <View style={styles.exerciseHeaderLine}>
-                                        <Text style={styles.exerciseNameText}>{ex.name}</Text>
-                                        {isDone && (
-                                          <View style={styles.completedBadge}>
-                                            <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
-                                            <Text style={styles.completedBadgeText}>DONE</Text>
-                                          </View>
-                                        )}
-                                      </View>
+                              return (
+                                <View key={ex.id || exIdx} style={styles.exerciseItemCard}>
+                                  {/* Thumbnail Image */}
+                                  <Image
+                                    source={
+                                      ex.image
+                                        ? { uri: ex.image }
+                                        : require('../../../assets/images/exercise_pelvic_tilt.png')
+                                    }
+                                    style={styles.exerciseImage}
+                                    resizeMode="cover"
+                                  />
 
-                                      {/* Sets, Reps, Rest */}
-                                      <View style={styles.dosageRow}>
-                                        <Text style={styles.dosageTag}>
-                                          {ex.sets ? `${ex.sets} Sets` : ''} {ex.reps ? `× ${ex.reps}` : ''} {ex.duration ? `• ${ex.duration}` : ''}
-                                        </Text>
-                                        {ex.restTime && (
-                                          <Text style={styles.restTag}>Rest: {ex.restTime}</Text>
-                                        )}
-                                      </View>
-
-                                      {/* Instructions */}
-                                      {ex.instructions && (
-                                        <Text style={styles.instructionsText} numberOfLines={2}>
-                                          {ex.instructions}
-                                        </Text>
+                                  {/* Info Content */}
+                                  <View style={styles.exerciseInfoContent}>
+                                    <View style={styles.exerciseHeaderLine}>
+                                      <Text style={styles.exerciseNameText}>{ex.name}</Text>
+                                      {isDone && (
+                                        <View style={styles.completedBadge}>
+                                          <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
+                                          <Text style={styles.completedBadgeText}>DONE</Text>
+                                        </View>
                                       )}
                                     </View>
+
+                                    {/* Sets, Reps, Rest */}
+                                    <View style={styles.dosageRow}>
+                                      <Text style={styles.dosageTag}>
+                                        {ex.sets ? `${ex.sets} Sets` : ''} {ex.reps ? `× ${ex.reps}` : ''} {ex.duration ? `• ${ex.duration}` : ''}
+                                      </Text>
+                                      {ex.restTime && (
+                                        <Text style={styles.restTag}>Rest: {ex.restTime}</Text>
+                                      )}
+                                    </View>
+
+                                    {/* Instructions */}
+                                    {ex.instructions && (
+                                      <Text style={styles.instructionsText} numberOfLines={2}>
+                                        {ex.instructions}
+                                      </Text>
+                                    )}
                                   </View>
-                                );
-                              })}
-                            </View>
-
-                            {/* Start Session CTA for Week */}
-                            {isCurrentWeek && (
-                              <TouchableOpacity
-                                activeOpacity={0.88}
-                                style={styles.startWeekSessionBtn}
-                                onPress={() =>
-                                  router.push({
-                                    pathname: '/active-session' as any,
-                                    params: {
-                                      exerciseIndex: '0',
-                                      assignmentId: assignment?.id,
-                                    },
-                                  })
-                                }
-                              >
-                                <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                                <Text style={styles.startWeekSessionBtnText}>Start Week {week.weekNumber} Session</Text>
-                              </TouchableOpacity>
-                            )}
+                                </View>
+                              );
+                            })}
                           </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
+
+                          {/* Start Session CTA for Week */}
+                          {isCurrentWeek && (
+                            <TouchableOpacity
+                              activeOpacity={0.88}
+                              style={styles.startWeekSessionBtn}
+                              onPress={() =>
+                                router.push({
+                                  pathname: '/active-session' as any,
+                                  params: {
+                                    exerciseIndex: '0',
+                                    assignmentId: assignment?.id,
+                                  },
+                                })
+                              }
+                            >
+                              <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
+                              <Text style={styles.startWeekSessionBtnText}>Start Week {week.weekNumber} Session</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+              )}
+            </View>
+
+            {/* CARD 4: CLINICAL NOTES FROM DOCTOR */}
+            <View style={styles.doctorNoteCard}>
+              <View style={styles.noteHeaderRow}>
+                <Image
+                  source={require('../../../assets/images/doctor_ananya.png')}
+                  style={styles.noteDoctorAvatar}
+                  resizeMode="cover"
+                />
+                <Text style={styles.noteTitle}>Note from {doctorName}</Text>
               </View>
 
-              {/* CARD 4: CLINICAL NOTES FROM DOCTOR */}
-              <View style={styles.doctorNoteCard}>
-                <View style={styles.noteHeaderRow}>
-                  <Image
-                    source={require('../../../assets/images/doctor_ananya.png')}
-                    style={styles.noteDoctorAvatar}
-                    resizeMode="cover"
-                  />
-                  <Text style={styles.noteTitle}>Note from {doctorName}</Text>
-                </View>
+              <Text style={styles.noteQuote}>
+                &ldquo;Consistency and steady form are key to full recovery. If you experience discomfort sharp score &gt; 4/10 during any drill, pause and rest immediately.&rdquo;
+              </Text>
 
-                <Text style={styles.noteQuote}>
-                  &ldquo;Consistency and steady form are key to full recovery. If you experience discomfort sharp score &gt; 4/10 during any drill, pause and rest immediately.&rdquo;
-                </Text>
+              <Text style={styles.noteFooter}>Configured for Patient Care Plan</Text>
+            </View>
+          </>
+        )}
+      </ScrollView>
 
-                <Text style={styles.noteFooter}>Configured for Patient Care Plan</Text>
-              </View>
-            </>
-          )}
-        </ScrollView>
-
-        {/* BOTTOM NAV BAR */}
-        <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />
-      </View>
-    );
-  };
+      {/* BOTTOM NAV BAR */}
+      <BottomNavBar activeTab={activeNavTab} onTabPress={handleNavTabPress} />
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -485,6 +513,31 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.lg,
+  },
+
+  /* EMPTY STATE */
+  emptyStateBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    marginTop: 10,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: Typography.fontWeight.bold,
+    color: '#475569',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 22,
   },
 
   /* CARD GENERAL */

@@ -167,7 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           type: 'recaptcha',
           verify: async () => '',
           render: async () => 0,
-          _reset: () => {},
+          _reset: () => { },
         };
       }
 

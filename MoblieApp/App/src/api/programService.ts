@@ -33,6 +33,7 @@ export interface MobileExercise {
 }
 
 export interface MobileProgramWeek {
+  id: string;
   weekNumber: number;
   title: string;
   description?: string;
@@ -102,255 +103,13 @@ const PROGRAMS_COLLECTION = 'programs';
 const ASSIGNMENTS_COLLECTION = 'programAssignments';
 
 // ─────────────────────────────────────────
-// DEFAULT WEEKS GENERATOR
-// ─────────────────────────────────────────
-
-export const getDefaultWeeksForProgram = (title: string, durationStr: string): MobileProgramWeek[] => {
-  const isKnee = title.toLowerCase().includes('acl') || title.toLowerCase().includes('knee');
-  const isShoulder = title.toLowerCase().includes('shoulder') || title.toLowerCase().includes('cuff');
-
-  if (isKnee) {
-    return [
-      {
-        weekNumber: 1,
-        title: 'Phase I: Pain Management & ROM Restoration',
-        description: 'Focus on swelling reduction, passive knee extension, and patellar mobilization.',
-        clinicalFocus: 'Passive Extension & Quadriceps Activation',
-        sessionsPerWeek: 3,
-        exercises: [
-          {
-            id: 'ex-k1-1',
-            name: 'Quadriceps Isometric Sets',
-            sets: 3,
-            reps: '10 reps (5s hold)',
-            duration: '5 mins',
-            restTime: '30s',
-            instructions: 'Tighten thigh muscles pushing the back of your knee down flat into the towel roll.',
-            notes: 'Avoid sudden force; maintain smooth tension.',
-            image: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: 'ex-k1-2',
-            name: 'Heel Slides (Assisted)',
-            sets: 3,
-            reps: '12 reps',
-            duration: '6 mins',
-            restTime: '30s',
-            instructions: 'Slowly slide your heel back toward your buttocks to bend your knee within comfort limits.',
-            notes: 'Use a towel strap under foot if assistance is required.',
-            image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: 'ex-k1-3',
-            name: 'Straight Leg Raises',
-            sets: 3,
-            reps: '10 reps',
-            duration: '5 mins',
-            restTime: '45s',
-            instructions: 'Lock your knee straight, flex foot upward, and lift leg 8-12 inches off table.',
-            notes: 'Ensure quad remains fully engaged throughout lift.',
-            image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&q=80',
-          },
-        ],
-      },
-      {
-        weekNumber: 2,
-        title: 'Phase II: Weight Bearing & Functional Mobility',
-        description: 'Progressive closed kinetic chain strengthening and gait control.',
-        clinicalFocus: 'Gait Normalization & Glute/Quad Control',
-        sessionsPerWeek: 4,
-        exercises: [
-          {
-            id: 'ex-k2-1',
-            name: 'Mini Wall Squats',
-            sets: 3,
-            reps: '12 reps',
-            duration: '6 mins',
-            restTime: '45s',
-            instructions: 'Lean back against a wall, lower your body to 45 degrees knee flexion, hold 3 seconds.',
-            notes: 'Keep knees aligned with second toes; avoid inward collapse.',
-            image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: 'ex-k2-2',
-            name: 'Step-Ups (Low Step)',
-            sets: 3,
-            reps: '10 reps each leg',
-            duration: '7 mins',
-            restTime: '45s',
-            instructions: 'Step onto a 4-inch platform keeping trunk upright and weight through heel.',
-            notes: 'Control descent slowly on return phase.',
-            image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
-          },
-        ],
-      },
-    ];
-  }
-
-  if (isShoulder) {
-    return [
-      {
-        weekNumber: 1,
-        title: 'Phase I: Rotator Cuff Activation',
-        description: 'Gentle scapular setting and pendulum exercises to restore shoulder alignment.',
-        clinicalFocus: 'Scapular Control & Glenohumeral Glide',
-        sessionsPerWeek: 3,
-        exercises: [
-          {
-            id: 'ex-s1-1',
-            name: 'Codman Pendulum Swings',
-            sets: 3,
-            reps: '60 seconds',
-            duration: '3 mins',
-            restTime: '30s',
-            instructions: 'Lean forward resting non-affected arm on a table. Let affected arm dangle freely and swing in small circular arcs.',
-            notes: 'Let momentum move the arm; do not actively lift using shoulder muscles.',
-            image: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=600&q=80',
-          },
-          {
-            id: 'ex-s1-2',
-            name: 'Scapular Retraction Setting',
-            sets: 3,
-            reps: '12 reps (5s hold)',
-            duration: '5 mins',
-            restTime: '30s',
-            instructions: 'Squeeze shoulder blades together down and back toward opposite back pockets.',
-            notes: 'Keep shoulders relaxed away from ears.',
-            image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&q=80',
-          },
-        ],
-      },
-    ];
-  }
-
-  // Default Lumbar / General Recovery protocol
-  return [
-    {
-      weekNumber: 1,
-      title: 'Phase 1: Pain Management & Mobilization',
-      description: 'Focus on reducing acute inflammation and restoring basic range of motion.',
-      clinicalFocus: 'Neural desensitization & Pelvic Tilts',
-      sessionsPerWeek: 3,
-      exercises: [
-        {
-          id: 'ex-1',
-          name: 'Pelvic Tilts',
-          sets: 3,
-          reps: '12 reps',
-          duration: '5 mins',
-          restTime: '30s',
-          instructions: 'Lie on back with knees bent. Gently flatten lower back against floor by tightening abdominal muscles.',
-          notes: 'Maintain steady nasal breathing; avoid holding breath.',
-          image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&q=80',
-        },
-        {
-          id: 'ex-2',
-          name: 'Cat-Cow Stretch',
-          sets: 3,
-          reps: '10 reps',
-          duration: '5 mins',
-          restTime: '30s',
-          instructions: 'On hands and knees, arch your back upward toward ceiling, then slowly drop belly toward floor.',
-          notes: 'Move smoothly through painless range of motion.',
-          image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
-        },
-        {
-          id: 'ex-3',
-          name: 'Knee-to-Chest Hold',
-          sets: 2,
-          reps: '30s hold per leg',
-          duration: '4 mins',
-          restTime: '15s',
-          instructions: 'Gently pull one knee toward your chest while keeping opposite leg extended flat or bent.',
-          notes: 'Feel mild stretch in lower back and glutes.',
-          image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80',
-        },
-      ],
-    },
-    {
-      weekNumber: 2,
-      title: 'Phase 2: Foundational Core Stability',
-      description: 'Core stabilizer engagement and lumbar spine protection during movement.',
-      clinicalFocus: 'Core Stabilizer Activation & Deep Bracing',
-      sessionsPerWeek: 4,
-      exercises: [
-        {
-          id: 'ex-4',
-          name: 'Bird-Dog Quadruped',
-          sets: 3,
-          reps: '10 reps each side',
-          duration: '6 mins',
-          restTime: '30s',
-          instructions: 'From quadruped position, extend opposite arm and leg parallel to floor without tilting pelvis.',
-          notes: 'Keep hips square and core engaged throughout movement.',
-          image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&q=80',
-        },
-        {
-          id: 'ex-5',
-          name: 'Dead Bug Bracing',
-          sets: 3,
-          reps: '12 reps',
-          duration: '6 mins',
-          restTime: '30s',
-          instructions: 'Lie on back with arms up and knees at 90 degrees. Lower opposite arm and leg toward floor while bracing lower back.',
-          notes: 'Do not allow lower back to arch off the surface.',
-          image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80',
-        },
-        {
-          id: 'ex-6',
-          name: 'Glute Bridge Hold',
-          sets: 3,
-          reps: '12 reps (3s hold)',
-          duration: '5 mins',
-          restTime: '30s',
-          instructions: 'Press through heels to lift hips until knees, hips, and shoulders form a straight line.',
-          notes: 'Squeeze glutes at peak extension without hyperextending lower back.',
-          image: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=600&q=80',
-        },
-      ],
-    },
-    {
-      weekNumber: 3,
-      title: 'Phase 3: Strength & Dynamic Trunk Control',
-      description: 'Progressive loading of posterior chain and spinal stabilizing musculature.',
-      clinicalFocus: 'Posterior Chain Hypertrophy',
-      sessionsPerWeek: 4,
-      exercises: [
-        {
-          id: 'ex-7',
-          name: 'Supported Goblet Squat',
-          sets: 3,
-          reps: '10 reps',
-          duration: '7 mins',
-          restTime: '45s',
-          instructions: 'Perform controlled squat keeping weight close to chest and knees tracking over toes.',
-          notes: 'Maintain neutral spine position at bottom of movement.',
-          image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&q=80',
-        },
-        {
-          id: 'ex-8',
-          name: 'Side Plank Iso-Hold',
-          sets: 3,
-          reps: '20s hold each side',
-          duration: '5 mins',
-          restTime: '30s',
-          instructions: 'Support body on forearm and side of feet/knees, raising hips off floor.',
-          notes: 'Keep shoulders, hips, and ankles aligned.',
-          image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80',
-        },
-      ],
-    },
-  ];
-};
-
-// ─────────────────────────────────────────
 // MAPPERS
 // ─────────────────────────────────────────
 
 export const mapDocToMobileProgram = (id: string, data: Record<string, any>): MobileProgram => {
   const title = data.title || 'Therapeutic Recovery Program';
   const duration = data.duration || '8 Weeks';
-  const rawWeeks = Array.isArray(data.weeks) && data.weeks.length > 0 ? data.weeks : getDefaultWeeksForProgram(title, duration);
+  const rawWeeks = Array.isArray(data.weeks) ? data.weeks : [];
 
   const totalExercisesCount = rawWeeks.reduce(
     (acc: number, w: any) => acc + (Array.isArray(w.exercises) ? w.exercises.length : 0),
@@ -435,6 +194,120 @@ export const mapDocToAssignment = (
 // ─────────────────────────────────────────
 
 /**
+ * Subscribe to real-time updates for a single program, including its weeks and exercises subcollections.
+ */
+export const subscribeToProgramDetailsRealtime = (
+  programId: string,
+  onData: (program: MobileProgram | null) => void,
+  onError?: (err: Error) => void
+): Unsubscribe => {
+  let currentProgram: MobileProgram | null = null;
+  let weeks: MobileProgramWeek[] = [];
+  const exercisesByWeek: Record<string, MobileExercise[]> = {};
+
+  let unsubProgram = () => {};
+  let unsubWeeks = () => {};
+  const unsubExercisesMap = new Map<string, Unsubscribe>();
+
+  const triggerUpdate = () => {
+    if (!currentProgram) return;
+    const populatedWeeks = weeks.map(w => ({
+      ...w,
+      exercises: exercisesByWeek[w.id] || []
+    }));
+    populatedWeeks.sort((a, b) => a.weekNumber - b.weekNumber);
+    
+    // Calculate totals based on populated dynamic data
+    const totalExercises = populatedWeeks.reduce((acc, w) => acc + w.exercises.length, 0);
+    
+    currentProgram.weeks = populatedWeeks;
+    currentProgram.phasesCount = populatedWeeks.length;
+    currentProgram.exercisesCount = totalExercises;
+    currentProgram.totalExercises = totalExercises;
+
+    onData({ ...currentProgram });
+  };
+
+  try {
+    const programRef = doc(db, PROGRAMS_COLLECTION, programId);
+    unsubProgram = onSnapshot(programRef, (snap) => {
+      if (!snap.exists()) {
+        onData(null);
+        return;
+      }
+      currentProgram = mapDocToMobileProgram(snap.id, snap.data());
+      triggerUpdate();
+    }, onError);
+
+    const weeksRef = collection(db, PROGRAMS_COLLECTION, programId, 'weeks');
+    unsubWeeks = onSnapshot(weeksRef, (snap) => {
+      weeks = snap.docs.map((docSnap, index) => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          weekNumber: data.order || index + 1,
+          title: data.title || '',
+          description: data.description || '',
+          clinicalFocus: data.clinicalFocus || '',
+          sessionsPerWeek: data.sessionsPerWeek || 3,
+          exercises: []
+        };
+      });
+
+      const currentWeekIds = new Set(snap.docs.map(d => d.id));
+      
+      for (const [weekId, unsub] of unsubExercisesMap.entries()) {
+        if (!currentWeekIds.has(weekId)) {
+          unsub();
+          unsubExercisesMap.delete(weekId);
+        }
+      }
+
+      snap.docs.forEach((weekDoc, index) => {
+        const weekId = weekDoc.id;
+        const weekNumStr = (weekDoc.data().order || index + 1).toString();
+        
+        if (!unsubExercisesMap.has(weekId)) {
+          const exercisesRef = collection(db, PROGRAMS_COLLECTION, programId, 'weeks', weekId, 'exercises');
+          const unsubEx = onSnapshot(exercisesRef, (exSnap) => {
+            const exercises = exSnap.docs.map(e => {
+              const data = e.data();
+              return {
+                id: e.id,
+                name: data.name || '',
+                duration: data.duration || '',
+                instructions: data.instructions || data.dosage || '',
+                image: data.image || '',
+                order: data.order || 0,
+                sets: data.sets,
+                reps: data.reps
+              };
+            });
+            exercises.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+            exercisesByWeek[weekId] = exercises;
+            triggerUpdate();
+          }, onError);
+          unsubExercisesMap.set(weekId, unsubEx);
+        }
+      });
+
+      triggerUpdate();
+    }, onError);
+  } catch (error: any) {
+    console.error('[programService] Failed to set up real-time listener:', error);
+    if (onError) onError(error);
+  }
+
+  return () => {
+    unsubProgram();
+    unsubWeeks();
+    for (const unsub of unsubExercisesMap.values()) {
+      unsub();
+    }
+  };
+};
+
+/**
  * Subscribe to real-time updates for published programs.
  */
 export const subscribeToPrograms = (
@@ -460,7 +333,7 @@ export const subscribeToPrograms = (
   } catch (error: any) {
     console.error('[programService] Failed to set up snapshot listener:', error);
     if (onError) onError(error);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -489,7 +362,51 @@ export const fetchProgramById = async (id: string): Promise<MobileProgram | null
     const docRef = doc(db, PROGRAMS_COLLECTION, id);
     const snap = await getDoc(docRef);
     if (!snap.exists()) return null;
-    return mapDocToMobileProgram(snap.id, snap.data());
+
+    const programData = snap.data();
+
+    // Fetch weeks subcollection
+    const weeksRef = collection(db, PROGRAMS_COLLECTION, id, 'weeks');
+    const weeksSnap = await getDocs(weeksRef);
+
+    const weeks: MobileProgramWeek[] = [];
+
+    for (const weekDoc of weeksSnap.docs) {
+      const weekData = weekDoc.data();
+
+      const exercisesRef = collection(db, PROGRAMS_COLLECTION, id, 'weeks', weekDoc.id, 'exercises');
+      const exercisesSnap = await getDocs(exercisesRef);
+      const exercises: MobileExercise[] = exercisesSnap.docs.map(e => {
+        const data = e.data();
+        return {
+          id: e.id,
+          name: data.name || '',
+          duration: data.duration || '',
+          instructions: data.instructions || data.dosage || '',
+          image: data.image || '',
+          order: data.order || 0
+        };
+      });
+
+      exercises.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+
+      weeks.push({
+        weekNumber: weekData.order || weeks.length + 1,
+        title: weekData.title || '',
+        description: weekData.description || '',
+        clinicalFocus: weekData.clinicalFocus || '',
+        sessionsPerWeek: weekData.sessionsPerWeek || 3,
+        exercises
+      });
+    }
+
+    weeks.sort((a, b) => a.weekNumber - b.weekNumber);
+
+    if (weeks.length > 0) {
+      programData.weeks = weeks;
+    }
+
+    return mapDocToMobileProgram(snap.id, programData);
   } catch (err) {
     console.error(`[programService] fetchProgramById error for id=${id}:`, err);
     return null;
@@ -512,7 +429,7 @@ export const subscribeToPatientAssignments = (
 ): Unsubscribe => {
   if (!patientId) {
     onData([]);
-    return () => {};
+    return () => { };
   }
 
   try {
@@ -561,7 +478,7 @@ export const subscribeToPatientAssignments = (
   } catch (error: any) {
     console.error('[programService] Failed to setup patient assignments listener:', error);
     if (onError) onError(error);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -576,24 +493,31 @@ export const subscribeToAssignment = (
 ): Unsubscribe => {
   if (!assignmentId) {
     onData(null);
-    return () => {};
+    return () => { };
   }
 
   try {
     const docRef = doc(db, ASSIGNMENTS_COLLECTION, assignmentId);
     const unsub = onSnapshot(
       docRef,
-      async (snapshot) => {
+      (snapshot) => {
         if (!snapshot.exists()) {
           onData(null);
           return;
         }
         const assignment = mapDocToAssignment(snapshot.id, snapshot.data());
-        if (assignment.programId) {
-          const programDetails = await fetchProgramById(assignment.programId);
-          assignment.programDetails = programDetails || undefined;
-        }
+        // Return assignment immediately to unblock UI
         onData(assignment);
+        
+        // Fetch program details non-blockingly
+        if (assignment.programId) {
+          fetchProgramById(assignment.programId).then(programDetails => {
+            if (programDetails) {
+              assignment.programDetails = programDetails;
+              onData({ ...assignment });
+            }
+          }).catch(err => console.warn('Failed to fetch program details in sub:', err));
+        }
       },
       (err) => {
         console.warn('[programService] Assignment snapshot error:', err);
@@ -604,7 +528,7 @@ export const subscribeToAssignment = (
   } catch (error: any) {
     console.error('[programService] Failed to set up assignment snapshot:', error);
     if (onError) onError(error);
-    return () => {};
+    return () => { };
   }
 };
 
@@ -670,9 +594,7 @@ export const checkWeekProgression = (
   completedExercisesList: string[]
 ): number => {
   const currentWeek = assignment.currentWeek || 1;
-  const weeks = assignment.programDetails?.weeks && assignment.programDetails.weeks.length > 0
-    ? assignment.programDetails.weeks
-    : getDefaultWeeksForProgram(assignment.programTitle, `${assignment.totalWeeks || 8} Weeks`);
+  const weeks = assignment.programDetails?.weeks || [];
 
   const totalWeeks = assignment.totalWeeks || weeks.length || 8;
   const currentWeekObj = weeks.find((w) => w.weekNumber === currentWeek);

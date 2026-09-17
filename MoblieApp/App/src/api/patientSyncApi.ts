@@ -306,8 +306,12 @@ export const syncAvatarToPatientDetails = async (
   try {
     const docRef = doc(db, PATIENT_DETAILS_COLLECTION, uid);
     await setDoc(docRef, { avatarUrl: avatarUri, updatedAt: serverTimestamp() }, { merge: true });
-  } catch (err) {
-    console.warn('[patientSyncApi] Failed to sync avatar to patient details:', err);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied' || err?.message?.includes('permissions')) {
+      console.warn('[patientSyncApi] Permission denied syncing avatar to Firestore patient details.');
+    } else {
+      console.warn('[patientSyncApi] Failed to sync avatar to patient details:', err);
+    }
   }
 };
 
@@ -322,8 +326,12 @@ export const fetchOwnPatientRecord = async (uid: string): Promise<PatientRecord 
       return { id: snapshot.id, ...snapshot.data() } as PatientRecord;
     }
     return null;
-  } catch (err) {
-    console.error('[patientSyncApi] Failed to fetch own patient record:', err);
+  } catch (err: any) {
+    if (err?.code === 'permission-denied' || err?.message?.includes('permissions')) {
+      console.warn('[patientSyncApi] Permission denied reading own patient record from Firestore.');
+    } else {
+      console.error('[patientSyncApi] Failed to fetch own patient record:', err);
+    }
     return null;
   }
 };

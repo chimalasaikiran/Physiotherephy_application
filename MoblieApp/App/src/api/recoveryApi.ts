@@ -3,6 +3,8 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
+  doc,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -183,5 +185,43 @@ export const fetchUserProgressStats = async (userId?: string): Promise<ProgressS
   } catch (error) {
     console.error('[recoveryApi] fetchUserProgressStats error:', error);
     return DEFAULT_EMPTY_PROGRESS;
+  }
+};
+
+/**
+ * Fetch program details including nested weeks and exercises
+ */
+export const fetchAssignedProgramDetails = async (programId: string) => {
+  if (!programId) return null;
+  
+  try {
+    const progRef = doc(db, 'programs', programId);
+    const progSnap = await getDoc(progRef);
+    if (!progSnap.exists()) return null;
+    
+    const programData = { id: progSnap.id, ...progSnap.data() } as any;
+    
+    const weeksRef = collection(db, 'programs', programId, 'weeks');
+    const weeksSnap = await getDocs(weeksRef);
+    const weeks: any[] = [];
+    
+    for (const weekDoc of weeksSnap.docs) {
+      const weekData = { id: weekDoc.id, ...weekDoc.data() } as any;
+      
+      const exercisesRef = collection(db, 'programs', programId, 'weeks', weekDoc.id, 'exercises');
+      const exercisesSnap = await getDocs(exercisesRef);
+      const exercises = exercisesSnap.docs.map(e => ({ id: e.id, ...e.data() }));
+      
+      exercises.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+      weekData.exercises = exercises;
+      weeks.push(weekData);
+    }
+    
+    weeks.sort((a, b) => (a.order || 0) - (b.order || 0));
+    programData.weeks = weeks;
+    return programData;
+  } catch (error) {
+    console.error('[recoveryApi] fetchAssignedProgramDetails error:', error);
+    return null;
   }
 };

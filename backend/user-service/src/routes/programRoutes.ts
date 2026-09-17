@@ -23,7 +23,8 @@ router.get('/', authenticateFirebaseToken, async (_req: AuthenticatedRequest, re
 router.get('/:id', authenticateFirebaseToken, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : String(req.params.id);
-    const program = await ProgramService.getProgramById(id);
+    const includeDetails = req.query.details === 'true' || true; // we will default to true for now since it's required for mobile
+    const program = await ProgramService.getProgramById(id, includeDetails);
     if (!program) {
       return res.status(404).json({ success: false, error: 'Program not found' });
     }
@@ -36,8 +37,13 @@ router.get('/:id', authenticateFirebaseToken, async (req: AuthenticatedRequest, 
 // POST /api/v1/programs — Admin only
 router.post('/', authenticateFirebaseToken, requireAdminRole, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const programId = await ProgramService.createProgram(req.body);
-    const created = await ProgramService.getProgramById(programId);
+    let programId;
+    if (req.body.weeks && Array.isArray(req.body.weeks)) {
+      programId = await ProgramService.createProgramWithDetails(req.body);
+    } else {
+      programId = await ProgramService.createProgram(req.body);
+    }
+    const created = await ProgramService.getProgramById(programId, true);
     res.status(201).json({ success: true, data: created });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

@@ -41,7 +41,7 @@ export { app, auth, db };
 export interface UserProfileData {
   uid: string;
   phone: string;
-  fullName: string;
+  fullName?: string;
   dob?: string;
   gender?: string;
   height?: number;
@@ -62,8 +62,12 @@ export const fetchUserProfile = async (uid: string): Promise<UserProfileData | n
       return userSnapshot.data() as UserProfileData;
     }
     return null;
-  } catch (error) {
-    console.error('Error fetching user profile:', error);
+  } catch (error: any) {
+    if (error?.code === 'permission-denied' || error?.message?.includes('permissions')) {
+      console.warn('[Firebase] Firestore permission denied for fetchUserProfile, falling back to service API.');
+    } else {
+      console.error('Error fetching user profile:', error);
+    }
     return null;
   }
 };
@@ -74,21 +78,25 @@ export const saveUserProfileInFirestore = async (
 ): Promise<boolean> => {
   try {
     const userDocRef = doc(db, 'users', uid);
-    const existingDoc = await getDoc(userDocRef);
+    const existingDoc = await getDoc(userDocRef).catch(() => null);
 
     const payload = {
       ...profileData,
       uid,
       profileCompleted: true,
       updatedAt: serverTimestamp(),
-      ...(!existingDoc.exists() ? { createdAt: serverTimestamp() } : {}),
+      ...(!existingDoc || !existingDoc.exists() ? { createdAt: serverTimestamp() } : {}),
     };
 
     await setDoc(userDocRef, payload, { merge: true });
     return true;
-  } catch (error) {
-    console.error('Error saving profile:', error);
-    throw error;
+  } catch (error: any) {
+    if (error?.code === 'permission-denied' || error?.message?.includes('permissions')) {
+      console.warn('[Firebase] Firestore permission denied for saveUserProfileInFirestore, relying on backend service API.');
+    } else {
+      console.error('Error saving profile:', error);
+    }
+    return false;
   }
 };
 
@@ -110,8 +118,18 @@ export const initializeUserRecord = async (user: User): Promise<UserProfileData 
       await setDoc(userDocRef, initialRecord);
       return initialRecord as UserProfileData;
     }
-  } catch (error) {
-    console.error('Error initializing user record:', error);
-    return null;
+  } catch (error: any) {
+    if (error?.code === 'permission-denied' || error?.message?.includes('permissions')) {
+      console.warn('[Firebase] Firestore permission denied for initializeUserRecord, using local fallback record.');
+      return {
+        uid: user.uid,
+        phone: user.phoneNumber || '',
+        fullName: '',
+        profileCompleted: false,
+      };
+    } else {
+      console.error('Error initializing user record:', error);
+      return null;
+    }
   }
 };

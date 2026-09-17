@@ -11,6 +11,7 @@ import {
   Dimensions,
   Modal,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -20,10 +21,14 @@ import { Spacing } from '@/constants';
 import {
   WORKOUT_EXERCISES,
   getExerciseByIndex,
-  calculateWorkoutProgress,
-  getCompletedSetsCount,
-  getTotalWorkoutSets,
 } from '@/constants';
+import {
+  subscribeToAssignment,
+  MobileProgramAssignment,
+  MobileProgramWeek,
+  subscribeToProgramDetailsRealtime,
+  MobileProgram,
+} from '@/api/programService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -32,26 +37,61 @@ export const ExerciseProgressScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
 
-  // Parse exercise and set parameters passed from ActiveSessionScreen
+  const assignmentId = (params.assignmentId as string) || '';
+  const [assignment, setAssignment] = useState<MobileProgramAssignment | null>(null);
+  const [realtimeProgram, setRealtimeProgram] = useState<MobileProgram | null>(null);
+
+  useEffect(() => {
+    if (!assignmentId) return;
+    const unsub = subscribeToAssignment(
+      assignmentId,
+      (data) => setAssignment(data),
+      (err) => console.warn('[ExerciseProgressScreen] sub error:', err)
+    );
+    return () => unsub();
+  }, [assignmentId]);
+
+  useEffect(() => {
+    if (!assignment?.programId) return;
+    const unsub = subscribeToProgramDetailsRealtime(
+      assignment.programId,
+      (prog) => setRealtimeProgram(prog),
+      (err) => console.warn('[ExerciseProgressScreen] program sub error:', err)
+    );
+    return () => unsub();
+  }, [assignment?.programId]);
+
+  const programDetails = realtimeProgram || assignment?.programDetails;
+
+  const currentWeekNum = assignment?.currentWeek || 1;
+  const programTitle = assignment?.programTitle || 'Therapeutic Recovery';
+  const totalWeeks = assignment?.totalWeeks || 8;
+
+  const weeksList: MobileProgramWeek[] = programDetails?.weeks || [];
+
+  const currentWeekObj = weeksList.find((w) => w.weekNumber === currentWeekNum) || weeksList[0];
+
+  const activeExercises = currentWeekObj?.exercises || [];
+
+  const totalExercises = activeExercises.length;
+  
   const parsedIndex = params.exerciseIndex ? parseInt(params.exerciseIndex as string, 10) : 0;
-  const exerciseIndex = isNaN(parsedIndex) ? 0 : Math.max(0, Math.min(parsedIndex, WORKOUT_EXERCISES.length - 1));
-  const currentExerciseObj = getExerciseByIndex(exerciseIndex);
+  const exerciseIndex = isNaN(parsedIndex) ? 0 : Math.max(0, Math.min(parsedIndex, totalExercises - 1));
+  const currentExerciseObj = activeExercises[exerciseIndex] || activeExercises[0] || {} as any;
 
   const parsedSet = params.currentSet ? parseInt(params.currentSet as string, 10) : 1;
   const currentSet = isNaN(parsedSet) ? 1 : Math.max(1, parsedSet);
-  const totalSets = currentExerciseObj.totalSets || 3;
-  const totalExercises = WORKOUT_EXERCISES.length;
+  const totalSets = Number(currentExerciseObj.sets) || 3;
 
   const isExerciseComplete = currentSet >= totalSets;
   const isWorkoutComplete = isExerciseComplete && exerciseIndex >= totalExercises - 1;
 
-  // Set & workout statistics
-  const completedSetsTotal = getCompletedSetsCount(exerciseIndex, currentSet);
-  const totalWorkoutSets = getTotalWorkoutSets();
-  const sessionPercent = calculateWorkoutProgress(exerciseIndex, currentSet);
+  // Compute dummy total stats for now
+  const completedSetsTotal = exerciseIndex * totalSets + currentSet;
+  const totalWorkoutSets = totalExercises * totalSets;
+  const sessionPercent = Math.round((completedSetsTotal / totalWorkoutSets) * 100);
   const remainingExercises = isExerciseComplete ? Math.max(0, totalExercises - (exerciseIndex + 1)) : totalExercises - exerciseIndex;
 
-  // Determine next step target details
   let nextExerciseObj = currentExerciseObj;
   let nextUpTitle = '';
   let nextUpDuration = '';
@@ -59,11 +99,11 @@ export const ExerciseProgressScreen: React.FC = () => {
   if (!isExerciseComplete) {
     nextExerciseObj = currentExerciseObj;
     nextUpTitle = `${currentExerciseObj.name} (Set ${currentSet + 1} of ${totalSets})`;
-    nextUpDuration = currentExerciseObj.duration;
+    nextUpDuration = currentExerciseObj.duration || '5 mins';
   } else if (!isWorkoutComplete) {
-    nextExerciseObj = getExerciseByIndex(exerciseIndex + 1);
-    nextUpTitle = `${nextExerciseObj.name} (Set 1 of ${nextExerciseObj.totalSets})`;
-    nextUpDuration = nextExerciseObj.duration;
+    nextExerciseObj = activeExercises[exerciseIndex + 1] || activeExercises[0] || {} as any;
+    nextUpTitle = `${nextExerciseObj.name || ''} (Set 1 of ${Number(nextExerciseObj.sets) || 3})`;
+    nextUpDuration = nextExerciseObj.duration || '5 mins';
   } else {
     nextUpTitle = 'Session Completed! 🎉';
     nextUpDuration = 'Done';
@@ -107,6 +147,28 @@ export const ExerciseProgressScreen: React.FC = () => {
     }
   }, [isWorkoutComplete]);
 
+  if (!assignment || !programDetails) {
+    return (
+      <View style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#003D9B" />
+        <Text style={{ marginTop: 16, fontSize: 16, color: '#475569' }}>Loading session progress...</Text>
+      </View>
+    );
+  }
+
+  // Handle empty state if no exercises configured
+  if (totalExercises === 0) {
+    return (
+      <View style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="barbell-outline" size={48} color="#94A3B8" />
+        <Text style={{ marginTop: 16, fontSize: 16, color: '#475569', fontWeight: 'bold' }}>No exercises configured</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#003D9B', borderRadius: 9999 }}>
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const handleStartBreak = () => {
     setBreakTimer(30);
     setIsBreakActive(true);
@@ -117,10 +179,12 @@ export const ExerciseProgressScreen: React.FC = () => {
     setBreakTimer(30);
   };
 
-  const assignmentId = (params.assignmentId as string) || '';
-
   const handleContinueNext = () => {
     if (isWorkoutComplete) {
+      // Determine if program is fully completed or just week
+      const isProgramComplete = assignment && assignment.progressPercent >= 100;
+      const isWeekComplete = assignment && currentWeekNum < totalWeeks && exerciseIndex >= totalExercises - 1;
+
       router.replace({
         pathname: '/session-complete',
         params: {
@@ -128,18 +192,25 @@ export const ExerciseProgressScreen: React.FC = () => {
           exercises: `${totalExercises} of ${totalExercises}`,
           duration: `${Math.round((completedSetsTotal * 3))} Minutes`,
           recovery: `${sessionPercent}%`,
+          badge: isProgramComplete ? 'Program Complete' : isWeekComplete ? 'Week Complete' : 'Session Complete',
+          note: isProgramComplete
+            ? 'Congratulations on finishing the entire recovery program! Your therapist will review your final results.'
+            : isWeekComplete
+              ? 'Great job finishing this week\'s exercises! Awaiting therapist approval to advance to the next week.'
+              : 'Excellent work today! Remember to stay hydrated and continue with tomorrow\'s session.',
         },
       });
     } else if (isExerciseComplete) {
       // Move to next exercise, starting at set 1
+      const nextEx = activeExercises[exerciseIndex + 1];
       router.push({
         pathname: '/active-session',
         params: {
           exerciseIndex: (exerciseIndex + 1).toString(),
           currentSet: '1',
-          totalSets: getExerciseByIndex(exerciseIndex + 1).totalSets.toString(),
+          totalSets: (Number(nextEx.sets) || 3).toString(),
           totalExercises: totalExercises.toString(),
-          name: getExerciseByIndex(exerciseIndex + 1).name,
+          name: nextEx.name,
           assignmentId,
         },
       });
@@ -249,8 +320,8 @@ export const ExerciseProgressScreen: React.FC = () => {
                     isCompleted
                       ? styles.setIndicatorCompleted
                       : isNext
-                      ? styles.setIndicatorNext
-                      : styles.setIndicatorUpcoming,
+                        ? styles.setIndicatorNext
+                        : styles.setIndicatorUpcoming,
                   ]}
                 >
                   <Ionicons
@@ -264,8 +335,8 @@ export const ExerciseProgressScreen: React.FC = () => {
                       isCompleted
                         ? styles.setIndicatorTextCompleted
                         : isNext
-                        ? styles.setIndicatorTextNext
-                        : styles.setIndicatorTextUpcoming,
+                          ? styles.setIndicatorTextNext
+                          : styles.setIndicatorTextUpcoming,
                     ]}
                   >
                     {`Set ${setNum}`}
@@ -321,7 +392,7 @@ export const ExerciseProgressScreen: React.FC = () => {
             style={styles.nextExerciseCard}
           >
             <Image
-              source={nextExerciseObj.image}
+              source={typeof nextExerciseObj.image === 'string' ? { uri: nextExerciseObj.image } : nextExerciseObj.image || require('../../../assets/images/user_sagar_avatar.png')}
               style={styles.nextExerciseImage}
               resizeMode="cover"
             />
@@ -353,8 +424,8 @@ export const ExerciseProgressScreen: React.FC = () => {
               {isWorkoutComplete
                 ? 'Workout Completed! View Summary 🎉'
                 : isExerciseComplete
-                ? `Continue to Next Exercise (${nextExerciseObj.name})`
-                : `Continue to Set ${currentSet + 1} of ${totalSets}`}
+                  ? `Continue to Next Exercise (${nextExerciseObj.name})`
+                  : `Continue to Set ${currentSet + 1} of ${totalSets}`}
             </Text>
             <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 8 }} />
           </TouchableOpacity>

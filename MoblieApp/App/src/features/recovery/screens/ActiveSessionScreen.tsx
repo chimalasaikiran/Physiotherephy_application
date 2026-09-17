@@ -11,6 +11,7 @@ import {
   Alert,
   Dimensions,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -26,7 +27,8 @@ import {
   markExerciseComplete,
   MobileProgramAssignment,
   MobileProgramWeek,
-  getDefaultWeeksForProgram,
+  subscribeToProgramDetailsRealtime,
+  MobileProgram,
 } from '@/api/programService';
 import { auth } from '@/config/firebase';
 import { safeStorage } from '@/utils/storage';
@@ -51,39 +53,31 @@ export const ActiveSessionScreen: React.FC = () => {
 
   // Firestore Live Assignment State
   const [assignment, setAssignment] = useState<MobileProgramAssignment | null>(null);
+  const [realtimeProgram, setRealtimeProgram] = useState<MobileProgram | null>(null);
   const [isRestored, setIsRestored] = useState<boolean>(false);
+
+  const programDetails = realtimeProgram || assignment?.programDetails;
 
   // Derive Week & Exercise List
   const currentWeekNum = assignment?.currentWeek || 1;
   const totalWeeks = assignment?.totalWeeks || 8;
   const programTitle = assignment?.programTitle || 'Therapeutic Recovery';
 
-  const weeksList: MobileProgramWeek[] = assignment?.programDetails?.weeks && assignment.programDetails.weeks.length > 0
-    ? assignment.programDetails.weeks
-    : getDefaultWeeksForProgram(programTitle, `${totalWeeks} Weeks`);
+  const weeksList: MobileProgramWeek[] = programDetails?.weeks || [];
 
   const currentWeekObj = weeksList.find((w) => w.weekNumber === currentWeekNum) || weeksList[0];
   const weekTitle = currentWeekObj?.title || `Week ${currentWeekNum}`;
 
   // Prescribed Exercises for Current Week
-  const activeExercises = currentWeekObj?.exercises && currentWeekObj.exercises.length > 0
-    ? currentWeekObj.exercises
-    : WORKOUT_EXERCISES.map((ex) => ({
-        id: ex.id,
-        name: ex.name,
-        category: ex.category,
-        sets: ex.totalSets,
-        reps: ex.targetReps,
-        duration: ex.duration,
-        image: ex.image,
-      }));
+  const activeExercises = currentWeekObj?.exercises || [];
 
   const totalExercises = activeExercises.length;
+  
   const [exerciseIndex, setExerciseIndex] = useState<number>(
-    Math.min(initialIndex, totalExercises - 1)
+    Math.min(initialIndex, Math.max(0, totalExercises - 1))
   );
 
-  const rawExercise = activeExercises[exerciseIndex] || activeExercises[0] || WORKOUT_EXERCISES[0];
+  const rawExercise = activeExercises[exerciseIndex] || activeExercises[0] || {} as any;
 
   // Parse numeric target reps & total sets
   const targetReps = typeof rawExercise.reps === 'number'
@@ -117,6 +111,16 @@ export const ActiveSessionScreen: React.FC = () => {
     );
     return () => unsub();
   }, [assignmentId]);
+
+  useEffect(() => {
+    if (!assignment?.programId) return;
+    const unsub = subscribeToProgramDetailsRealtime(
+      assignment.programId,
+      (prog) => setRealtimeProgram(prog),
+      (err) => console.warn('[ActiveSessionScreen] program sub error:', err)
+    );
+    return () => unsub();
+  }, [assignment?.programId]);
 
   // 2. Persistent State Restoration (Resume from exact point stopped)
   useEffect(() => {
@@ -222,6 +226,27 @@ export const ActiveSessionScreen: React.FC = () => {
     const padSecs = secs < 10 ? `0${secs}` : `${secs}`;
     return `${padMins}:${padSecs}`;
   };
+
+  if (!assignment || !programDetails) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#003D9B" />
+        <Text style={{ marginTop: 16, fontSize: 16, color: '#475569' }}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  if (totalExercises === 0) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="alert-circle-outline" size={48} color="#94A3B8" />
+        <Text style={{ marginTop: 16, fontSize: 16, color: '#475569', fontWeight: 'bold' }}>No exercises in this session</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 24, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#003D9B', borderRadius: 9999 }}>
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const handleTogglePause = () => {
     setIsPaused((prev) => !prev);

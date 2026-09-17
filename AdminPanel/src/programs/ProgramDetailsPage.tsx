@@ -708,7 +708,7 @@ export const ProgramDetailsPage: React.FC<ProgramDetailsPageProps> = ({
 
       {/* WEEKS TAB CONTENT */}
       {activeTab === 'weeks' && (
-        <WeeksTabContent onShowToast={showToast} />
+        <WeeksTabContent onShowToast={showToast} programId={program?.id} />
       )}
 
       {/* EXERCISES TAB CONTENT */}

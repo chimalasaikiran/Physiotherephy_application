@@ -306,7 +306,7 @@ export const MyRecoveryProgramsScreen: React.FC = () => {
                   {/* Progress Bar */}
                   <View style={styles.scoreSection}>
                     <View style={styles.scoreHeaderRow}>
-                      <Text style={styles.scoreLabel}>PROGRAM PROGRESS</Text>
+                      <Text style={styles.scoreLabel}>OverAll</Text>
                       <Text style={styles.scoreValue}>{assignment.progressPercent}%</Text>
                     </View>
                     <View style={styles.scoreTrack}>

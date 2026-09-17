@@ -315,7 +315,7 @@ export const RecoveryScreen: React.FC<RecoveryScreenProps> = ({ hideBottomNavBar
                     <View style={styles.outerRing}>
                       <View style={styles.innerRingContent}>
                         <Text style={styles.ringScoreText}>{activeAssignment.progressPercent}%</Text>
-                        <Text style={styles.ringLabelText}>Program Progress</Text>
+                        <Text style={styles.ringLabelText}>OverAll</Text>
                       </View>
                     </View>
                   </View>

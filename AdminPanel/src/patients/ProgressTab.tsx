@@ -15,6 +15,7 @@ import {
   FileText,
 } from 'lucide-react';
 import type { Patient } from './types';
+import { PatientProgressView } from './PatientProgressView';
 
 interface ProgressTabProps {
   patientName?: string;
@@ -647,6 +648,22 @@ export const ProgressTab: React.FC<ProgressTabProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+          
+          {/* C. DETAILED PROGRAM PROGRESS (NESTED WEEKS & EXERCISES) */}
+          <div className="bg-white rounded-3xl p-5 sm:p-7 border border-slate-100 shadow-2xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">
+                  Detailed Program Progress
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Real-time sync of weekly exercise completion from the patient's mobile app
+                </p>
+              </div>
+            </div>
+            
+            <PatientProgressView assignment={activeAssignment} />
           </div>
         </div>
 

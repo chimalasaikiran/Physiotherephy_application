@@ -26,6 +26,24 @@ import type {
 } from '@/programs/types';
 import { INITIAL_PROGRAMS } from '@/programs/mockData';
 
+export interface ExerciseData {
+  id?: string;
+  name: string;
+  dosage: string;
+  image: string;
+  order: number;
+}
+
+export interface WeekData {
+  id?: string;
+  title: string;
+  description: string;
+  sessionsPerWeek: string;
+  clinicalFocus: string;
+  order: number;
+  exercises?: ExerciseData[];
+}
+
 export const PROGRAMS_FIRESTORE_COLLECTION = 'programs';
 export const ASSIGNMENTS_COLLECTION = 'programAssignments';
 
@@ -269,6 +287,240 @@ export const duplicateProgram = async (program: Program): Promise<string> => {
  */
 export const archiveProgram = async (id: string): Promise<void> => {
   await updateProgram(id, { status: 'archived' });
+};
+
+/**
+ * Fetch program details including nested weeks and exercises
+ */
+export const fetchProgramDetails = async (programId: string): Promise<WeekData[]> => {
+  const weeksRef = collection(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks');
+  const weeksSnap = await getDocs(weeksRef);
+  const weeks: WeekData[] = [];
+
+  for (const doc of weeksSnap.docs) {
+    const weekData = doc.data() as WeekData;
+    const weekId = doc.id;
+    weekData.id = weekId;
+
+    const exercisesRef = collection(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId, 'exercises');
+    const exercisesSnap = await getDocs(exercisesRef);
+    const exercises = exercisesSnap.docs.map(e => ({ id: e.id, ...e.data() } as ExerciseData));
+    
+    // sort by order
+    exercises.sort((a, b) => (a.order || 0) - (b.order || 0));
+    weekData.exercises = exercises;
+    weeks.push(weekData);
+  }
+
+  // sort weeks by order
+  weeks.sort((a, b) => (a.order || 0) - (b.order || 0));
+  return weeks;
+};
+
+/**
+ * Add a new week to a program
+ */
+export const addWeekToProgram = async (programId: string, week: Omit<WeekData, 'id' | 'exercises'>): Promise<string> => {
+  const weeksRef = collection(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks');
+  const docRef = await addDoc(weeksRef, week);
+  
+  // update program phases count
+  const progRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId);
+  const progSnap = await getDoc(progRef);
+  if (progSnap.exists()) {
+    const pData = progSnap.data();
+    await updateDoc(progRef, { phasesCount: (Number(pData.phasesCount) || 0) + 1 });
+  }
+  
+  return docRef.id;
+};
+
+/**
+ * Add an exercise to a week
+ */
+export const addExerciseToWeek = async (programId: string, weekId: string, exercise: Omit<ExerciseData, 'id'>): Promise<string> => {
+  const exercisesRef = collection(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId, 'exercises');
+  const docRef = await addDoc(exercisesRef, exercise);
+  
+  // update program total exercises
+  const progRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId);
+  const progSnap = await getDoc(progRef);
+  if (progSnap.exists()) {
+    const pData = progSnap.data();
+    await updateDoc(progRef, { 
+      exercisesCount: (Number(pData.exercisesCount) || 0) + 1,
+      totalExercises: (Number(pData.totalExercises) || Number(pData.exercisesCount) || 0) + 1 
+    });
+  }
+  
+  return docRef.id;
+};
+
+/**
+ * Update a week configuration
+ */
+export const updateWeekInProgram = async (programId: string, weekId: string, updateData: Partial<WeekData>): Promise<void> => {
+  const weekRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId);
+  const dataToUpdate = { ...updateData };
+  delete dataToUpdate.id;
+  delete dataToUpdate.exercises;
+  await updateDoc(weekRef, dataToUpdate);
+};
+
+/**
+ * Delete a week and its exercises from a program
+ */
+export const deleteWeekFromProgram = async (programId: string, weekId: string): Promise<void> => {
+  // First, delete all exercises in this week
+  const exercisesRef = collection(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId, 'exercises');
+  const exercisesSnap = await getDocs(exercisesRef);
+  
+  let deletedExercisesCount = 0;
+  for (const exerciseDoc of exercisesSnap.docs) {
+    await deleteDoc(doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId, 'exercises', exerciseDoc.id));
+    deletedExercisesCount++;
+  }
+
+  // Next, delete the week document itself
+  const weekRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId);
+  await deleteDoc(weekRef);
+
+  // Update program phases count and total exercises count
+  const progRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId);
+  const progSnap = await getDoc(progRef);
+  if (progSnap.exists()) {
+    const pData = progSnap.data();
+    await updateDoc(progRef, {
+      phasesCount: Math.max(0, (Number(pData.phasesCount) || 0) - 1),
+      exercisesCount: Math.max(0, (Number(pData.exercisesCount) || 0) - deletedExercisesCount),
+      totalExercises: Math.max(0, (Number(pData.totalExercises) || Number(pData.exercisesCount) || 0) - deletedExercisesCount)
+    });
+  }
+};
+
+/**
+ * Update an exercise in a week
+ */
+export const updateExerciseInWeek = async (programId: string, weekId: string, exerciseId: string, updateData: Partial<ExerciseData>): Promise<void> => {
+  const exerciseRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId, 'exercises', exerciseId);
+  const dataToUpdate = { ...updateData };
+  delete dataToUpdate.id;
+  await updateDoc(exerciseRef, dataToUpdate);
+};
+
+/**
+ * Delete an exercise from a week
+ */
+export const deleteExerciseFromWeek = async (programId: string, weekId: string, exerciseId: string): Promise<void> => {
+  const exerciseRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId, 'exercises', exerciseId);
+  await deleteDoc(exerciseRef);
+
+  // Update program total exercises count
+  const progRef = doc(db, PROGRAMS_FIRESTORE_COLLECTION, programId);
+  const progSnap = await getDoc(progRef);
+  if (progSnap.exists()) {
+    const pData = progSnap.data();
+    await updateDoc(progRef, {
+      exercisesCount: Math.max(0, (Number(pData.exercisesCount) || 0) - 1),
+      totalExercises: Math.max(0, (Number(pData.totalExercises) || Number(pData.exercisesCount) || 0) - 1)
+    });
+  }
+};
+
+/**
+ * Subscribe to real-time updates for a single program's weeks and exercises
+ */
+export const subscribeToProgramWeeks = (
+  programId: string,
+  onData: (weeks: WeekData[]) => void,
+  onError?: (err: Error) => void
+): Unsubscribe => {
+  let weeks: WeekData[] = [];
+  const exercisesByWeek: Record<string, ExerciseData[]> = {};
+
+  let unsubWeeks = () => {};
+  const unsubExercisesMap = new Map<string, Unsubscribe>();
+
+  const triggerUpdate = () => {
+    const populatedWeeks = weeks.map((w) => ({
+      ...w,
+      exercises: exercisesByWeek[w.id as string] || [],
+    }));
+    // Sort weeks
+    populatedWeeks.sort((a, b) => (a.order || 0) - (b.order || 0));
+    onData(populatedWeeks);
+  };
+
+  try {
+    const weeksRef = collection(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks');
+    unsubWeeks = onSnapshot(
+      weeksRef,
+      (snap) => {
+        weeks = snap.docs.map((docSnap, index) => {
+          const data = docSnap.data();
+          return {
+            id: docSnap.id,
+            title: data.title || '',
+            description: data.description || '',
+            sessionsPerWeek: data.sessionsPerWeek || '3 per week',
+            clinicalFocus: data.clinicalFocus || '',
+            order: data.order || index + 1,
+            exercises: [],
+          };
+        });
+
+        const currentWeekIds = new Set(snap.docs.map((d) => d.id));
+
+        for (const [weekId, unsub] of unsubExercisesMap.entries()) {
+          if (!currentWeekIds.has(weekId)) {
+            unsub();
+            unsubExercisesMap.delete(weekId);
+          }
+        }
+
+        snap.docs.forEach((weekDoc) => {
+          const weekId = weekDoc.id;
+
+          if (!unsubExercisesMap.has(weekId)) {
+            const exercisesRef = collection(db, PROGRAMS_FIRESTORE_COLLECTION, programId, 'weeks', weekId, 'exercises');
+            const unsubEx = onSnapshot(
+              exercisesRef,
+              (exSnap) => {
+                const exercises = exSnap.docs.map((e) => {
+                  const data = e.data();
+                  return {
+                    id: e.id,
+                    name: data.name || '',
+                    dosage: data.dosage || '',
+                    image: data.image || '',
+                    order: data.order || 0,
+                  };
+                });
+                exercises.sort((a, b) => (a.order || 0) - (b.order || 0));
+                exercisesByWeek[weekId] = exercises;
+                triggerUpdate();
+              },
+              onError
+            );
+            unsubExercisesMap.set(weekId, unsubEx);
+          }
+        });
+
+        triggerUpdate();
+      },
+      onError
+    );
+  } catch (error: any) {
+    console.error('[programService] Failed to set up real-time listener for weeks:', error);
+    if (onError) onError(error);
+  }
+
+  return () => {
+    unsubWeeks();
+    for (const unsub of unsubExercisesMap.values()) {
+      unsub();
+    }
+  };
 };
 
 /**

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createProgram } from '@/services/programService';
+import { createProgram, addWeekToProgram, addExerciseToWeek } from '@/services/programService';
 
 import {
   Plus,
@@ -150,7 +150,30 @@ export const CreateRecoveryProgramPage: React.FC<CreateRecoveryProgramPageProps>
       if (onCreateProgram) {
         onCreateProgram(newProg);
       } else {
-        await createProgram(newProg);
+        const programId = await createProgram(newProg);
+        
+        // Initialize default weeks based on template
+        if (selectedTemplateId !== 'blank') {
+          // Add a couple of initial weeks to get started
+          for (let i = 1; i <= Math.min(4, estimatedDuration); i++) {
+            const weekId = await addWeekToProgram(programId, {
+              title: `Phase ${i}: Rehabilitation`,
+              description: `Standard progression for week ${i}`,
+              clinicalFocus: bodyArea || 'General',
+              sessionsPerWeek: '3',
+              order: i
+            });
+            
+            // Add a sample exercise
+            await addExerciseToWeek(programId, weekId, {
+              name: 'Mobility Drills',
+              dosage: '3 sets of 10 reps',
+              image: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80',
+              order: 1
+            });
+          }
+        }
+        
         if (onBack) onBack();
       }
     } catch (err) {
