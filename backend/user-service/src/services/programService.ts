@@ -93,7 +93,7 @@ export class ProgramService {
           weekData.id = weekDoc.id;
           
           const exercisesSnap = await db.collection(PROGRAMS_COLLECTION).doc(id).collection('weeks').doc(weekDoc.id).collection('exercises').orderBy('order').get();
-          const exercises = exercisesSnap.docs.map(exDoc => ({ id: exDoc.id, ...exDoc.data() } as ExerciseData));
+          const exercises = exercisesSnap.docs.map((exDoc: any) => ({ id: exDoc.id, ...exDoc.data() } as ExerciseData));
           
           weekData.exercises = exercises;
           weeks.push(weekData);
